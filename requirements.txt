@@ -1,0 +1,8 @@
+rclpy
+sensor_msgs
+geometry_msgs
+std_msgs
+trajectory_msgs
+pyyaml
+numpy
+smbus2

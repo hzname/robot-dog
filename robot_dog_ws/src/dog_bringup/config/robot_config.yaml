@@ -1,0 +1,74 @@
+# Robot Dog Configuration
+
+# Walking parameters
+walking:
+  speed: 0.5           # Maximum forward speed (m/s)
+  turn_speed: 0.5      # Maximum turn speed (rad/s)
+  gait_period: 1.0     # Gait cycle period (s)
+  step_height: 0.08    # Step height (m)
+  step_length: 0.05    # Step length (m)
+
+# Trot gait specific parameters
+gait:
+  # Timing
+  period: 1.0                # Gait cycle period in seconds (1 Hz)
+  timer_rate: 50.0           # Control loop frequency (Hz)
+  
+  # Step parameters (all in meters)
+  step_height: 0.04          # Step height: 3-5 cm (0.03-0.05)
+  step_length: 0.06          # Step length: 5-8 cm (0.05-0.08)
+  step_width: 0.02           # Step width for lateral movement
+  
+  # Body compensation parameters
+  body_compensation: 0.02    # Body height adjustment during swing (m)
+  roll_compensation: 0.05    # Roll angle compensation (rad)
+  pitch_compensation: 0.05   # Pitch angle compensation (rad)
+  
+  # Smooth transition parameters
+  transition_duration: 0.5   # Duration of start/stop transition (seconds)
+  
+  # Trajectory type: "triangle" or "sinusoid"
+  trajectory_type: "triangle"
+  
+  # Leg offsets for fine-tuning (meters)
+  leg_offsets:
+    FL: {x: 0.0, y: 0.0, z: 0.0}
+    FR: {x: 0.0, y: 0.0, z: 0.0}
+    BL: {x: 0.0, y: 0.0, z: 0.0}
+    BR: {x: 0.0, y: 0.0, z: 0.0}
+
+# Joint limits and PID gains
+joints:
+  hip:
+    min_position: -1.0
+    max_position: 1.0
+    p_gain: 100.0
+    d_gain: 10.0
+  thigh:
+    min_position: -1.5
+    max_position: 1.5
+    p_gain: 150.0
+    d_gain: 15.0
+  calf:
+    min_position: -2.5
+    max_position: -0.1
+    p_gain: 150.0
+    d_gain: 15.0
+
+# Standing pose (joint angles in radians)
+standing_pose:
+  hip: 0.0
+  thigh: 0.5
+  calf: -1.2
+
+# Default heights
+body:
+  standing_height: 0.25    # Height of body when standing (m)
+  minimum_height: 0.15     # Minimum safe height (m)
+  maximum_height: 0.35     # Maximum safe height (m)
+
+# Teleop settings
+teleop:
+  speed_scale: 1.0
+  turn_scale: 1.0
+  deadzone: 0.1

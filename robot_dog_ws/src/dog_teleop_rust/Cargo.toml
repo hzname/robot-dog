@@ -1,0 +1,11 @@
+[package]
+name = "dog_teleop_rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+crossterm = "0.27"
+
+[[bin]]
+name = "teleop_rust"
+path = "src/main.rs"

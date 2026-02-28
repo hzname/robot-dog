@@ -1,0 +1,15 @@
+[package]
+name = "dog_sensors_rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rclrs = "0.7"
+sensor_msgs = { package = "sensor_msgs", version = "5.0" }
+geometry_msgs = { package = "geometry_msgs", version = "5.0" }
+std_msgs = { package = "std_msgs", version = "5.0" }
+builtin_interfaces = { package = "builtin_interfaces", version = "1.2" }
+
+[[bin]]
+name = "imu_node_rust"
+path = "src/main.rs"

@@ -1,0 +1,13 @@
+imu_node:
+  ros__parameters:
+    # I2C configuration
+    i2c_bus: 1
+    
+    # Publishing rate (Hz)
+    publish_rate: 100.0
+    
+    # TF frame ID
+    frame_id: "imu_link"
+    
+    # Use mock data for simulation/testing
+    use_mock: false

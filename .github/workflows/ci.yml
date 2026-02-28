@@ -1,0 +1,137 @@
+name: ROS2 Build and Test
+
+on:
+  push:
+    branches: [ main, master, develop ]
+    paths:
+      - 'robot_dog_ws/**'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'robot_dog_ws/**'
+
+jobs:
+  build-python:
+    runs-on: ubuntu-22.04
+    container:
+      image: ros:humble-ros-base
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Setup ROS2
+      run: |
+        apt-get update
+        apt-get install -y python3-pip python3-colcon-common-extensions
+        apt-get install -y ros-humble-robot-state-publisher ros-humble-joint-state-publisher
+        apt-get install -y ros-humble-joint-state-publisher-gui
+        apt-get install -y ros-humble-rviz2
+    
+    - name: Install dependencies
+      run: |
+        pip3 install -r robot_dog_ws/requirements.txt
+    
+    - name: Build Python packages
+      run: |
+        cd robot_dog_ws
+        source /opt/ros/humble/setup.bash
+        colcon build --packages-select dog_control dog_hardware dog_sensors dog_teleop
+    
+    - name: Run tests
+      run: |
+        cd robot_dog_ws
+        source /opt/ros/humble/setup.bash
+        source install/setup.bash
+        colcon test --packages-select dog_control dog_hardware dog_sensors dog_teleop
+        colcon test-result --verbose
+
+  build-cmake:
+    runs-on: ubuntu-22.04
+    container:
+      image: ros:humble-ros-base
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Setup ROS2
+      run: |
+        apt-get update
+        apt-get install -y python3-colcon-common-extensions
+        apt-get install -y ros-humble-robot-state-publisher
+    
+    - name: Build CMake packages
+      run: |
+        cd robot_dog_ws
+        source /opt/ros/humble/setup.bash
+        colcon build --packages-select dog_bringup dog_description
+
+  build-rust:
+    runs-on: ubuntu-22.04
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-action@stable
+    
+    - name: Build Rust packages
+      run: |
+        cd robot_dog_ws/src/dog_control_rust && cargo build --release
+        cd ../dog_sensors_rust && cargo build --release
+        cd ../dog_hardware_rust && cargo build --release
+        cd ../dog_balance_rust && cargo build --release
+        cd ../dog_teleop_rust && cargo build --release
+    
+    - name: Check Rust formatting
+      run: |
+        rustup component add rustfmt
+        cd robot_dog_ws/src
+        cargo fmt --manifest-path dog_control_rust/Cargo.toml -- --check
+        cargo fmt --manifest-path dog_sensors_rust/Cargo.toml -- --check
+        cargo fmt --manifest-path dog_hardware_rust/Cargo.toml -- --check
+        cargo fmt --manifest-path dog_balance_rust/Cargo.toml -- --check
+        cargo fmt --manifest-path dog_teleop_rust/Cargo.toml -- --check
+
+  lint-python:
+    runs-on: ubuntu-22.04
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    
+    - name: Install linters
+      run: |
+        pip install flake8 pylint black
+    
+    - name: Run flake8
+      run: |
+        cd robot_dog_ws
+        flake8 src --count --select=E9,F63,F7,F82 --show-source --statistics || true
+    
+    - name: Check formatting with black
+      run: |
+        cd robot_dog_ws
+        black --check src || true
+
+  security-audit:
+    runs-on: ubuntu-22.04
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Security audit for Rust
+      run: |
+        rustup update
+        cargo install cargo-audit
+        cd robot_dog_ws/src
+        cargo audit --manifest-path dog_control_rust/Cargo.toml || true
+        cargo audit --manifest-path dog_sensors_rust/Cargo.toml || true

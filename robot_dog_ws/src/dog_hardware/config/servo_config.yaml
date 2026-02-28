@@ -1,0 +1,121 @@
+# Servo configuration for quadruped robot
+# PCA9685: 12 channels (0-11) for 12 servos
+
+servos:
+  # Front Left Leg (FL) - channels 0, 1, 2
+  - name: FL_hip
+    channel: 0
+    min_angle: -90.0
+    max_angle: 90.0
+    min_pulse: 500.0
+    max_pulse: 2500.0
+    inverted: false
+    offset: 0.0
+
+  - name: FL_thigh
+    channel: 1
+    min_angle: -90.0
+    max_angle: 90.0
+    min_pulse: 500.0
+    max_pulse: 2500.0
+    inverted: false
+    offset: 0.0
+
+  - name: FL_calf
+    channel: 2
+    min_angle: -90.0
+    max_angle: 90.0
+    min_pulse: 500.0
+    max_pulse: 2500.0
+    inverted: false
+    offset: 0.0
+
+  # Front Right Leg (FR) - channels 3, 4, 5 (inverted)
+  - name: FR_hip
+    channel: 3
+    min_angle: -90.0
+    max_angle: 90.0
+    min_pulse: 500.0
+    max_pulse: 2500.0
+    inverted: true
+    offset: 0.0
+
+  - name: FR_thigh
+    channel: 4
+    min_angle: -90.0
+    max_angle: 90.0
+    min_pulse: 500.0
+    max_pulse: 2500.0
+    inverted: true
+    offset: 0.0
+
+  - name: FR_calf
+    channel: 5
+    min_angle: -90.0
+    max_angle: 90.0
+    min_pulse: 500.0
+    max_pulse: 2500.0
+    inverted: true
+    offset: 0.0
+
+  # Back Left Leg (BL) - channels 6, 7, 8
+  - name: BL_hip
+    channel: 6
+    min_angle: -90.0
+    max_angle: 90.0
+    min_pulse: 500.0
+    max_pulse: 2500.0
+    inverted: false
+    offset: 0.0
+
+  - name: BL_thigh
+    channel: 7
+    min_angle: -90.0
+    max_angle: 90.0
+    min_pulse: 500.0
+    max_pulse: 2500.0
+    inverted: false
+    offset: 0.0
+
+  - name: BL_calf
+    channel: 8
+    min_angle: -90.0
+    max_angle: 90.0
+    min_pulse: 500.0
+    max_pulse: 2500.0
+    inverted: false
+    offset: 0.0
+
+  # Back Right Leg (BR) - channels 9, 10, 11 (inverted)
+  - name: BR_hip
+    channel: 9
+    min_angle: -90.0
+    max_angle: 90.0
+    min_pulse: 500.0
+    max_pulse: 2500.0
+    inverted: true
+    offset: 0.0
+
+  - name: BR_thigh
+    channel: 10
+    min_angle: -90.0
+    max_angle: 90.0
+    min_pulse: 500.0
+    max_pulse: 2500.0
+    inverted: true
+    offset: 0.0
+
+  - name: BR_calf
+    channel: 11
+    min_angle: -90.0
+    max_angle: 90.0
+    min_pulse: 500.0
+    max_pulse: 2500.0
+    inverted: true
+    offset: 0.0
+
+# PCA9685 settings
+pca9685:
+  i2c_bus: 0           # Banana Pi I2C bus
+  i2c_address: 0x40    # Default PCA9685 address
+  pwm_frequency: 50    # 50Hz for standard servos

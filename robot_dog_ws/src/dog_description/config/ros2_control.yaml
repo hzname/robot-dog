@@ -1,0 +1,46 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 100  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    joint_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+joint_trajectory_controller:
+  ros__parameters:
+    joints:
+      - FL_hip_joint
+      - FL_thigh_joint
+      - FL_calf_joint
+      - FR_hip_joint
+      - FR_thigh_joint
+      - FR_calf_joint
+      - BL_hip_joint
+      - BL_thigh_joint
+      - BL_calf_joint
+      - BR_hip_joint
+      - BR_thigh_joint
+      - BR_calf_joint
+
+    command_interfaces:
+      - position
+
+    state_interfaces:
+      - position
+      - velocity
+
+    gains:
+      FL_hip_joint: {p: 100.0, i: 0.0, d: 10.0}
+      FL_thigh_joint: {p: 100.0, i: 0.0, d: 10.0}
+      FL_calf_joint: {p: 100.0, i: 0.0, d: 10.0}
+      FR_hip_joint: {p: 100.0, i: 0.0, d: 10.0}
+      FR_thigh_joint: {p: 100.0, i: 0.0, d: 10.0}
+      FR_calf_joint: {p: 100.0, i: 0.0, d: 10.0}
+      BL_hip_joint: {p: 100.0, i: 0.0, d: 10.0}
+      BL_thigh_joint: {p: 100.0, i: 0.0, d: 10.0}
+      BL_calf_joint: {p: 100.0, i: 0.0, d: 10.0}
+      BR_hip_joint: {p: 100.0, i: 0.0, d: 10.0}
+      BR_thigh_joint: {p: 100.0, i: 0.0, d: 10.0}
+      BR_calf_joint: {p: 100.0, i: 0.0, d: 10.0}
