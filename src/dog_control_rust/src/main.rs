@@ -1,4 +1,5 @@
 use std::f64::consts::PI;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use rclrs::{Context, Node, Publisher, QosProfile, RclrsError, Subscription};
@@ -98,7 +99,10 @@ impl GaitController {
         
         JointState {
             header: std_msgs::msg::Header {
-                stamp: rclrs::Clock::system().now().into(),
+                stamp: builtin_interfaces::msg::Time {
+                    sec: 0,
+                    nanosec: 0,
+                }, // TODO: Use node.get_clock().now() when API available
                 frame_id: "base_link".to_string(),
             },
             name: self.joint_names.clone(),
@@ -116,6 +120,10 @@ fn main() -> Result<(), RclrsError> {
     // Create node
     let node = context.create_node("gait_controller_rust")?;
     
+    // Shared velocity state between subscription and main loop
+    let velocity_x = Arc::new(Mutex::new(0.1_f64)); // Default 0.1 m/s
+    let velocity_x_clone = Arc::clone(&velocity_x);
+    
     // Create publisher for joint states
     let publisher: Publisher<JointState> = node.create_publisher(
         "/joint_states",
@@ -126,10 +134,9 @@ fn main() -> Result<(), RclrsError> {
     let _cmd_vel_sub: Subscription<Twist> = node.create_subscription(
         "/cmd_vel",
         QosProfile::default(),
-        |msg: Twist| {
-            // Store velocity command (simplified - just log for now)
-            println!("Received cmd_vel: linear.x={}, angular.z={}", 
-                     msg.linear.x, msg.angular.z);
+        move |msg: Twist| {
+            let mut vel = velocity_x_clone.lock().unwrap();
+            *vel = msg.linear.x as f64;
         },
     )?;
     
@@ -146,13 +153,16 @@ fn main() -> Result<(), RclrsError> {
     while context.ok() {
         let start = std::time::Instant::now();
         
+        // Get current velocity
+        let vel_x = *velocity_x.lock().unwrap();
+        
         // Update gait phase
         let dt = 0.02_f64; // 20ms
         gait_phase += 2.0 * PI * frequency * dt;
         gait_phase %= 2.0 * PI;
         
         // Calculate joint states
-        let joint_state = controller.calculate_joint_states(gait_phase, 0.1);
+        let joint_state = controller.calculate_joint_states(gait_phase, vel_x);
         
         // Publish
         publisher.publish(&joint_state)?;
