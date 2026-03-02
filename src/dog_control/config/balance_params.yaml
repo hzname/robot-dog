@@ -1,0 +1,25 @@
+balance_controller:
+  ros__parameters:
+    # Roll PID (left/right tilt compensation)
+    pid:
+      roll:
+        kp: 0.5        # Proportional gain
+        ki: 0.01       # Integral gain
+        kd: 0.1        # Derivative gain
+      
+      # Pitch PID (forward/backward tilt compensation)
+      pitch:
+        kp: 0.5
+        ki: 0.01
+        kd: 0.1
+      
+      # PID limits
+      output_limit: 0.05      # Max correction output (meters)
+      integral_limit: 0.1     # Anti-windup limit
+    
+    # Balance geometry
+    balance:
+      enabled: true           # Enable balance control
+      leg_span_x: 0.3         # Distance between front and back legs (m)
+      leg_span_y: 0.2         # Distance between left and right legs (m)
+      max_correction: 0.03    # Maximum Z correction per leg (m)

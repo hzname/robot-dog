@@ -1,0 +1,87 @@
+version: '3.8'
+
+# Деплой на Banana Pi — только runtime, без сборки
+# Бинарники собираются заранее: cargo build --release --target aarch64-unknown-linux-gnu
+
+services:
+  # Базовый сервис (общие настройки)
+  robot_base:
+    image: arm64v8/ros:humble-ros-base
+    privileged: true
+    network_mode: host
+    environment:
+      - ROS_DOMAIN_ID=0
+      - ROS_LOCALHOST_ONLY=0
+    volumes:
+      - ./install:/workspace/install:ro
+      - ./rust_nodes:/workspace/rust_nodes:ro
+      - /dev/i2c-1:/dev/i2c-1
+      - /dev/gpiomem:/dev/gpiomem
+    working_dir: /workspace
+    restart: unless-stopped
+
+  # Gait Controller (Rust)
+  gait_controller:
+    extends: robot_base
+    container_name: gait_controller_rust
+    command: >
+      bash -c "source /opt/ros/humble/setup.bash &&
+               /workspace/rust_nodes/gait_controller_rust"
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # Servo Driver (Rust)
+  servo_driver:
+    extends: robot_base
+    container_name: servo_driver_rust
+    command: >
+      bash -c "source /opt/ros/humble/setup.bash &&
+               /workspace/rust_nodes/servo_driver_rust"
+    depends_on:
+      - gait_controller
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # Balance Controller (Rust)
+  balance_controller:
+    extends: robot_base
+    container_name: balance_controller_rust
+    command: >
+      bash -c "source /opt/ros/humble/setup.bash &&
+               /workspace/rust_nodes/balance_controller_rust"
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # IMU Node (Rust)
+  imu_node:
+    extends: robot_base
+    container_name: imu_node_rust
+    command: >
+      bash -c "source /opt/ros/humble/setup.bash &&
+               /workspace/rust_nodes/imu_node_rust"
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # Teleop (Python)
+  teleop:
+    extends: robot_base
+    container_name: teleop
+    command: >
+      bash -c "source /opt/ros/humble/setup.bash &&
+               source /workspace/install/setup.bash &&
+               ros2 run dog_teleop teleop_keyboard"
+    stdin_open: true
+    tty: true
+    profiles: ["teleop"]

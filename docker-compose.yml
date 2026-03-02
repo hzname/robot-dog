@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  robot_dog:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: robot_dog:ros2-humble
+    container_name: robot_dog
+    
+    # Привилегии для доступа к железу
+    privileged: true
+    
+    # Сетевой режим хоста для ROS2
+    network_mode: host
+    
+    # Привязка устройств
+    devices:
+      - /dev/i2c-1:/dev/i2c-1
+      - /dev/gpiomem:/dev/gpiomem
+    
+    # Переменные окружения
+    environment:
+      - ROS_DOMAIN_ID=0
+      - ROS_LOCALHOST_ONLY=0
+      - DISPLAY=${DISPLAY:-:0}
+    
+    # Монтирование volumes
+    volumes:
+      # Исходный код
+      - ./src:/workspace/src:rw
+      # Сборка
+      - ./build:/workspace/build:rw
+      - ./install:/workspace/install:rw
+      - ./log:/workspace/log:rw
+      # X11 для GUI (RViz)
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # I2C
+      - /dev/i2c-1:/dev/i2c-1
+    
+    # Рабочая директория
+    working_dir: /workspace
+    
+    # Команда по умолчанию
+    command: /bin/bash -c "
+      source /opt/ros/humble/setup.bash &&
+      colcon build --symlink-install 2>/dev/null || true &&
+      source install/setup.bash &&
+      bash
+    "
+    
+    # Автоперезапуск
+    restart: unless-stopped
+    
+    # Логирование
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Сервис для запуска робота с железом
+  robot_dog_hardware:
+    extends: robot_dog
+    container_name: robot_dog_hardware
+    profiles: ["hardware"]
+    command: /bin/bash -c "
+      source /opt/ros/humble/setup.bash &&
+      source install/setup.bash &&
+      ros2 launch dog_bringup robot_dog.launch.py use_hardware:=true
+    "
+    restart: always
+
+  # Сервис для симуляции
+  robot_dog_sim:
+    extends: robot_dog
+    container_name: robot_dog_sim
+    profiles: ["sim"]
+    command: /bin/bash -c "
+      source /opt/ros/humble/setup.bash &&
+      source install/setup.bash &&
+      ros2 launch dog_bringup robot_dog.launch.py use_sim:=true
+    "
