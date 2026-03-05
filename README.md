@@ -1,171 +1,212 @@
-# Robot Dog ROS2 Workspace
+# Robot Dog ROS2 Workspace 🤖🐕
 
-ROS2 workspace для квадрупедного робота-собаки с Python и Rust нодами.
+Квадрупедальный робот на базе ROS2 с C++ нодами для реального времени управления.
+
+[![ROS2 Jazzy](https://img.shields.io/badge/ROS2-Jazzy-blue.svg)](https://docs.ros.org/en/jazzy/)
+[![Build Status](https://github.com/hzname/robot-dog/actions/workflows/ci-cpp.yml/badge.svg)](https://github.com/hzname/robot-dog/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+## 🎯 Возможности
+
+- **C++ ноды** — высокая производительность и детерминизм
+- **Lifecycle management** — безопасный запуск/остановка
+- **Симуляция** — тестирование без железа
+- **Safety first** — watchdog, emergency stop, position limits
+- **Teleoperation** — клавиатура, джойстик, UDP
+- **Web interface** — в разработке (см. ROADMAP)
 
 ## 📁 Структура
 
 ```
 robot_dog_ws/
 ├── src/
-│   ├── dog_bringup/          # Launch файлы и конфигурация
-│   ├── dog_description/      # URDF, меши, описание робота
-│   ├── dog_control/          # Python: контроллеры походки и баланса
-│   ├── dog_hardware/         # Python: интерфейс сервоприводов
-│   ├── dog_sensors/          # Python: драйверы сенсоров (IMU)
-│   ├── dog_teleop/           # Python: телеуправление
-│   ├── dog_control_rust/     # Rust: контроллер походки
-│   ├── dog_sensors_rust/     # Rust: IMU нода
-│   ├── dog_hardware_rust/    # Rust: драйвер сервоприводов
-│   ├── dog_balance_rust/     # Rust: контроллер баланса
-│   └── dog_teleop_rust/      # Rust: телеуправление
+│   ├── dog_sensors_cpp/      # C++: IMU node (MPU6050 + simulator)
+│   ├── dog_control_cpp/       # C++: Gait + Balance controllers
+│   ├── dog_teleop_cpp/        # C++: Keyboard/Joystick/UDP teleop
+│   ├── dog_hardware_cpp/      # C++: Servo driver (PCA9685)
+│   ├── dog_description/       # URDF модель робота
+│   ├── dog_bringup/           # Launch файлы
+│   └── [deprecated]/          # Python и Rust пакеты (устарели)
+├── Dockerfile                 # Docker образ для сборки
+├── build-and-test.sh          # Скрипт сборки и тестирования
+└── ROADMAP.md                 # План разработки
 ```
 
 ## 🚀 Быстрый старт
 
 ### Требования
 
-- ROS2 Humble или Jazzy
-- Python 3.8+
-- Rust 1.70+ (для Rust нод)
+- Docker (рекомендуется)
+- или ROS2 Jazzy (Ubuntu 24.04)
 - colcon
 
-### Сборка
+### Сборка через Docker (рекомендуется)
 
 ```bash
-cd ~/robot_dog_ws
+git clone https://github.com/hzname/robot-dog.git
+cd robot-dog
 
-# Установка зависимостей
-rosdep install --from-paths src --ignore-src -y
+# Полная сборка и тесты
+./build-and-test.sh
 
-# Сборка всего workspace
-colcon build --symlink-install
+# Или только сборка
+docker build -t robot-dog-builder .
+docker run --rm -v $(pwd)/robot_dog_ws:/workspace robot-dog-builder
+```
+
+### Локальная сборка (без Docker)
+
+```bash
+cd robot-dog/robot_dog_ws
+source /opt/ros/jazzy/setup.bash
+
+# Сборка C++ пакетов
+colcon build --symlink-install --packages-select \
+  dog_sensors_cpp dog_control_cpp dog_teleop_cpp dog_hardware_cpp
 
 # Source окружения
 source install/setup.bash
 ```
 
-### Запуск
+## 🎮 Запуск
+
+### Симуляция (без железа)
 
 ```bash
-# Полный запуск (Python ноды + bridge)
-ros2 launch dog_bringup robot.launch.py
+# Все ноды
+ros2 launch dog_bringup robot_dog.launch.py use_hardware:=false
 
-# Запуск с Rust нодами
-ros2 launch dog_bringup rust_robot.launch.py use_rust:=true
-
-# Отдельные компоненты
-ros2 run dog_control gait_controller
-ros2 run dog_sensors imu_node
-ros2 run dog_teleop teleop_keyboard
-
-# Rust ноды напрямую
-ros2 run dog_control_rust gait_controller_rust
-ros2 run dog_sensors_rust imu_node_rust
+# Или отдельно
+ros2 run dog_sensors_cpp imu_node --ros-args -p simulate:=true
+ros2 run dog_control_cpp gait_controller
+ros2 run dog_teleop_cpp keyboard_teleop
 ```
 
-## 🔧 Деплой на Banana Pi
-
-### 1. Подготовка
+### На реальном железе (Banana Pi)
 
 ```bash
-# На Banana Pi
-sudo apt update
-sudo apt install -y python3-pip python3-colcon-common-extensions
-
-# Установка ROS2 (если не установлен)
-# См. официальную документацию ROS2 для ARM64
+ros2 launch dog_bringup robot_dog.launch.py use_hardware:=true
 ```
 
-### 2. Клонирование и сборка
+## 🕹️ Управление
 
-```bash
-# На Banana Pi
-git clone https://github.com/hzname/dev-workspace.git ~/dev-workspace
-cd ~/dev-workspace/robot_dog_ws
+### Keyboard Teleop
 
-# Установка Python зависимостей
-pip3 install -r requirements.txt
+Запустите `keyboard_teleop` и используйте:
 
-# Сборка (только Python пакеты)
-colcon build --packages-select dog_bringup dog_description dog_control dog_hardware dog_sensors dog_teleop
-
-# Source
-source install/setup.bash
+```
+w/s — вперед/назад
+a/d — влево/вправо
+q/e — поворот
+Space — стоп
++/- — высота корпуса
+ESC — emergency stop
+r — сброс emergency stop
 ```
 
-### 3. Установка Rust (опционально)
+### Топики
 
-```bash
-# Если нужны Rust ноды на Banana Pi
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source $HOME/.cargo/env
-
-# Пересборка с Rust
-colcon build --symlink-install
-```
-
-### 4. Запуск сервиса
-
-```bash
-# Создание systemd сервиса
-sudo tee /etc/systemd/system/robot-dog.service > /dev/null <<EOF
-[Unit]
-Description=Robot Dog ROS2
-After=network.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/home/pi/dev-workspace/robot_dog_ws
-ExecStart=/bin/bash -c 'source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 launch dog_bringup robot.launch.py'
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable robot-dog
-sudo systemctl start robot-dog
-```
+- `/cmd_vel` — команды скорости (geometry_msgs/Twist)
+- `/imu/data` — данные IMU (sensor_msgs/Imu)
+- `/joint_trajectory` — траектории суставов
+- `/gait_state` — состояние походки
+- `/emergency_stop` — emergency stop trigger
 
 ## 🧪 Тестирование
 
 ```bash
-# Проверка всех нод
-ros2 node list
+# В Docker
+./test-docker.sh
 
-# Просмотр топиков
-ros2 topic list
-ros2 topic echo /joint_states
-ros2 topic echo /imu/data
-
-# Тест телеуправления
-ros2 run dog_teleop teleop_keyboard
-# Управление: WASD для движения, Q/E для поворота
+# Локально
+colcon test --packages-select dog_sensors_cpp dog_control_cpp
+colcon test-result --verbose
 ```
 
-## 🐛 Отладка
+## 🏗️ Архитектура
+
+```
+┌─────────────────────────────────────────┐
+│           Teleop (Keyboard/UDP)         │
+└─────────────┬───────────────────────────┘
+              │ /cmd_vel
+┌─────────────▼───────────────────────────┐
+│        Gait Controller (C++)            │
+│    - Trot gait with phase offsets       │
+│    - Balance compensation (PID)         │
+└─────────────┬───────────────────────────┘
+              │ /joint_trajectory
+┌─────────────▼───────────────────────────┐
+│       Servo Driver (C++)                │
+│    - PCA9685 I2C PWM                    │
+│    - Safety: limits, watchdog, e-stop   │
+└─────────────┬───────────────────────────┘
+              │ I2C/UART
+┌─────────────▼───────────────────────────┐
+│         Hardware (12 servos)            │
+└─────────────────────────────────────────┘
+
+┌─────────────────────────────────────────┐
+│       IMU Node (C++)                    │
+│    - MPU6050 driver                     │
+│    - Mahony sensor fusion               │
+│    - Simulation mode                    │
+└─────────────────────────────────────────┘
+```
+
+## 🔧 Разработка
+
+### Добавление нового пакета
 
 ```bash
-# Логи ROS2
-ros2 run rqt_console rqt_console
-
-# Проверка графа
-ros2 run rqt_graph rqt_graph
-
-# RViz
-ros2 launch dog_bringup robot.launch.py use_rviz:=true
+cd robot_dog_ws/src
+ros2 pkg create --build-type ament_cmake my_package_cpp --dependencies rclcpp
 ```
 
-## 🔒 Исправленные проблемы
+### Code style
 
-- ✅ shell=True заменён на shell=False
-- ✅ Исправлены unwrap() в Rust коде
-- ✅ Исправлены condition в launch файлах
-- ✅ Добавлены недостающие зависимости
-- ✅ Полная интеграция Rust пакетов
+Проект использует:
+- `clang-format` — форматирование C++
+- `clang-tidy` — статический анализ
+- `cpplint` — проверка стиля Google
+
+```bash
+# Проверка форматирования
+find src -name "*.cpp" -o -name "*.hpp" | xargs clang-format --dry-run --Werror
+```
+
+## 📋 Статус разработки
+
+| Компонент | Статус |
+|-----------|--------|
+| C++ пакеты | ✅ Готово |
+| Сборка (Docker) | ✅ Готово |
+| Unit tests | ✅ 56/66 passed |
+| Симуляция | ✅ Работает |
+| Веб-интерфейс | 🚧 В разработке |
+| Тесты на железе | ⏳ Запланировано |
+
+См. [ROADMAP.md](ROADMAP.md) для подробного плана.
+
+## 🆘 Deprecated пакеты
+
+Следующие пакеты устарели и будут удалены:
+- `dog_control/` — Python контроллер
+- `dog_sensors/` — Python драйверы
+- `dog_hardware/` — Python интерфейс
+- `dog_teleop/` — Python телеоперация
+- `*_rust/` — Rust пакеты (заменены на C++)
+
+Используйте `*_cpp` пакеты вместо них.
 
 ## 📄 Лицензия
 
-MIT
+MIT License — см. [LICENSE](LICENSE)
+
+## 🤝 Contributing
+
+См. [CONTRIBUTING.md](CONTRIBUTING.md)
+
+---
+
+**Вопросы?** Создайте issue на GitHub или пишите в Telegram.
