@@ -83,7 +83,8 @@ void SimulationDriver::physicsLoop()
 
   while (running_)
   {
-    next_tick += std::chrono::duration<double>(PHYSICS_DT);
+    next_tick += std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+      std::chrono::duration<double>(PHYSICS_DT));
     std::this_thread::sleep_until(next_tick);
 
     std::lock_guard<std::mutex> lock(servos_mutex_);

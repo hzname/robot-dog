@@ -11,11 +11,18 @@
 #ifndef DOG_HARDWARE_CPP__SERVO_INTERFACE_HPP_
 #define DOG_HARDWARE_CPP__SERVO_INTERFACE_HPP_
 
+#include <cmath>
+#include <cstring>
 #include <string>
 #include <vector>
 #include <cstdint>
 #include <stdexcept>
 #include <optional>
+
+// Define M_PI if not available (C++ standard doesn't guarantee it)
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 namespace dog_hardware_cpp
 {

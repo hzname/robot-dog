@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <errno.h>
 
 namespace dog_hardware_cpp
@@ -45,14 +46,14 @@ bool PCA9685Driver::initialize(const std::string& device_port, uint8_t servo_cou
   i2c_fd_ = open(device_port.c_str(), O_RDWR);
   if (i2c_fd_ < 0)
   {
-    last_error_ = "Failed to open " + device_port + ": " + std::strerror(errno);
+    last_error_ = "Failed to open " + device_port + ": " + strerror(errno);
     return false;
   }
 
   // Set I2C slave address
   if (ioctl(i2c_fd_, I2C_SLAVE, i2c_addr_) < 0)
   {
-    last_error_ = "Failed to set I2C address: " + std::strerror(errno);
+    last_error_ = "Failed to set I2C address: " + strerror(errno);
     close(i2c_fd_);
     i2c_fd_ = -1;
     return false;
@@ -123,7 +124,7 @@ bool PCA9685Driver::writeByte(uint8_t reg, uint8_t data)
   uint8_t buffer[2] = {reg, data};
   if (write(i2c_fd_, buffer, 2) != 2)
   {
-    last_error_ = "I2C write failed: " + std::string(std::strerror(errno));
+    last_error_ = "I2C write failed: " + std::string(strerror(errno));
     return false;
   }
   return true;
@@ -140,7 +141,7 @@ bool PCA9685Driver::readByte(uint8_t reg, uint8_t& data)
 
   if (read(i2c_fd_, &data, 1) != 1)
   {
-    last_error_ = "I2C read failed: " + std::string(std::strerror(errno));
+    last_error_ = "I2C read failed: " + std::string(strerror(errno));
     return false;
   }
   return true;
