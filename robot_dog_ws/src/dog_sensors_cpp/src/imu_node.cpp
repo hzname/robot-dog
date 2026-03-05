@@ -7,7 +7,7 @@
 #include "dog_sensors_cpp/mpu6050_driver.hpp"
 #include "dog_sensors_cpp/mpu6050_simulator.hpp"
 
-#include <math>
+#include <cmath>
 #include <string>
 
 #include "rclcpp/qos.hpp"

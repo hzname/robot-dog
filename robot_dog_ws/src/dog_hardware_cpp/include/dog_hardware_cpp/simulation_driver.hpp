@@ -15,7 +15,7 @@
 #include "dog_hardware_cpp/servo_interface.hpp"
 
 #include <chrono>
-#include <math>
+#include <cmath>
 #include <thread>
 #include <mutex>
 #include <condition_variable>

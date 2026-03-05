@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 #include <array>
-#include <math>
+#include <cmath>
 #include <vector>
 
 #include "rclcpp/rclcpp.hpp"

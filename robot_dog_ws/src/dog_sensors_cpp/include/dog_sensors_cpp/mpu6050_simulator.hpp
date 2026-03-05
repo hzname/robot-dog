@@ -13,7 +13,7 @@
 #define DOG_SENSORS_CPP__MPU6050_SIMULATOR_HPP_
 
 #include <string>
-#include <math>
+#include <cmath>
 #include <array>
 #include <random>
 

@@ -7,7 +7,7 @@
 
 #include <rclcpp/qos.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
-#include <math>
+#include <cmath>
 #include <algorithm>
 
 namespace dog_hardware_cpp

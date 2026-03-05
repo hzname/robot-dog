@@ -2,7 +2,7 @@
 #define DOG_CONTROL_CPP__IMU_SIMULATOR_HPP_
 
 #include <memory>
-#include <math>
+#include <cmath>
 
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/imu.hpp"

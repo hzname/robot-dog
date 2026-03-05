@@ -1,7 +1,7 @@
 #include "dog_control_cpp/imu_simulator.hpp"
 
 #include <random>
-#include <math>
+#include <cmath>
 
 namespace dog_control_cpp
 {

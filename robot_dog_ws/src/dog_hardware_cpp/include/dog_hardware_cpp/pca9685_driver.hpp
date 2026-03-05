@@ -18,7 +18,7 @@
 
 #include <fstream>
 #include <array>
-#include <math>
+#include <cmath>
 #include <linux/i2c-dev.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>

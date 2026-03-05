@@ -6,7 +6,7 @@
 #include <gtest/gtest.h>
 #include <cmath>
 #include <array>
-#include <math>
+#include <cmath>
 
 // Simulator configuration matching MPU6050Simulator
 struct SimulatorConfig

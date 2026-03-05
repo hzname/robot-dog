@@ -6,7 +6,7 @@
 #include "dog_hardware_cpp/pca9685_driver.hpp"
 
 #include <chrono>
-#include <math>
+#include <cmath>
 #include <errno.h>
 
 namespace dog_hardware_cpp

@@ -1,7 +1,7 @@
 #include "dog_control_cpp/gait_controller.hpp"
 
 #include <rclcpp/qos.hpp>
-#include <math>
+#include <cmath>
 
 namespace dog_control_cpp
 {

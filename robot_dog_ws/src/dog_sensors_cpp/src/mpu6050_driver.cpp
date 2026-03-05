@@ -10,7 +10,7 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
-#include <math>
+#include <cmath>
 #include <iostream>
 
 namespace dog_sensors_cpp

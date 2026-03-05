@@ -5,7 +5,7 @@
 
 #include "dog_sensors_cpp/mpu6050_simulator.hpp"
 
-#include <math>
+#include <cmath>
 
 namespace dog_sensors_cpp
 {

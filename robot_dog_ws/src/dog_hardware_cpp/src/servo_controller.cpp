@@ -5,7 +5,7 @@
 
 #include "dog_hardware_cpp/servo_controller.hpp"
 
-#include <math>
+#include <cmath>
 
 namespace dog_hardware_cpp
 {
