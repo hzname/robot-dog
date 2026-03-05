@@ -1,0 +1,77 @@
+name: ROS2 C++ Build and Test
+
+on:
+  push:
+    branches: [ main, master, develop ]
+    paths:
+      - 'robot_dog_ws/src/dog_*_cpp/**'
+      - '.github/workflows/ci-cpp.yml'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'robot_dog_ws/src/dog_*_cpp/**'
+
+jobs:
+  build-cpp:
+    runs-on: ubuntu-24.04
+    container:
+      image: ros:jazzy-desktop
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Setup ROS2 Jazzy
+      run: |
+        apt-get update
+        apt-get install -y python3-colcon-common-extensions
+        apt-get install -y ros-jazzy-robot-state-publisher
+        apt-get install -y ros-jazzy-joint-state-publisher
+        apt-get install -y ros-jazzy-rviz2
+        apt-get install -y clang-format clang-tidy
+    
+    - name: Build C++ packages
+      run: |
+        cd robot_dog_ws
+        source /opt/ros/jazzy/setup.bash
+        colcon build --symlink-install --packages-select dog_sensors_cpp dog_control_cpp dog_teleop_cpp dog_hardware_cpp
+    
+    - name: Run tests
+      run: |
+        cd robot_dog_ws
+        source /opt/ros/jazzy/setup.bash
+        source install/setup.bash
+        colcon test --packages-select dog_sensors_cpp dog_control_cpp dog_teleop_cpp dog_hardware_cpp
+        colcon test-result --verbose
+    
+    - name: Upload build artifacts
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-logs
+        path: robot_dog_ws/build/*/log
+        retention-days: 7
+
+  lint-cpp:
+    runs-on: ubuntu-24.04
+    container:
+      image: ros:jazzy-desktop
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Install linters
+      run: |
+        apt-get update
+        apt-get install -y clang-format clang-tidy
+    
+    - name: Check formatting with clang-format
+      run: |
+        find robot_dog_ws/src/dog_*_cpp -name "*.cpp" -o -name "*.hpp" | xargs clang-format --dry-run --Werror || true
+    
+    - name: Run clang-tidy
+      run: |
+        cd robot_dog_ws
+        source /opt/ros/jazzy/setup.bash
+        clang-tidy src/dog_sensors_cpp/src/*.cpp src/dog_control_cpp/src/*.cpp src/dog_teleop_cpp/src/*.cpp src/dog_hardware_cpp/src/*.cpp -- || true
