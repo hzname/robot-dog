@@ -1,0 +1,20 @@
+# IMU Simulator Parameters (for testing in simulation)
+imu_simulator:
+  ros__parameters:
+    # Publish rate (Hz)
+    publish_rate: 100.0
+    
+    # Static offsets (simulating permanent tilt, radians)
+    static_roll: 0.0
+    static_pitch: 0.0
+    
+    # Oscillation parameters (simulating walking vibration)
+    osc_amplitude_roll: 0.02   # Roll oscillation amplitude (rad)
+    osc_amplitude_pitch: 0.015 # Pitch oscillation amplitude (rad)
+    osc_frequency: 2.0         # Oscillation frequency (Hz)
+    
+    # Noise parameters
+    noise_stddev: 0.005        # Standard deviation of noise (rad)
+    
+    # Disturbance decay factor (0.0 = instant, 1.0 = never decay)
+    disturbance_decay: 0.95

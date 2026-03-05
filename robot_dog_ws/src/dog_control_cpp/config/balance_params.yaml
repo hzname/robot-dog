@@ -1,0 +1,36 @@
+# Balance Controller PID Parameters
+balance_controller:
+  ros__parameters:
+    # PID gains for roll control
+    kp_roll: 0.15
+    ki_roll: 0.01
+    kd_roll: 0.05
+    
+    # PID gains for pitch control
+    kp_pitch: 0.15
+    ki_pitch: 0.01
+    kd_pitch: 0.05
+    
+    # PID gains for height control
+    kp_height: 1.0
+    ki_height: 0.1
+    kd_height: 0.2
+    
+    # Target height (meters)
+    target_height: 0.25
+    
+    # Output limits (radians for roll/pitch, meters for height)
+    max_roll_correction: 0.08
+    max_pitch_correction: 0.08
+    max_height_correction: 0.05
+    
+    # Anti-windup limits for integral terms
+    max_integral_roll: 0.5
+    max_integral_pitch: 0.5
+    max_integral_height: 0.2
+    
+    # Rate limiting (max change per second)
+    max_correction_rate: 0.5
+    
+    # Control loop rate (Hz)
+    control_rate: 100.0

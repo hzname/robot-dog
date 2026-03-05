@@ -1,0 +1,23 @@
+# Gait Controller Parameters
+gait_controller:
+  ros__parameters:
+    # Gait type: "trot", "walk", "bound"
+    gait_type: "trot"
+    
+    # Robot dimensions (meters)
+    body_length: 0.35
+    body_width: 0.20
+    thigh_length: 0.11
+    shin_length: 0.11
+    
+    # Gait parameters
+    stance_height: 0.25      # Default standing height (m)
+    step_height: 0.08        # Swing foot height (m)
+    gait_period: 0.5         # Duration of one gait cycle (s)
+    
+    # Balance integration
+    balance_enabled: true
+    balance_response_factor: 1.0  # Scaling factor for balance corrections
+    
+    # Control loop rate (Hz)
+    control_rate: 100.0

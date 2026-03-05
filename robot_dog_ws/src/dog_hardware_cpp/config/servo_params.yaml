@@ -1,0 +1,337 @@
+# Servo Driver Configuration for Robot Dog
+# 12 servos: 3 per leg × 4 legs
+# Joint names MUST match URDF joints in dog_description/urdf/
+
+servo_driver_node:
+  ros__parameters:
+    # Hardware interface settings
+    bus_type: "simulation"  # Options: "i2c", "uart", "simulation"
+    device_port: ""  # Auto-detected: "/dev/i2c-1" for I2C, "/dev/ttyUSB0" for UART
+    servo_count: 12
+    pwm_frequency: 50  # Hz
+    
+    # Control loop settings
+    control_rate: 100.0  # Hz
+    publish_rate: 100.0  # Hz
+    
+    # Safety settings
+    safety_enabled: true
+    emergency_stop_on_timeout: true
+    enable_watchdog: true
+    watchdog_timeout_s: 0.5  # Emergency stop if no commands for 0.5s
+    
+    # Motion limits
+    max_position_delta_rad: 0.15  # Max change per cycle
+    max_velocity_rad_s: 10.0  # Max velocity
+    
+    # Interpolation
+    enable_interpolation: true
+    interpolation_time_s: 0.05  # Time to reach target
+    
+    # ============================================================
+    # JOINT CONFIGURATION - Must match URDF joint names exactly!
+    # URDF: dog_description/urdf/dog.urdf.xacro
+    # ============================================================
+    # Joint order: LF = Left Front, RF = Right Front, 
+    #              LR = Left Rear,  RR = Right Rear
+    # Hip joints: side-to-side motion (roll/axis X)
+    # Thigh joints: forward/backward motion (pitch/axis Y)
+    # Shin joints: knee motion (pitch/axis Y)
+    
+    joints:
+      # ==========================================================
+      # LEFT FRONT LEG (lf)
+      # ==========================================================
+      lf_hip_joint:
+        id: 0
+        # URDF limits: lower="-0.8" upper="0.8" effort="10.0" velocity="10.0"
+        min_position: -0.8  # rad (~45 deg)
+        max_position: 0.8   # rad (~45 deg)
+        neutral_position: 0.0
+        max_velocity: 10.0  # rad/s
+        max_acceleration: 50.0  # rad/s^2
+        max_effort: 10.0
+        pwm_min_ms: 0.5
+        pwm_max_ms: 2.5
+        pwm_neutral_ms: 1.5
+        inverted: false
+        
+      lf_thigh_joint:
+        id: 1
+        # URDF limits: lower="-1.5" upper="1.5" effort="15.0" velocity="10.0"
+        min_position: -1.5  # rad
+        max_position: 1.5   # rad
+        neutral_position: 0.0
+        max_velocity: 10.0
+        max_acceleration: 50.0
+        max_effort: 15.0
+        pwm_min_ms: 0.5
+        pwm_max_ms: 2.5
+        pwm_neutral_ms: 1.5
+        inverted: false
+        
+      lf_shin_joint:
+        id: 2
+        # URDF limits: lower="-2.5" upper="-0.5" effort="15.0" velocity="10.0"
+        min_position: -2.5  # rad (bent backward)
+        max_position: -0.5  # rad (bent forward)
+        neutral_position: -1.2  # rad
+        max_velocity: 10.0
+        max_acceleration: 50.0
+        max_effort: 15.0
+        pwm_min_ms: 0.5
+        pwm_max_ms: 2.5
+        pwm_neutral_ms: 1.5
+        inverted: false
+        
+      # ==========================================================
+      # RIGHT FRONT LEG (rf) - mirrored from left
+      # ==========================================================
+      rf_hip_joint:
+        id: 3
+        # URDF limits: lower="-0.8" upper="0.8" effort="10.0" velocity="10.0"
+        min_position: -0.8
+        max_position: 0.8
+        neutral_position: 0.0
+        max_velocity: 10.0
+        max_acceleration: 50.0
+        max_effort: 10.0
+        pwm_min_ms: 0.5
+        pwm_max_ms: 2.5
+        pwm_neutral_ms: 1.5
+        inverted: true  # Mirrored leg
+        
+      rf_thigh_joint:
+        id: 4
+        # URDF limits: lower="-1.5" upper="1.5" effort="15.0" velocity="10.0"
+        min_position: -1.5
+        max_position: 1.5
+        neutral_position: 0.0
+        max_velocity: 10.0
+        max_acceleration: 50.0
+        max_effort: 15.0
+        pwm_min_ms: 0.5
+        pwm_max_ms: 2.5
+        pwm_neutral_ms: 1.5
+        inverted: true
+        
+      rf_shin_joint:
+        id: 5
+        # URDF limits: lower="-2.5" upper="-0.5" effort="15.0" velocity="10.0"
+        min_position: -2.5
+        max_position: -0.5
+        neutral_position: -1.2
+        max_velocity: 10.0
+        max_acceleration: 50.0
+        max_effort: 15.0
+        pwm_min_ms: 0.5
+        pwm_max_ms: 2.5
+        pwm_neutral_ms: 1.5
+        inverted: true
+        
+      # ==========================================================
+      # LEFT REAR LEG (lr)
+      # ==========================================================
+      lr_hip_joint:
+        id: 6
+        # URDF limits: lower="-0.8" upper="0.8" effort="10.0" velocity="10.0"
+        min_position: -0.8
+        max_position: 0.8
+        neutral_position: 0.0
+        max_velocity: 10.0
+        max_acceleration: 50.0
+        max_effort: 10.0
+        pwm_min_ms: 0.5
+        pwm_max_ms: 2.5
+        pwm_neutral_ms: 1.5
+        inverted: false
+        
+      lr_thigh_joint:
+        id: 7
+        # URDF limits: lower="-1.5" upper="1.5" effort="15.0" velocity="10.0"
+        min_position: -1.5
+        max_position: 1.5
+        neutral_position: 0.0
+        max_velocity: 10.0
+        max_acceleration: 50.0
+        max_effort: 15.0
+        pwm_min_ms: 0.5
+        pwm_max_ms: 2.5
+        pwm_neutral_ms: 1.5
+        inverted: false
+        
+      lr_shin_joint:
+        id: 8
+        # URDF limits: lower="-2.5" upper="-0.5" effort="15.0" velocity="10.0"
+        min_position: -2.5
+        max_position: -0.5
+        neutral_position: -1.2
+        max_velocity: 10.0
+        max_acceleration: 50.0
+        max_effort: 15.0
+        pwm_min_ms: 0.5
+        pwm_max_ms: 2.5
+        pwm_neutral_ms: 1.5
+        inverted: false
+        
+      # ==========================================================
+      # RIGHT REAR LEG (rr) - mirrored from left
+      # ==========================================================
+      rr_hip_joint:
+        id: 9
+        # URDF limits: lower="-0.8" upper="0.8" effort="10.0" velocity="10.0"
+        min_position: -0.8
+        max_position: 0.8
+        neutral_position: 0.0
+        max_velocity: 10.0
+        max_acceleration: 50.0
+        max_effort: 10.0
+        pwm_min_ms: 0.5
+        pwm_max_ms: 2.5
+        pwm_neutral_ms: 1.5
+        inverted: true
+        
+      rr_thigh_joint:
+        id: 10
+        # URDF limits: lower="-1.5" upper="1.5" effort="15.0" velocity="10.0"
+        min_position: -1.5
+        max_position: 1.5
+        neutral_position: 0.0
+        max_velocity: 10.0
+        max_acceleration: 50.0
+        max_effort: 15.0
+        pwm_min_ms: 0.5
+        pwm_max_ms: 2.5
+        pwm_neutral_ms: 1.5
+        inverted: true
+        
+      rr_shin_joint:
+        id: 11
+        # URDF limits: lower="-2.5" upper="-0.5" effort="15.0" velocity="10.0"
+        min_position: -2.5
+        max_position: -0.5
+        neutral_position: -1.2
+        max_velocity: 10.0
+        max_acceleration: 50.0
+        max_effort: 15.0
+        pwm_min_ms: 0.5
+        pwm_max_ms: 2.5
+        pwm_neutral_ms: 1.5
+        inverted: true
+
+    # ============================================================
+    # ROS2 Control Joint Limits (for integration with ros2_control)
+    # These are automatically synced with URDF limits
+    # ============================================================
+    joint_limits:
+      # Left Front
+      lf_hip_joint:
+        has_position_limits: true
+        min_position: -0.8
+        max_position: 0.8
+        has_velocity_limits: true
+        max_velocity: 10.0
+        has_effort_limits: true
+        max_effort: 10.0
+        
+      lf_thigh_joint:
+        has_position_limits: true
+        min_position: -1.5
+        max_position: 1.5
+        has_velocity_limits: true
+        max_velocity: 10.0
+        has_effort_limits: true
+        max_effort: 15.0
+        
+      lf_shin_joint:
+        has_position_limits: true
+        min_position: -2.5
+        max_position: -0.5
+        has_velocity_limits: true
+        max_velocity: 10.0
+        has_effort_limits: true
+        max_effort: 15.0
+        
+      # Right Front
+      rf_hip_joint:
+        has_position_limits: true
+        min_position: -0.8
+        max_position: 0.8
+        has_velocity_limits: true
+        max_velocity: 10.0
+        has_effort_limits: true
+        max_effort: 10.0
+        
+      rf_thigh_joint:
+        has_position_limits: true
+        min_position: -1.5
+        max_position: 1.5
+        has_velocity_limits: true
+        max_velocity: 10.0
+        has_effort_limits: true
+        max_effort: 15.0
+        
+      rf_shin_joint:
+        has_position_limits: true
+        min_position: -2.5
+        max_position: -0.5
+        has_velocity_limits: true
+        max_velocity: 10.0
+        has_effort_limits: true
+        max_effort: 15.0
+        
+      # Left Rear
+      lr_hip_joint:
+        has_position_limits: true
+        min_position: -0.8
+        max_position: 0.8
+        has_velocity_limits: true
+        max_velocity: 10.0
+        has_effort_limits: true
+        max_effort: 10.0
+        
+      lr_thigh_joint:
+        has_position_limits: true
+        min_position: -1.5
+        max_position: 1.5
+        has_velocity_limits: true
+        max_velocity: 10.0
+        has_effort_limits: true
+        max_effort: 15.0
+        
+      lr_shin_joint:
+        has_position_limits: true
+        min_position: -2.5
+        max_position: -0.5
+        has_velocity_limits: true
+        max_velocity: 10.0
+        has_effort_limits: true
+        max_effort: 15.0
+        
+      # Right Rear
+      rr_hip_joint:
+        has_position_limits: true
+        min_position: -0.8
+        max_position: 0.8
+        has_velocity_limits: true
+        max_velocity: 10.0
+        has_effort_limits: true
+        max_effort: 10.0
+        
+      rr_thigh_joint:
+        has_position_limits: true
+        min_position: -1.5
+        max_position: 1.5
+        has_velocity_limits: true
+        max_velocity: 10.0
+        has_effort_limits: true
+        max_effort: 15.0
+        
+      rr_shin_joint:
+        has_position_limits: true
+        min_position: -2.5
+        max_position: -0.5
+        has_velocity_limits: true
+        max_velocity: 10.0
+        has_effort_limits: true
+        max_effort: 15.0

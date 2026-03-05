@@ -1,0 +1,27 @@
+dog_teleop_cpp:
+  keyboard_teleop:
+    ros__parameters:
+      max_linear_speed: 0.5
+      max_angular_speed: 2.0
+      max_lateral_speed: 0.3
+      publish_rate: 50.0
+      watchdog_timeout: 0.5
+      
+  gamepad_teleop:
+    ros__parameters:
+      max_linear_speed: 0.5
+      max_angular_speed: 2.0
+      max_lateral_speed: 0.3
+      axis_deadzone: 0.1
+      publish_rate: 50.0
+      watchdog_timeout: 0.5
+      
+  udp_teleop:
+    ros__parameters:
+      max_linear_speed: 0.5
+      max_angular_speed: 2.0
+      max_lateral_speed: 0.3
+      publish_rate: 50.0
+      udp_port: 8888
+      watchdog_timeout: 0.5
+      max_packet_size: 256

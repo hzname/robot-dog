@@ -1,0 +1,60 @@
+#
+# IMU Node Configuration
+#
+# Load with:
+#   ros2 run dog_sensors_cpp imu_node --ros-args --params-file config/imu_params.yaml
+#
+
+imu_node:
+  ros__parameters:
+    # Publication rate (Hz)
+    # Higher rates for better control response, lower for bandwidth
+    publish_rate_hz: 100.0
+
+    # TF frame ID for IMU data
+    frame_id: "imu_link"
+
+    # Simulation mode - use simulated data instead of hardware
+    simulate: false
+
+    # Driver type: "auto", "mpu6050", "simulator", "none"
+    # - auto: Try hardware first, fall back to simulator
+    # - mpu6050: Use hardware MPU6050 driver
+    # - simulator: Use software simulator
+    # - none: Dummy data (zeros)
+    driver_type: "auto"
+
+    # Publish integrated pose estimate from IMU data
+    publish_pose: true
+
+    # Calibration biases (computed during calibration)
+    linear_accel_bias: [0.0, 0.0, 0.0]  # x, y, z in m/s^2
+    angular_vel_bias: [0.0, 0.0, 0.0]   # x, y, z in rad/s
+
+    # MPU6050 Hardware Configuration
+    i2c_bus: "/dev/i2c-1"    # I2C bus device path
+    i2c_address: 0x68        # I2C address: 0x68 (AD0=GND) or 0x69 (AD0=VCC)
+
+    # Simulator Configuration
+    sim_motion_mode: "idle"   # Motion mode: idle, walking, trotting, turning, pacing
+    sim_walk_frequency: 1.0   # Walking gait frequency (Hz)
+    sim_walk_amplitude: 0.15  # Walking motion amplitude (rad)
+
+---
+# Simulation-only configuration (for testing without hardware)
+# Usage: ros2 run dog_sensors_cpp imu_node --ros-args --params-file config/imu_params_sim.yaml
+
+imu_node:
+  ros__parameters:
+    publish_rate_hz: 100.0
+    frame_id: "imu_link"
+    simulate: true
+    driver_type: "simulator"
+    publish_pose: true
+    linear_accel_bias: [0.0, 0.0, 0.0]
+    angular_vel_bias: [0.0, 0.0, 0.0]
+    
+    # Simulator settings
+    sim_motion_mode: "walking"
+    sim_walk_frequency: 1.0
+    sim_walk_amplitude: 0.15
