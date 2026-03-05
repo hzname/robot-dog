@@ -1,5 +1,5 @@
 # Dockerfile для сборки robot-dog C++ пакетов на ROS2 Jazzy
-FROM ros:jazzy-desktop
+FROM ros:jazzy
 
 # Установка зависимостей
 RUN apt-get update && apt-get install -y \
