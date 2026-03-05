@@ -46,14 +46,14 @@ bool PCA9685Driver::initialize(const std::string& device_port, uint8_t servo_cou
   i2c_fd_ = open(device_port.c_str(), O_RDWR);
   if (i2c_fd_ < 0)
   {
-    last_error_ = "Failed to open " + device_port + ": " + strerror(errno);
+    last_error_ = std::string("Failed to open ") + device_port + ": " + strerror(errno);
     return false;
   }
 
   // Set I2C slave address
   if (ioctl(i2c_fd_, I2C_SLAVE, i2c_addr_) < 0)
   {
-    last_error_ = "Failed to set I2C address: " + strerror(errno);
+    last_error_ = std::string("Failed to set I2C address: ") + strerror(errno);
     close(i2c_fd_);
     i2c_fd_ = -1;
     return false;
