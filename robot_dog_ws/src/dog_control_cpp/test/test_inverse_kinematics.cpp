@@ -7,11 +7,11 @@
 #include <cmath>
 #include <array>
 
-// Test leg dimensions matching gait_controller.hpp
-constexpr double HIP_LENGTH = 0.045;
-constexpr double THIGH_LENGTH = 0.11;
-constexpr double CALF_LENGTH = 0.11;
-constexpr double BODY_LENGTH = 0.35;
+// Test leg dimensions matching URDF (dog.urdf.xacro)
+constexpr double HIP_LENGTH = 0.083;   // hip to thigh
+constexpr double THIGH_LENGTH = 0.25;  // thigh to calf
+constexpr double CALF_LENGTH = 0.25;   // calf to foot
+constexpr double BODY_LENGTH = 0.40;
 constexpr double BODY_WIDTH = 0.20;
 
 /**
