@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 #include <cmath>
 #include <array>
+#include <random>
 
 /**
  * @brief Mahony filter implementation (mirrors MPU6050 driver/simulator)

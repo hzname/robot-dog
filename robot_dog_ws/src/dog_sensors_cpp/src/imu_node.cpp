@@ -52,6 +52,9 @@ ImuNode::ImuNode(const rclcpp::NodeOptions & options)
   declare_parameter("sim_walk_amplitude", sim_walk_amplitude_);
 }
 
+// Destructor defined here where Mpu6050Driver and Mpu6050Simulator are complete types
+ImuNode::~ImuNode() = default;
+
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 ImuNode::on_configure(const rclcpp_lifecycle::State & /*state*/)
 {

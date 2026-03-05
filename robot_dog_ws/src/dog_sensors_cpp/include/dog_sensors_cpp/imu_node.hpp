@@ -61,7 +61,7 @@ public:
   /**
    * @brief Destructor
    */
-  ~ImuNode() override = default;
+  ~ImuNode() override;
 
   // Lifecycle transitions
   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
