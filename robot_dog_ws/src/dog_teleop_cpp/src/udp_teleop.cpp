@@ -1,11 +1,17 @@
 #include "dog_teleop_cpp/udp_teleop.hpp"
+#include <rclcpp/executors.hpp>
 
 #include <rclcpp/qos.hpp>
+#include <rclcpp/executors.hpp>
 #include <rcutils/allocator.h>
+#include <rclcpp/executors.hpp>
 
 #include <cmath>
+#include <rclcpp/executors.hpp>
 #include <algorithm>
+#include <rclcpp/executors.hpp>
 #include <sstream>
+#include <rclcpp/executors.hpp>
 
 namespace dog_teleop_cpp
 {
@@ -244,7 +250,9 @@ void UdpTeleop::parseAndExecute(const char* buffer, ssize_t len)
   bool stop = false;
 
   // Try parsing as comma-separated: "vx,vy,wz,stop"
-  int parsed = sscanf(buffer, "%lf,%lf,%lf,%d", &vx, &vy, &wz, &stop);
+  int stop_int = 0;
+    int parsed = sscanf(buffer, "%lf,%lf,%lf,%d", &vx, &vy, &wz, &stop_int);
+    stop = (stop_int != 0);
   
   if (parsed >= 3) {
     if (stop || emergency_stop_) {
@@ -363,7 +371,8 @@ int main(int argc, char * argv[])
 {
   rclcpp::init(argc, argv);
   
-  rclcpp::executors::SingleThreadedExecutor exec;
+  rclcpp::ExecutorOptions options;
+  rclcpp::executors::SingleThreadedExecutor exec(options);
   auto node = std::make_shared<dog_teleop_cpp::UdpTeleop>();
   exec.add_node(node->get_node_base_interface());
   

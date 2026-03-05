@@ -1,7 +1,10 @@
 #include "dog_teleop_cpp/keyboard_teleop.hpp"
+#include <rclcpp/executors.hpp>
 
 #include <rclcpp/qos.hpp>
+#include <rclcpp/executors.hpp>
 #include <algorithm>
+#include <rclcpp/executors.hpp>
 
 namespace dog_teleop_cpp
 {
@@ -410,7 +413,8 @@ int main(int argc, char * argv[])
 {
   rclcpp::init(argc, argv);
 
-  rclcpp::executors::SingleThreadedExecutor exec;
+  rclcpp::ExecutorOptions options;
+  rclcpp::executors::SingleThreadedExecutor exec(options);
   auto node = std::make_shared<dog_teleop_cpp::KeyboardTeleop>();
   exec.add_node(node->get_node_base_interface());
 
