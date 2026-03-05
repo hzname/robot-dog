@@ -24,15 +24,11 @@
 #include "geometry_msgs/msg/twist.hpp"
 #include "std_msgs/msg/bool.hpp"
 
-// Forward declarations
-namespace dog_sensors_cpp {
-class Mpu6050Driver;
-class Mpu6050Simulator;
-struct SimulatorConfig;
-}
+// Include driver types for unique_ptr
+#include "dog_sensors_cpp/mpu6050_driver.hpp"
+#include "dog_sensors_cpp/mpu6050_simulator.hpp"
 
-namespace dog_sensors_cpp
-{
+namespace dog_sensors_cpp {
 
 /**
  * @brief Driver type selection

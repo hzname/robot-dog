@@ -323,7 +323,7 @@ bool Mpu6050Driver::i2c_read_bytes(uint8_t reg, uint8_t * buffer, size_t length)
   }
   
   // Read data
-  return read(fd_, buffer, length) == static_cast<ssize_t>(length);
+  return ::read(fd_, buffer, length) == static_cast<ssize_t>(length);
 }
 
 bool Mpu6050Driver::i2c_read_byte(uint8_t reg, uint8_t & data)
