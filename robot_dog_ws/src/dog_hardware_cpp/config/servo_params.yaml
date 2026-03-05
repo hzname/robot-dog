@@ -36,7 +36,7 @@ servo_driver_node:
     #              LR = Left Rear,  RR = Right Rear
     # Hip joints: side-to-side motion (roll/axis X)
     # Thigh joints: forward/backward motion (pitch/axis Y)
-    # Shin joints: knee motion (pitch/axis Y)
+    # Calf joints: knee motion (pitch/axis Y)
     
     joints:
       # ==========================================================
@@ -70,7 +70,7 @@ servo_driver_node:
         pwm_neutral_ms: 1.5
         inverted: false
         
-      lf_shin_joint:
+      lf_calf_joint:
         id: 2
         # URDF limits: lower="-2.5" upper="-0.5" effort="15.0" velocity="10.0"
         min_position: -2.5  # rad (bent backward)
@@ -115,7 +115,7 @@ servo_driver_node:
         pwm_neutral_ms: 1.5
         inverted: true
         
-      rf_shin_joint:
+      rf_calf_joint:
         id: 5
         # URDF limits: lower="-2.5" upper="-0.5" effort="15.0" velocity="10.0"
         min_position: -2.5
@@ -160,7 +160,7 @@ servo_driver_node:
         pwm_neutral_ms: 1.5
         inverted: false
         
-      lr_shin_joint:
+      lr_calf_joint:
         id: 8
         # URDF limits: lower="-2.5" upper="-0.5" effort="15.0" velocity="10.0"
         min_position: -2.5
@@ -205,7 +205,7 @@ servo_driver_node:
         pwm_neutral_ms: 1.5
         inverted: true
         
-      rr_shin_joint:
+      rr_calf_joint:
         id: 11
         # URDF limits: lower="-2.5" upper="-0.5" effort="15.0" velocity="10.0"
         min_position: -2.5
@@ -243,7 +243,7 @@ servo_driver_node:
         has_effort_limits: true
         max_effort: 15.0
         
-      lf_shin_joint:
+      lf_calf_joint:
         has_position_limits: true
         min_position: -2.5
         max_position: -0.5
@@ -271,7 +271,7 @@ servo_driver_node:
         has_effort_limits: true
         max_effort: 15.0
         
-      rf_shin_joint:
+      rf_calf_joint:
         has_position_limits: true
         min_position: -2.5
         max_position: -0.5
@@ -299,7 +299,7 @@ servo_driver_node:
         has_effort_limits: true
         max_effort: 15.0
         
-      lr_shin_joint:
+      lr_calf_joint:
         has_position_limits: true
         min_position: -2.5
         max_position: -0.5
@@ -327,7 +327,7 @@ servo_driver_node:
         has_effort_limits: true
         max_effort: 15.0
         
-      rr_shin_joint:
+      rr_calf_joint:
         has_position_limits: true
         min_position: -2.5
         max_position: -0.5

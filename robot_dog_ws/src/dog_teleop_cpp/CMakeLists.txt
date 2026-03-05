@@ -79,6 +79,17 @@ install(DIRECTORY config
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
+  
+  # Find gtest
+  find_package(ament_cmake_gtest REQUIRED)
+  
+  # Teleop command parser tests
+  ament_add_gtest(test_teleop_commands test/test_teleop_commands.cpp)
+  target_include_directories(test_teleop_commands PRIVATE include)
+  
+  # Keyboard input handler tests
+  ament_add_gtest(test_keyboard_handler test/test_keyboard_handler.cpp)
+  target_include_directories(test_keyboard_handler PRIVATE include)
 endif()
 
 ament_package()

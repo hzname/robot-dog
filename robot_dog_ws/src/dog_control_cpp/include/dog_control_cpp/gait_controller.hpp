@@ -65,7 +65,7 @@ protected:
   
   // Inverse kinematics
   void solveLegIK(int leg_idx, double foot_x, double foot_y, double foot_z,
-                  double &hip_angle, double &thigh_angle, double &shin_angle);
+                  double &hip_angle, double &thigh_angle, double &calf_angle);
   
   // Publishing
   void publishJointTrajectory();
@@ -92,7 +92,7 @@ private:
   double body_width_;
   double hip_length_;
   double thigh_length_;
-  double shin_length_;
+  double calf_length_;
   
   // Leg hip positions relative to body center
   std::array<std::array<double, 3>, 4> leg_positions_;

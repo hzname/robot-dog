@@ -90,6 +90,21 @@ install(DIRECTORY config
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
+  
+  # Find gtest
+  find_package(ament_cmake_gtest REQUIRED)
+  
+  # Inverse Kinematics tests
+  ament_add_gtest(test_inverse_kinematics test/test_inverse_kinematics.cpp)
+  target_include_directories(test_inverse_kinematics PRIVATE include)
+  
+  # Gait Controller tests
+  ament_add_gtest(test_gait_controller test/test_gait_controller.cpp)
+  target_include_directories(test_gait_controller PRIVATE include)
+  
+  # Balance Controller tests
+  ament_add_gtest(test_balance_controller test/test_balance_controller.cpp)
+  target_include_directories(test_balance_controller PRIVATE include)
 endif()
 
 ament_package()

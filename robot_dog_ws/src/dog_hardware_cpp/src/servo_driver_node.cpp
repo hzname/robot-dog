@@ -6,7 +6,9 @@
 #include "dog_hardware_cpp/servo_driver_node.hpp"
 
 #include <rclcpp/qos.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 #include <math>
+#include <algorithm>
 
 namespace dog_hardware_cpp
 {
@@ -16,10 +18,10 @@ ServoDriverNode::ServoDriverNode(const rclcpp::NodeOptions &options)
       publish_rate_hz_(100.0),
       safety_enabled_(true),
       joint_names_({
-          "lf_hip_joint", "lf_thigh_joint", "lf_shin_joint",
-          "rf_hip_joint", "rf_thigh_joint", "rf_shin_joint",
-          "lr_hip_joint", "lr_thigh_joint", "lr_shin_joint",
-          "rr_hip_joint", "rr_thigh_joint", "rr_shin_joint"})
+          "lf_hip_joint", "lf_thigh_joint", "lf_calf_joint",
+          "rf_hip_joint", "rf_thigh_joint", "rf_calf_joint",
+          "lr_hip_joint", "lr_thigh_joint", "lr_calf_joint",
+          "rr_hip_joint", "rr_thigh_joint", "rr_calf_joint"})
 {
   // Declare parameters
   declare_parameter("bus_type", "simulation");
@@ -271,7 +273,7 @@ void ServoDriverNode::controlLoop()
   publishJointStates();
 
   // Check watchdog and publish status
-  if (watchdog_pub_-<is_activated())
+  if (watchdog_pub_->is_activated())
   {
     std_msgs::msg::Bool watchdog_msg;
     watchdog_msg.data = controller_->isWatchdogTriggered();
@@ -378,7 +380,7 @@ void ServoDriverNode::emergencyStopCallback(const std_msgs::msg::Bool::SharedPtr
     controller_->resetEmergencyStop();
   }
 
-  if (emergency_stop_pub_-<is_activated())
+  if (emergency_stop_pub_->is_activated())
   {
     emergency_stop_pub_->publish(*msg);
   }
@@ -398,7 +400,7 @@ void ServoDriverNode::enableCallback(const std_msgs::msg::Bool::SharedPtr msg)
 
 void ServoDriverNode::publishJointStates()
 {
-  if (!joint_state_pub_-<is_activated())
+  if (!joint_state_pub_->is_activated())
   {
     return;
   }
@@ -430,7 +432,7 @@ void ServoDriverNode::publishJointStates()
   joint_state_pub_->publish(std::move(msg));
 
   // Publish feedback as Float64MultiArray
-  if (servo_feedback_pub_-<is_activated())
+  if (servo_feedback_pub_->is_activated())
   {
     auto feedback_msg = std::make_unique<std_msgs::msg::Float64MultiArray>();
     feedback_msg->data = std::vector<double>(positions.begin(), positions.end());

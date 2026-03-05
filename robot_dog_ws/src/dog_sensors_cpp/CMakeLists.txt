@@ -70,6 +70,17 @@ install(DIRECTORY config
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
+  
+  # Find gtest
+  find_package(ament_cmake_gtest REQUIRED)
+  
+  # Mahony Filter tests
+  ament_add_gtest(test_mahony_filter test/test_mahony_filter.cpp)
+  target_include_directories(test_mahony_filter PRIVATE include)
+  
+  # MPU6050 Simulator tests
+  ament_add_gtest(test_mpu6050_simulator test/test_mpu6050_simulator.cpp)
+  target_include_directories(test_mpu6050_simulator PRIVATE include)
 endif()
 
 ament_package()

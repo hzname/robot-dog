@@ -18,16 +18,16 @@ GaitController::GaitController(const rclcpp::NodeOptions & options)
   body_width_(0.20),
   hip_length_(0.045),
   thigh_length_(0.11),
-  shin_length_(0.11),
+  calf_length_(0.11),
   current_phase_(0.0),
   control_rate_(100.0),
   balance_enabled_(true),
   balance_response_factor_(1.0),
   joint_names_({
-    "lf_hip_joint", "lf_thigh_joint", "lf_shin_joint",
-    "rf_hip_joint", "rf_thigh_joint", "rf_shin_joint",
-    "lr_hip_joint", "lr_thigh_joint", "lr_shin_joint",
-    "rr_hip_joint", "rr_thigh_joint", "rr_shin_joint",
+    "lf_hip_joint", "lf_thigh_joint", "lf_calf_joint",
+    "rf_hip_joint", "rf_thigh_joint", "rf_calf_joint",
+    "lr_hip_joint", "lr_thigh_joint", "lr_calf_joint",
+    "rr_hip_joint", "rr_thigh_joint", "rr_calf_joint",
   }),
   joint_angles_({0.0, 0.0, -1.2, 0.0, 0.0, -1.2, 0.0, 0.0, -1.2, 0.0, 0.0, -1.2})
 {
@@ -39,7 +39,7 @@ GaitController::GaitController(const rclcpp::NodeOptions & options)
   declare_parameter("body_length", body_length_);
   declare_parameter("body_width", body_width_);
   declare_parameter("thigh_length", thigh_length_);
-  declare_parameter("shin_length", shin_length_);
+  declare_parameter("calf_length", calf_length_);
   declare_parameter("control_rate", control_rate_);
   declare_parameter("balance_enabled", balance_enabled_);
   declare_parameter("balance_response_factor", balance_response_factor_);
@@ -77,7 +77,7 @@ LifecycleCallbackReturn GaitController::on_configure(const rclcpp_lifecycle::Sta
   body_length_ = get_parameter("body_length").as_double();
   body_width_ = get_parameter("body_width").as_double();
   thigh_length_ = get_parameter("thigh_length").as_double();
-  shin_length_ = get_parameter("shin_length").as_double();
+  calf_length_ = get_parameter("calf_length").as_double();
   control_rate_ = get_parameter("control_rate").as_double();
   balance_enabled_ = get_parameter("balance_enabled").as_bool();
   balance_response_factor_ = get_parameter("balance_response_factor").as_double();
@@ -334,17 +334,17 @@ void GaitController::calculateAllFootPositions()
     foot_positions_compensated_[leg_idx] = {{fx, fy, fz}};
     
     // Solve IK with compensated positions
-    double hip, thigh, shin;
-    solveLegIK(leg_idx, fx, fy, fz, hip, thigh, shin);
+    double hip, thigh, calf;
+    solveLegIK(leg_idx, fx, fy, fz, hip, thigh, calf);
     
     joint_angles_[leg_idx * 3 + 0] = hip;
     joint_angles_[leg_idx * 3 + 1] = thigh;
-    joint_angles_[leg_idx * 3 + 2] = shin;
+    joint_angles_[leg_idx * 3 + 2] = calf;
   }
 }
 
 void GaitController::solveLegIK(int leg_idx, double foot_x, double foot_y, double foot_z,
-                                 double &hip_angle, double &thigh_angle, double &shin_angle)
+                                 double &hip_angle, double &thigh_angle, double &calf_angle)
 {
   // Hip angle (abduction/adduction)
   hip_angle = std::atan2(foot_y, -foot_z);
@@ -356,16 +356,16 @@ void GaitController::solveLegIK(int leg_idx, double foot_x, double foot_y, doubl
   
   // 2D IK in leg plane using law of cosines
   double target_dist = std::sqrt(leg_plane_x * leg_plane_x + leg_plane_z * leg_plane_z);
-  target_dist = std::min(target_dist, thigh_length_ + shin_length_ - 0.001);
+  target_dist = std::min(target_dist, thigh_length_ + calf_length_ - 0.001);
   
   // Shin angle (knee)
-  double cos_shin = (thigh_length_ * thigh_length_ + shin_length_ * shin_length_ - target_dist * target_dist) /
-                    (2.0 * thigh_length_ * shin_length_);
-  cos_shin = std::max(-1.0, std::min(1.0, cos_shin));
-  shin_angle = M_PI - std::acos(cos_shin);
+  double cos_calf = (thigh_length_ * thigh_length_ + calf_length_ * calf_length_ - target_dist * target_dist) /
+                    (2.0 * thigh_length_ * calf_length_);
+  cos_calf = std::max(-1.0, std::min(1.0, cos_calf));
+  calf_angle = M_PI - std::acos(cos_calf);
   
   // Thigh angle (hip pitch)
-  double cos_thigh = (target_dist * target_dist + thigh_length_ * thigh_length_ - shin_length_ * shin_length_) /
+  double cos_thigh = (target_dist * target_dist + thigh_length_ * thigh_length_ - calf_length_ * calf_length_) /
                      (2.0 * target_dist * thigh_length_);
   cos_thigh = std::max(-1.0, std::min(1.0, cos_thigh));
   
@@ -376,7 +376,7 @@ void GaitController::solveLegIK(int leg_idx, double foot_x, double foot_y, doubl
   if (leg_idx == RF || leg_idx == RR) {
     hip_angle = -hip_angle;
     thigh_angle = -thigh_angle;
-    shin_angle = -shin_angle;
+    calf_angle = -calf_angle;
   }
 }
 

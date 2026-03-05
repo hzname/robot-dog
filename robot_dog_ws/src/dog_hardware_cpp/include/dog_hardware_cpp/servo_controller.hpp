@@ -197,10 +197,10 @@ private:
 
   // Default joint names for quadruped
   static constexpr std::array<const char*, 12> DEFAULT_JOINT_NAMES = {
-    "lf_hip_joint", "lf_thigh_joint", "lf_shin_joint",
-    "rf_hip_joint", "rf_thigh_joint", "rf_shin_joint",
-    "lr_hip_joint", "lr_thigh_joint", "lr_shin_joint",
-    "rr_hip_joint", "rr_thigh_joint", "rr_shin_joint"
+    "lf_hip_joint", "lf_thigh_joint", "lf_calf_joint",
+    "rf_hip_joint", "rf_thigh_joint", "rf_calf_joint",
+    "lr_hip_joint", "lr_thigh_joint", "lr_calf_joint",
+    "rr_hip_joint", "rr_thigh_joint", "rr_calf_joint"
   };
 };
 

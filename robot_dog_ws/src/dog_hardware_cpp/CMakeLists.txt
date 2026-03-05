@@ -58,6 +58,17 @@ install(DIRECTORY config
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
+  
+  # Find gtest
+  find_package(ament_cmake_gtest REQUIRED)
+  
+  # Servo controller tests
+  ament_add_gtest(test_servo_controller test/test_servo_controller.cpp)
+  target_include_directories(test_servo_controller PRIVATE include)
+  
+  # PCA9685 driver tests
+  ament_add_gtest(test_pca9685_driver test/test_pca9685_driver.cpp)
+  target_include_directories(test_pca9685_driver PRIVATE include)
 endif()
 
 ament_package()
