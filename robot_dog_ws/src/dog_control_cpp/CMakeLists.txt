@@ -19,29 +19,35 @@ find_package(trajectory_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 
-include_directories(include)
-
-# Gait Controller
-add_executable(gait_controller
+# Gait Controller Library (target-based)
+add_library(gait_controller_lib SHARED
   src/gait_controller.cpp
 )
-
-ament_target_dependencies(gait_controller
-  rclcpp
-  rclcpp_lifecycle
-  lifecycle_msgs
-  geometry_msgs
-  sensor_msgs
-  trajectory_msgs
-  std_msgs
-  tf2
+target_include_directories(gait_controller_lib PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
 )
+target_compile_features(gait_controller_lib PUBLIC cxx_std_17)
+target_link_libraries(gait_controller_lib PUBLIC
+  rclcpp::rclcpp
+  rclcpp_lifecycle::rclcpp_lifecycle
+  lifecycle_msgs::lifecycle_msgs
+  geometry_msgs::geometry_msgs
+  sensor_msgs::sensor_msgs
+  trajectory_msgs::trajectory_msgs
+  std_msgs::std_msgs
+  tf2::tf2
+)
+
+# Gait Controller Executable
+add_executable(gait_controller src/main_gait_controller.cpp)
+target_link_libraries(gait_controller PRIVATE gait_controller_lib)
 
 # Balance Controller
 add_executable(balance_controller
   src/balance_controller.cpp
 )
-
+target_include_directories(balance_controller PRIVATE include)
 ament_target_dependencies(balance_controller
   rclcpp
   rclcpp_lifecycle
@@ -56,7 +62,7 @@ ament_target_dependencies(balance_controller
 add_executable(imu_simulator
   src/imu_simulator.cpp
 )
-
+target_include_directories(imu_simulator PRIVATE include)
 ament_target_dependencies(imu_simulator
   rclcpp
   sensor_msgs
@@ -70,6 +76,14 @@ install(TARGETS
   balance_controller
   imu_simulator
   DESTINATION lib/${PROJECT_NAME}
+)
+
+# Install library
+install(TARGETS gait_controller_lib
+  EXPORT export_${PROJECT_NAME}
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
 )
 
 # Install headers

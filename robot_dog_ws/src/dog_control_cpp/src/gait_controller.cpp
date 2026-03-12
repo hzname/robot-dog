@@ -29,7 +29,8 @@ GaitController::GaitController(const rclcpp::NodeOptions & options)
     "lr_hip_joint", "lr_thigh_joint", "lr_calf_joint",
     "rr_hip_joint", "rr_thigh_joint", "rr_calf_joint",
   }),
-  joint_angles_({0.0, 0.0, -1.2, 0.0, 0.0, -1.2, 0.0, 0.0, -1.2, 0.0, 0.0, -1.2})
+  joint_angles_({0.0, 0.0, -1.2, 0.0, 0.0, -1.2, 0.0, 0.0, -1.2, 0.0, 0.0, -1.2}),
+  last_time_(rclcpp::Time(0, 0, RCL_ROS_TIME))
 {
   // Declare parameters
   declare_parameter("gait_type", gait_type_);
@@ -208,17 +209,20 @@ LifecycleCallbackReturn GaitController::on_error(const rclcpp_lifecycle::State &
 
 void GaitController::cmdVelCallback(const geometry_msgs::msg::Twist::SharedPtr msg)
 {
+  std::lock_guard<std::mutex> lock(state_mutex_);
   velocity_cmd_ = *msg;
   step_length_ = msg->linear.x * gait_period_ * 0.5;
 }
 
 void GaitController::bodyPoseCallback(const geometry_msgs::msg::Pose::SharedPtr msg)
 {
+  std::lock_guard<std::mutex> lock(state_mutex_);
   body_pose_ = *msg;
 }
 
 void GaitController::balanceAdjustmentCallback(const geometry_msgs::msg::Vector3::SharedPtr msg)
 {
+  std::lock_guard<std::mutex> lock(state_mutex_);
   balance_adjustment_ = *msg;
   RCLCPP_DEBUG(get_logger(), "Balance adjustment: roll=%.3f pitch=%.3f height=%.3f",
                msg->x, msg->y, msg->z);
@@ -238,8 +242,17 @@ void GaitController::gaitLoop()
   current_phase_ += dt / gait_period_;
   current_phase_ = std::fmod(current_phase_, 1.0);
   
+  // Копируем данные под локом
+  geometry_msgs::msg::Twist local_vel;
+  geometry_msgs::msg::Vector3 local_balance;
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    local_vel = velocity_cmd_;
+    local_balance = balance_adjustment_;
+  }
+  
   // Calculate foot positions and solve IK
-  calculateAllFootPositions();
+  calculateAllFootPositions(local_vel);
   
   // Publish
   publishJointTrajectory();
@@ -248,15 +261,16 @@ void GaitController::gaitLoop()
 }
 
 void GaitController::calculateFootTrajectory(int leg_idx, double phase,
-                                              double &x, double &y, double &z)
+                                              double &x, double &y, double &z,
+                                              const geometry_msgs::msg::Twist& velocity_cmd)
 {
   // Default foot position (neutral stance)
   double default_x = leg_positions_[leg_idx][0] * 0.5;
   double default_y = leg_positions_[leg_idx][1] * 0.8;
   double default_z = -stance_height_;
   
-  double direction = (std::abs(velocity_cmd_.linear.x) > 0.01) ? 
-                     std::copysign(1.0, velocity_cmd_.linear.x) : 1.0;
+  double direction = (std::abs(velocity_cmd.linear.x) > 0.01) ? 
+                     std::copysign(1.0, velocity_cmd.linear.x) : 1.0;
   
   double x_offset = 0.0;
   double z_offset = 0.0;
@@ -275,9 +289,9 @@ void GaitController::calculateFootTrajectory(int leg_idx, double phase,
   
   // Apply turning
   double turn_offset = 0.0;
-  if (std::abs(velocity_cmd_.angular.z) > 0.01) {
+  if (std::abs(velocity_cmd.angular.z) > 0.01) {
     double leg_sign = (leg_idx == LF || leg_idx == LR) ? 1.0 : -1.0;
-    turn_offset = leg_sign * velocity_cmd_.angular.z * 0.05 * std::sin(phase * 2.0 * M_PI);
+    turn_offset = leg_sign * velocity_cmd.angular.z * 0.05 * std::sin(phase * 2.0 * M_PI);
   }
   
   x = default_x + x_offset + turn_offset;
@@ -318,13 +332,13 @@ void GaitController::applyBalanceCorrections(double &x, double &y, double &z, in
   y -= roll_corr * 0.02;   // Move feet slightly left/right for roll
 }
 
-void GaitController::calculateAllFootPositions()
+void GaitController::calculateAllFootPositions(const geometry_msgs::msg::Twist& velocity_cmd)
 {
   for (int leg_idx = 0; leg_idx < 4; ++leg_idx) {
     double leg_phase = std::fmod(current_phase_ + gait_phase_offset_[leg_idx], 1.0);
     
     double fx, fy, fz;
-    calculateFootTrajectory(leg_idx, leg_phase, fx, fy, fz);
+    calculateFootTrajectory(leg_idx, leg_phase, fx, fy, fz, velocity_cmd);
     
     // Store original positions
     foot_positions_[leg_idx] = {{fx, fy, fz}};
@@ -361,13 +375,13 @@ void GaitController::solveLegIK(int leg_idx, double foot_x, double foot_y, doubl
   // Shin angle (knee)
   double cos_calf = (thigh_length_ * thigh_length_ + calf_length_ * calf_length_ - target_dist * target_dist) /
                     (2.0 * thigh_length_ * calf_length_);
-  cos_calf = std::max(-1.0, std::min(1.0, cos_calf));
+  cos_calf = std::clamp(cos_calf, -1.0, 1.0);
   calf_angle = M_PI - std::acos(cos_calf);
   
   // Thigh angle (hip pitch)
   double cos_thigh = (target_dist * target_dist + thigh_length_ * thigh_length_ - calf_length_ * calf_length_) /
                      (2.0 * target_dist * thigh_length_);
-  cos_thigh = std::max(-1.0, std::min(1.0, cos_thigh));
+  cos_thigh = std::clamp(cos_thigh, -1.0, 1.0);
   
   double target_angle = std::atan2(leg_plane_x, -leg_plane_z);
   thigh_angle = target_angle - std::acos(cos_thigh);
@@ -424,17 +438,3 @@ void GaitController::publishGaitState()
 }
 
 }  // namespace dog_control_cpp
-
-int main(int argc, char * argv[])
-{
-  rclcpp::init(argc, argv);
-  rclcpp::NodeOptions options;
-  auto node = std::make_shared<dog_control_cpp::GaitController>(options);
-  
-  rclcpp::executors::SingleThreadedExecutor executor;
-  executor.add_node(node->get_node_base_interface());
-  executor.spin();
-  
-  rclcpp::shutdown();
-  return 0;
-}

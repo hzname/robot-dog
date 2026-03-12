@@ -6,6 +6,8 @@
 #include <array>
 #include <cmath>
 #include <vector>
+#include <mutex>
+#include <atomic>
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
@@ -56,9 +58,10 @@ protected:
   void balanceAdjustmentCallback(const geometry_msgs::msg::Vector3::SharedPtr msg);
   
   // Gait generation
-  void calculateFootTrajectory(int leg_idx, double phase, 
-                               double &x, double &y, double &z);
-  void calculateAllFootPositions();
+  void calculateFootTrajectory(int leg_idx, double phase,
+                               double &x, double &y, double &z,
+                               const geometry_msgs::msg::Twist& velocity_cmd);
+  void calculateAllFootPositions(const geometry_msgs::msg::Twist& velocity_cmd);
   
   // Apply balance corrections to foot positions
   void applyBalanceCorrections(double &x, double &y, double &z, int leg_idx);
@@ -104,8 +107,11 @@ private:
   
   // Balance compensation
   geometry_msgs::msg::Vector3 balance_adjustment_;
-  bool balance_enabled_;
+  std::atomic<bool> balance_enabled_{true};
   double balance_response_factor_;
+  
+  // Thread safety
+  mutable std::mutex state_mutex_;
   
   // Joint configuration
   std::array<std::string, 12> joint_names_;

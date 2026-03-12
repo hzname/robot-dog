@@ -2,6 +2,7 @@
 
 #include <rclcpp/qos.hpp>
 #include <cmath>
+#include <limits>
 
 namespace dog_control_cpp
 {
@@ -192,7 +193,7 @@ void BalanceController::imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg)
 
 void BalanceController::heightCmdCallback(const std_msgs::msg::Float64::SharedPtr msg)
 {
-  target_height_ = std::max(0.15, std::min(0.35, msg->data));
+  target_height_ = std::clamp(msg->data, 0.15, 0.35);
   RCLCPP_DEBUG(get_logger(), "Target height set to: %.3f", target_height_);
 }
 
@@ -201,16 +202,21 @@ void BalanceController::poseCmdCallback(const geometry_msgs::msg::Pose::SharedPt
   double roll, pitch, yaw;
   quaternionToEuler(msg->orientation.w, msg->orientation.x, msg->orientation.y, msg->orientation.z,
                     roll, pitch, yaw);
-  target_roll_ = std::max(-0.3, std::min(0.3, roll));
-  target_pitch_ = std::max(-0.3, std::min(0.3, pitch));
+  target_roll_ = std::clamp(roll, -0.3, 0.3);
+  target_pitch_ = std::clamp(pitch, -0.3, 0.3);
   RCLCPP_DEBUG(get_logger(), "Target pose: roll=%.3f pitch=%.3f", target_roll_, target_pitch_);
 }
 
 double BalanceController::computePID(double error, double &integral, double &prev_error,
                                       double dt, double kp, double ki, double kd)
 {
+  if (dt <= std::numeric_limits<double>::epsilon()) {
+    return kp * error; // Только пропорциональная часть
+  }
+  
   // Update integral with anti-windup
   integral += error * dt;
+  integral = std::clamp(integral, -max_integral_roll_, max_integral_roll_);
   
   // Compute derivative
   double derivative = (error - prev_error) / dt;
@@ -238,12 +244,9 @@ void BalanceController::controlLoop()
   double height_error = target_height_ - current_height_;
 
   // Clamp integrals (anti-windup)
-  roll_error_integral_ = std::max(-max_integral_roll_, 
-                                   std::min(max_integral_roll_, roll_error_integral_));
-  pitch_error_integral_ = std::max(-max_integral_pitch_, 
-                                    std::min(max_integral_pitch_, pitch_error_integral_));
-  height_error_integral_ = std::max(-max_integral_height_, 
-                                     std::min(max_integral_height_, height_error_integral_));
+  roll_error_integral_ = std::clamp(roll_error_integral_, -max_integral_roll_, max_integral_roll_);
+  pitch_error_integral_ = std::clamp(pitch_error_integral_, -max_integral_pitch_, max_integral_pitch_);
+  height_error_integral_ = std::clamp(height_error_integral_, -max_integral_height_, max_integral_height_);
 
   // Compute PID outputs
   double roll_correction = computePID(roll_error, roll_error_integral_, roll_error_prev_,
@@ -254,12 +257,9 @@ void BalanceController::controlLoop()
                                          dt, kp_height_, ki_height_, kd_height_);
 
   // Clamp corrections
-  roll_correction = std::max(-max_roll_correction_, 
-                              std::min(max_roll_correction_, roll_correction));
-  pitch_correction = std::max(-max_pitch_correction_, 
-                               std::min(max_pitch_correction_, pitch_correction));
-  height_correction = std::max(-max_height_correction_, 
-                                std::min(max_height_correction_, height_correction));
+  roll_correction = std::clamp(roll_correction, -max_roll_correction_, max_roll_correction_);
+  pitch_correction = std::clamp(pitch_correction, -max_pitch_correction_, max_pitch_correction_);
+  height_correction = std::clamp(height_correction, -max_height_correction_, max_height_correction_);
 
   // Apply rate limiting
   std::array<double, 3> correction = {roll_correction, pitch_correction, height_correction};
@@ -268,7 +268,7 @@ void BalanceController::controlLoop()
   for (size_t i = 0; i < 3; ++i)
   {
     double delta = correction[i] - last_correction_[i];
-    delta = std::max(-max_delta, std::min(max_delta, delta));
+    delta = std::clamp(delta, -max_delta, max_delta);
     last_correction_[i] += delta;
   }
 

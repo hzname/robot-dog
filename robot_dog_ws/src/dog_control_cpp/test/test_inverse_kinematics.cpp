@@ -24,12 +24,12 @@ void solveLegIK(int leg_idx, double foot_x, double foot_y, double foot_z,
   
   double cos_calf = (THIGH_LENGTH*THIGH_LENGTH + CALF_LENGTH*CALF_LENGTH - target_dist*target_dist) /
                     (2.0 * THIGH_LENGTH * CALF_LENGTH);
-  cos_calf = std::max(-1.0, std::min(1.0, cos_calf));
+  cos_calf = std::clamp(cos_calf, -1.0, 1.0);
   calf_angle = M_PI - std::acos(cos_calf);
   
   double cos_thigh = (target_dist*target_dist + THIGH_LENGTH*THIGH_LENGTH - CALF_LENGTH*CALF_LENGTH) /
                      (2.0 * target_dist * THIGH_LENGTH);
-  cos_thigh = std::max(-1.0, std::min(1.0, cos_thigh));
+  cos_thigh = std::clamp(cos_thigh, -1.0, 1.0);
   
   double target_angle = std::atan2(foot_x, d_adj);
   thigh_angle = target_angle - std::acos(cos_thigh);
@@ -93,6 +93,17 @@ TEST(IKTest, ZeroPosition)
   EXPECT_TRUE(std::isfinite(h));
   EXPECT_TRUE(std::isfinite(t));
   EXPECT_TRUE(std::isfinite(c));
+}
+
+TEST(IKTest, HandlesSingularity)
+{
+  double hip, thigh, calf;
+  // Точка вне workspace
+  EXPECT_NO_THROW(solveLegIK(0, 1000.0, 1000.0, -1000.0, hip, thigh, calf));
+  // Проверяем что вернулось корректное значение (clamped)
+  EXPECT_TRUE(std::isfinite(hip));
+  EXPECT_TRUE(std::isfinite(thigh));
+  EXPECT_TRUE(std::isfinite(calf));
 }
 
 int main(int argc, char **argv)
