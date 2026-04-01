@@ -48,19 +48,19 @@ def generate_launch_description():
         output='screen'
     )
     
-    # Gait controller
+    # Gait controller (C++)
     gait_controller_node = Node(
-        package='dog_control',
+        package='dog_control_cpp',
         executable='gait_controller',
         name='gait_controller',
         output='screen',
         parameters=[config_file]
     )
     
-    # Teleop keyboard (optional)
+    # Teleop keyboard (C++, optional)
     teleop_node = Node(
-        package='dog_teleop',
-        executable='teleop_keyboard',
+        package='dog_teleop_cpp',
+        executable='keyboard_teleop',
         name='teleop_keyboard',
         output='screen',
         parameters=[config_file]

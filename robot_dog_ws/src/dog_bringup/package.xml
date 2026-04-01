@@ -10,8 +10,10 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>dog_description</depend>
-  <depend>dog_control</depend>
-  <depend>dog_teleop</depend>
+  <depend>dog_control_cpp</depend>
+  <depend>dog_teleop_cpp</depend>
+  <depend>dog_sensors_cpp</depend>
+  <depend>dog_hardware_cpp</depend>
   <depend>robot_state_publisher</depend>
   <depend>joint_state_publisher</depend>
 
