@@ -208,7 +208,8 @@ void BalanceController::poseCmdCallback(const geometry_msgs::msg::Pose::SharedPt
 }
 
 double BalanceController::computePID(double error, double &integral, double &prev_error,
-                                      double dt, double kp, double ki, double kd)
+                                      double dt, double kp, double ki, double kd,
+                                      double max_integral)
 {
   if (dt <= std::numeric_limits<double>::epsilon()) {
     return kp * error; // Только пропорциональная часть
@@ -216,7 +217,7 @@ double BalanceController::computePID(double error, double &integral, double &pre
   
   // Update integral with anti-windup
   integral += error * dt;
-  integral = std::clamp(integral, -max_integral_roll_, max_integral_roll_);
+  integral = std::clamp(integral, -max_integral, max_integral);
   
   // Compute derivative
   double derivative = (error - prev_error) / dt;
@@ -250,11 +251,11 @@ void BalanceController::controlLoop()
 
   // Compute PID outputs
   double roll_correction = computePID(roll_error, roll_error_integral_, roll_error_prev_,
-                                       dt, kp_roll_, ki_roll_, kd_roll_);
+                                       dt, kp_roll_, ki_roll_, kd_roll_, max_integral_roll_);
   double pitch_correction = computePID(pitch_error, pitch_error_integral_, pitch_error_prev_,
-                                        dt, kp_pitch_, ki_pitch_, kd_pitch_);
+                                        dt, kp_pitch_, ki_pitch_, kd_pitch_, max_integral_pitch_);
   double height_correction = computePID(height_error, height_error_integral_, height_error_prev_,
-                                         dt, kp_height_, ki_height_, kd_height_);
+                                         dt, kp_height_, ki_height_, kd_height_, max_integral_height_);
 
   // Clamp corrections
   roll_correction = std::clamp(roll_correction, -max_roll_correction_, max_roll_correction_);

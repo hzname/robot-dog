@@ -59,7 +59,7 @@ protected:
   
   // PID computation
   double computePID(double error, double &integral, double &prev_error, 
-                    double dt, double kp, double ki, double kd);
+                    double dt, double kp, double ki, double kd, double max_integral);
 
 private:
   // PID gains for roll
