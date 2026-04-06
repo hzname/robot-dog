@@ -11,7 +11,7 @@ install(DIRECTORY
   urdf
   launch
   meshes
-  DESTINATION share/${PROJECT_NAME}
+  DESTINATION share/dog_description
 )
 
 if(BUILD_TESTING)
