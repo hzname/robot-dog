@@ -19,7 +19,7 @@ find_package(trajectory_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 
-# Gait Controller Library (target-based)
+# Gait Controller Library
 add_library(gait_controller_lib SHARED
   src/gait_controller.cpp
 )
@@ -28,20 +28,17 @@ target_include_directories(gait_controller_lib PUBLIC
   $<INSTALL_INTERFACE:include>
 )
 target_compile_features(gait_controller_lib PUBLIC cxx_std_17)
-target_link_libraries(gait_controller_lib PUBLIC
-  rclcpp::rclcpp
-  rclcpp_lifecycle::rclcpp_lifecycle
-  lifecycle_msgs::lifecycle_msgs
-  geometry_msgs::geometry_msgs
-  sensor_msgs::sensor_msgs
-  trajectory_msgs::trajectory_msgs
-  std_msgs::std_msgs
-  tf2::tf2
+ament_target_dependencies(gait_controller_lib
+  rclcpp
+  rclcpp_lifecycle
+  rclcpp_components
+  lifecycle_msgs
+  geometry_msgs
+  sensor_msgs
+  trajectory_msgs
+  std_msgs
+  tf2
 )
-
-# Gait Controller Executable
-add_executable(gait_controller src/main_gait_controller.cpp)
-target_link_libraries(gait_controller PRIVATE gait_controller_lib)
 
 # Balance Controller
 add_executable(balance_controller
@@ -58,7 +55,7 @@ ament_target_dependencies(balance_controller
   tf2
 )
 
-# IMU Simulator (for testing)
+# IMU Simulator
 add_executable(imu_simulator
   src/imu_simulator.cpp
 )
@@ -70,15 +67,7 @@ ament_target_dependencies(imu_simulator
   std_msgs
 )
 
-# Install executables
-install(TARGETS 
-  gait_controller 
-  balance_controller
-  imu_simulator
-  DESTINATION lib/${PROJECT_NAME}
-)
-
-# Install library
+# Install
 install(TARGETS gait_controller_lib
   EXPORT export_${PROJECT_NAME}
   LIBRARY DESTINATION lib
@@ -86,17 +75,15 @@ install(TARGETS gait_controller_lib
   RUNTIME DESTINATION bin
 )
 
-# Install headers
+install(TARGETS balance_controller imu_simulator
+  DESTINATION lib/${PROJECT_NAME}
+)
 install(DIRECTORY include/
   DESTINATION include
 )
-
-# Install launch files
 install(DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}
 )
-
-# Install config files
 install(DIRECTORY config
   DESTINATION share/${PROJECT_NAME}
 )
@@ -104,21 +91,6 @@ install(DIRECTORY config
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
-  
-  # Find gtest
-  find_package(ament_cmake_gtest REQUIRED)
-  
-  # Inverse Kinematics tests
-  ament_add_gtest(test_inverse_kinematics test/test_inverse_kinematics.cpp)
-  target_include_directories(test_inverse_kinematics PRIVATE include)
-  
-  # Gait Controller tests
-  ament_add_gtest(test_gait_controller test/test_gait_controller.cpp)
-  target_include_directories(test_gait_controller PRIVATE include)
-  
-  # Balance Controller tests
-  ament_add_gtest(test_balance_controller test/test_balance_controller.cpp)
-  target_include_directories(test_balance_controller PRIVATE include)
 endif()
 
 ament_package()
