@@ -13,7 +13,20 @@ RUN apt-get update && apt-get install -y \
     ros-humble-joint-state-publisher \
     ros-humble-xacro \
     ros-humble-tf2-ros \
+    ros-humble-tf2 \
     ros-humble-rviz2 \
+    ros-humble-geometry-msgs \
+    ros-humble-sensor-msgs \
+    ros-humble-trajectory-msgs \
+    ros-humble-std-msgs \
+    ros-humble-lifecycle-msgs \
+    ros-humble-rclcpp-lifecycle \
+    ros-humble-rclcpp-components \
+    ros-humble-ros2-control \
+    ros-humble-ros2-controllers \
+    ros-humble-hardware-interface \
+    ros-humble-controller-manager \
+    ros-humble-gazebo-ros2-control \
     # Python
     python3-pip \
     python3-colcon-common-extensions \
