@@ -51,13 +51,19 @@ class PCA9685:
 
     def set_freq(self, freq):
         prescale = int(25000000.0 / (4096 * freq) - 1)
+        # Прочитаем текущий режим
         old = self._read(MODE1)
-        self._write(MODE1, (old & 0x7F) | 0x10)  # sleep
-        self._write(PRESCALE, prescale)
-        self._write(MODE1, old)
-        time.sleep(0.005)
-        self._write(MODE1, old | 0x80)  # restart
-        self._write(MODE2, 0x04)  # output driver: totem pole
+        # Сброс (нужен для PCA9685)
+        self.bus.write_byte_data(self.addr, MODE1, 0x00)  # FULL STOP
+        time.sleep(0.01)
+        # Режим сна для установки prescale
+        self.bus.write_byte_data(self.addr, MODE1, 0x10)  # SLEEP
+        time.sleep(0.01)
+        self.bus.write_byte_data(self.addr, PRESCALE, prescale)
+        # Перезапуск
+        self.bus.write_byte_data(self.addr, MODE1, 0x80)  # RESTART
+        time.sleep(0.05)
+        self._write(MODE2, 0x04)  # outdrv: totem pole
 
     def set_pwm(self, channel, on, off):
         reg = LED0_ON_L + 4 * channel
