@@ -17,8 +17,8 @@ SERVO_MID = 375   # ~90°
 
 ANGLE_MIN = 30
 ANGLE_MAX = 150
-STEP = 5
-STEP_DELAY = 0.02  # задержка между шагами (сек)
+STEP = 10
+STEP_DELAY = 0.03  # задержка между шагами (сек)
 
 JOINTS = [
     "FL_hip", "FL_thigh", "FL_calf",
@@ -76,7 +76,6 @@ if __name__ == "__main__":
     print("Robot Dog — Последовательный тест сервоприводов")
     print(f"PCA9685: I2C-{I2C_BUS}, адрес 0x{I2C_ADDR:02X}")
     print(f"Диапазон: {ANGLE_MIN}° → {ANGLE_MAX}°, шаг {STEP}°")
-    print(f"Переключение каналов: 1 сек")
     print()
 
     pca = PCA9685(I2C_BUS, I2C_ADDR)
@@ -84,12 +83,26 @@ if __name__ == "__main__":
     # Сначала все в нейтраль
     for ch in range(12):
         pca.set_angle(ch, 90)
-    time.sleep(0.5)
+    time.sleep(1)
+
+    # Тест одного канала
+    ch = 0
+    name = JOINTS[ch]
+    print(f"[Тест] {name}: 30° жду 1с")
+    pca.set_angle(ch, 30)
+    time.sleep(1)
+    print(f"[Тест] {name}: 150° жду 1с")
+    pca.set_angle(ch, 150)
+    time.sleep(1)
+    print(f"[Тест] {name}: 90° жду 1с")
+    pca.set_angle(ch, 90)
+    time.sleep(1)
+    print("[Тест] OK\n")
 
     # По очереди каждый канал
     for ch, name in enumerate(JOINTS):
         sweep(pca, ch, name)
-        time.sleep(1)  # 1 секунда между каналами
+        time.sleep(1)
 
     # Все в нейтраль
     for ch in range(12):
