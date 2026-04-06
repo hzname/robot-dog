@@ -26,7 +26,7 @@ RUN apt-get update && apt-get install -y \
     ros-humble-ros2-controllers \
     ros-humble-hardware-interface \
     ros-humble-controller-manager \
-    ros-humble-gazebo-ros2-control \
+    # ros-humble-gazebo-ros2-control \
     # Python
     python3-pip \
     python3-colcon-common-extensions \
