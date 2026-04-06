@@ -271,7 +271,8 @@ void GaitController::calculateFootTrajectory(int leg_idx, double phase,
   
   double direction = (std::abs(velocity_cmd.linear.x) > 0.01) ? 
                      std::copysign(1.0, velocity_cmd.linear.x) : 1.0;
-  
+  (void)direction;
+
   double x_offset = 0.0;
   double z_offset = 0.0;
   

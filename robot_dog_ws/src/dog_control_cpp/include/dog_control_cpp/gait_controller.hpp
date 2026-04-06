@@ -107,7 +107,7 @@ private:
   
   // Balance compensation
   geometry_msgs::msg::Vector3 balance_adjustment_;
-  std::atomic<bool> balance_enabled_{true};
+  bool balance_enabled_{true};
   double balance_response_factor_;
   
   // Thread safety
