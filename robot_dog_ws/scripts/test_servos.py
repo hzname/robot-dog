@@ -21,8 +21,8 @@ MODE2      = 0x01
 PRESCALE   = 0xFE
 LED0_ON_L  = 0x06
 
-I2C_BUS = 5
-I2C_ADDR = 0x30
+I2C_BUS = 0
+I2C_ADDR = 0x40
 
 SERVO_MIN = 150   # ~0°
 SERVO_MAX = 600   # ~180°
