@@ -40,6 +40,10 @@ ament_target_dependencies(gait_controller_lib
   tf2
 )
 
+# Gait Controller Executable
+add_executable(gait_controller src/main_gait_controller.cpp)
+target_link_libraries(gait_controller PRIVATE gait_controller_lib)
+
 # Balance Controller
 add_executable(balance_controller
   src/balance_controller.cpp
@@ -75,7 +79,7 @@ install(TARGETS gait_controller_lib
   RUNTIME DESTINATION bin
 )
 
-install(TARGETS balance_controller imu_simulator
+install(TARGETS gait_controller balance_controller imu_simulator
   DESTINATION lib/${PROJECT_NAME}
 )
 install(DIRECTORY include/
