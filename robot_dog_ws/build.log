@@ -1,0 +1,57 @@
+Starting >>> dog_control
+Starting >>> dog_description
+Starting >>> dog_teleop
+Starting >>> dog_control_cpp
+Finished <<< dog_description [8.13s]
+Starting >>> dog_hardware
+Finished <<< dog_control [10.2s]
+Finished <<< dog_teleop [10.2s]
+Starting >>> dog_hardware_cpp
+Starting >>> dog_sensors
+Finished <<< dog_hardware [9.42s]
+Starting >>> dog_sensors_cpp
+Finished <<< dog_sensors [12.2s]
+Starting >>> dog_teleop_cpp
+--- stderr: dog_control_cpp
+In file included from /workspace/src/dog_control_cpp/src/main_gait_controller.cpp:6:
+/workspace/src/dog_control_cpp/include/dog_control_cpp/gait_controller.hpp:16:10: fatal error: geometry_msgs/msg/twist.hpp: No such file or directory
+   16 | #include "geometry_msgs/msg/twist.hpp"
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation terminated.
+gmake[2]: *** [CMakeFiles/gait_controller.dir/build.make:76: CMakeFiles/gait_controller.dir/src/main_gait_controller.cpp.o] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:193: CMakeFiles/gait_controller.dir/all] Error 2
+gmake[1]: *** Waiting for unfinished jobs....
+In file included from /workspace/src/dog_control_cpp/src/gait_controller.cpp:1:
+/workspace/src/dog_control_cpp/include/dog_control_cpp/gait_controller.hpp: In constructor ‘dog_control_cpp::GaitController::GaitController(const rclcpp::NodeOptions&)’:
+/workspace/src/dog_control_cpp/include/dog_control_cpp/gait_controller.hpp:124:10: warning: ‘dog_control_cpp::GaitController::control_rate_’ will be initialized after [-Wreorder]
+  124 |   double control_rate_;
+      |          ^~~~~~~~~~~~~
+/workspace/src/dog_control_cpp/include/dog_control_cpp/gait_controller.hpp:110:21: warning:   ‘std::atomic<bool> dog_control_cpp::GaitController::balance_enabled_’ [-Wreorder]
+  110 |   std::atomic<bool> balance_enabled_{true};
+      |                     ^~~~~~~~~~~~~~~~
+/workspace/src/dog_control_cpp/src/gait_controller.cpp:9:1: warning:   when initialized here [-Wreorder]
+    9 | GaitController::GaitController(const rclcpp::NodeOptions & options)
+      | ^~~~~~~~~~~~~~
+/workspace/src/dog_control_cpp/src/gait_controller.cpp: In member function ‘void dog_control_cpp::GaitController::calculateFootTrajectory(int, double, double&, double&, double&, const Twist&)’:
+/workspace/src/dog_control_cpp/src/gait_controller.cpp:272:10: warning: unused variable ‘direction’ [-Wunused-variable]
+  272 |   double direction = (std::abs(velocity_cmd.linear.x) > 0.01) ?
+      |          ^~~~~~~~~
+gmake: *** [Makefile:146: all] Error 2
+---
+Failed   <<< dog_control_cpp [4min 13s, exited with code 2]
+[Processing: dog_control_cpp, dog_hardware_cpp, dog_sensors_cpp, dog_teleop_cpp]
+[Processing: dog_control_cpp, dog_hardware_cpp, dog_sensors_cpp, dog_teleop_cpp]
+[Processing: dog_control_cpp, dog_hardware_cpp, dog_sensors_cpp, dog_teleop_cpp]
+[Processing: dog_control_cpp, dog_hardware_cpp, dog_sensors_cpp, dog_teleop_cpp]
+[Processing: dog_control_cpp, dog_hardware_cpp, dog_sensors_cpp, dog_teleop_cpp]
+[Processing: dog_control_cpp, dog_hardware_cpp, dog_sensors_cpp, dog_teleop_cpp]
+[Processing: dog_control_cpp, dog_hardware_cpp, dog_sensors_cpp, dog_teleop_cpp]
+Aborted  <<< dog_sensors_cpp [4min 42s]
+Aborted  <<< dog_hardware_cpp [5min 2s]
+Aborted  <<< dog_teleop_cpp [5min 37s]
+
+Summary: 5 packages finished [6min 1s]
+  1 package failed: dog_control_cpp
+  3 packages aborted: dog_hardware_cpp dog_sensors_cpp dog_teleop_cpp
+  3 packages had stderr output: dog_control_cpp dog_hardware_cpp dog_sensors_cpp
+  1 package not processed
