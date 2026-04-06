@@ -37,6 +37,9 @@ class PCA9685:
         self._write(0x00, 0x10)  # sleep
         time.sleep(0.01)
         self._write(0xFE, 121)   # prescale 50Hz
+        time.sleep(0.01)
+        self._write(0x00, 0x00)   # wake up (clear sleep bit)
+        time.sleep(0.01)
         self._write(0x00, 0x80)  # restart
         time.sleep(0.05)
         self._write(0x01, 0x04)  # totem pole
