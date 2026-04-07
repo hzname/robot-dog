@@ -19,8 +19,8 @@ I2C_ADDR = 0x40
 
 # PCA9685: 50 Hz, 12-bit (0–4095)
 # 1.0 мс = tick 205,  2.0 мс = tick 410
-SERVO_MIN = 205    # ~1.0 мс  → ~0°
-SERVO_MAX = 410    # ~2.0 мс  → ~180°
+SERVO_MIN = 150    # ~0.5 мс  → ~0°
+SERVO_MAX = 600    # ~2.5 мс  → ~180°
 
 ANGLE_MIN = 30
 ANGLE_MAX = 150

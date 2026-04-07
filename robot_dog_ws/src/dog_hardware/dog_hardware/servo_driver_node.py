@@ -61,41 +61,53 @@ class PCA9685:
             self._init_chip()
     
     def _init_chip(self):
-        """Initialize PCA9685 chip."""
+        """Initialize PCA9685 chip (datasheet sequence)."""
+        import time
+        
         if self._mock_mode:
             return
-            
-        # Reset
-        self._write_byte(self.MODE1, self.RESTART)
-        import time
-        time.sleep(0.005)
         
-        # Set sleep mode to change prescale
-        self._write_byte(self.MODE1, self.SLEEP)
+        # 1. Full reset — ALLCALL + SLEEP
+        self._write_byte(self.MODE1, 0x00)
+        time.sleep(0.01)
         
-        # Calculate prescale for desired frequency
+        # 2. Read current MODE1, enter sleep for prescale change
+        old_mode = self.bus.read_byte_data(self.address, self.MODE1)
+        self._write_byte(self.MODE1, (old_mode & 0x7F) | self.SLEEP)
+        time.sleep(0.01)
+        
+        # 3. Set prescale for desired frequency
         # prescale = round(25MHz / (4096 * frequency)) - 1
         prescale = int(round(25000000.0 / (4096.0 * self.frequency) - 1.0))
         self._write_byte(self.PRESCALE, prescale)
+        time.sleep(0.01)
         
-        # Wake up
-        self._write_byte(self.MODE1, 0x00)
-        import time
-        time.sleep(0.005)
+        # 4. Wake up (clear SLEEP bit)
+        self._write_byte(self.MODE1, old_mode & 0x7F)
+        time.sleep(0.01)
         
-        # Set MODE2 (totem pole drive, non-inverted)
+        # 5. Restart (set RESTART bit)
+        self._write_byte(self.MODE1, old_mode | self.RESTART)
+        time.sleep(0.05)
+        
+        # 6. Set MODE2 — totem-pole, non-inverted
         self._write_byte(self.MODE2, self.OUTDRV)
         
-        # Set MODE1 (auto-increment, normal mode)
+        # 7. Set MODE1 — auto-increment + ALLCALL
         self._write_byte(self.MODE1, self.ALLCALL)
-        import time
-        time.sleep(0.005)
+        time.sleep(0.01)
     
     def _write_byte(self, register: int, value: int):
         """Write byte to register."""
         if self._mock_mode:
             return
         self.bus.write_byte_data(self.address, register, value)
+    
+    def _read_byte(self, register: int) -> int:
+        """Read byte from register."""
+        if self._mock_mode:
+            return 0
+        return self.bus.read_byte_data(self.address, register)
     
     def set_pwm(self, channel: int, on: int, off: int):
         """
@@ -123,11 +135,11 @@ class PCA9685:
             channel: Channel number (0-15)
             pulse_us: Pulse width in microseconds (typically 500-2500)
         """
-        # For 50Hz, period is 20000us
-        # 4096 ticks per period
-        # tick_time = 20000 / 4096 = 4.88us per tick
+        # For 50Hz, period is 20000us, 4096 ticks
+        # tick_time = 20000 / 4096 ≈ 4.88us per tick
         tick = int(pulse_us / 20000.0 * 4096.0)
-        tick = max(0, min(4095, tick))  # Clamp to valid range
+        tick = max(0, min(4095, tick))
+        # ON at tick 0, OFF at calculated tick
         self.set_pwm(channel, 0, tick)
     
     def set_all_off(self):

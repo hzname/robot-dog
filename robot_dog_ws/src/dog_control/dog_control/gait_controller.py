@@ -131,10 +131,10 @@ class GaitController(Node):
         
         # Joint names for all 4 legs
         self.leg_joints = {
-            'FL': ['FL_hip_joint', 'FL_thigh_joint', 'FL_calf_joint'],
-            'FR': ['FR_hip_joint', 'FR_thigh_joint', 'FR_calf_joint'],
-            'BL': ['BL_hip_joint', 'BL_thigh_joint', 'BL_calf_joint'],
-            'BR': ['BR_hip_joint', 'BR_thigh_joint', 'BR_calf_joint']
+            'FL': ['FL_hip', 'FL_thigh', 'FL_calf'],
+            'FR': ['FR_hip', 'FR_thigh', 'FR_calf'],
+            'BL': ['BL_hip', 'BL_thigh', 'BL_calf'],
+            'BR': ['BR_hip', 'BR_thigh', 'BR_calf']
         }
         
         # Leg positions (for inverse kinematics)
@@ -468,18 +468,18 @@ class GaitController(Node):
             knee_angle = -knee_angle
         
         return {
-            f'{leg}_hip_joint': hip_angle,
-            f'{leg}_thigh_joint': thigh_angle,
-            f'{leg}_calf_joint': knee_angle
+            f'{leg}_hip': hip_angle,
+            f'{leg}_thigh': thigh_angle,
+            f'{leg}_calf': knee_angle
         }
     
     def _get_standing_positions(self) -> dict:
         """Return standing position for all joints."""
         positions = {}
         for leg in ['FL', 'FR', 'BL', 'BR']:
-            positions[f'{leg}_hip_joint'] = self.standing_pose['hip']
-            positions[f'{leg}_thigh_joint'] = self.standing_pose['thigh']
-            positions[f'{leg}_calf_joint'] = self.standing_pose['calf']
+            positions[f'{leg}_hip'] = self.standing_pose['hip']
+            positions[f'{leg}_thigh'] = self.standing_pose['thigh']
+            positions[f'{leg}_calf'] = self.standing_pose['calf']
         return positions
     
     def _publish_trajectory(self, positions: dict):
