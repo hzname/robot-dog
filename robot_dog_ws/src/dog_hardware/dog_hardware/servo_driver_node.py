@@ -94,7 +94,7 @@ class PCA9685:
         self._write_byte(self.MODE2, self.OUTDRV)
         
         # 7. Set MODE1 — auto-increment + ALLCALL
-        self._write_byte(self.MODE1, self.ALLCALL)
+        self._write_byte(self.MODE1, 0x20 | self.ALLCALL)  # Enable Auto-Increment (AI) bit
         time.sleep(0.01)
     
     def _write_byte(self, register: int, value: int):
@@ -122,10 +122,12 @@ class PCA9685:
             return
             
         base = self.LED0_ON_L + 4 * channel
-        self.bus.write_byte_data(self.address, base, on & 0xFF)
-        self.bus.write_byte_data(self.address, base + 1, on >> 8)
-        self.bus.write_byte_data(self.address, base + 2, off & 0xFF)
-        self.bus.write_byte_data(self.address, base + 3, off >> 8)
+        # Write in correct order for auto-increment mode: OFF_L, OFF_H, ON_L, ON_H
+        self.bus.write_i2c_block_data(
+            self.address,
+            base,
+            [off & 0xFF, (off >> 8) & 0xFF, on & 0xFF, (on >> 8) & 0xFF]
+        )
     
     def set_servo_pulse(self, channel: int, pulse_us: float):
         """
