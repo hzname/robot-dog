@@ -242,20 +242,17 @@ bool PCA9685Driver::setPWM(uint8_t channel, uint16_t on, uint16_t off)
   }
 
   uint8_t reg = PCA9685_LED0_ON_L + 4 * channel;
-  uint8_t data[4] = {
-    static_cast<uint8_t>(on & 0xFF),
-    static_cast<uint8_t>((on >> 8) & 0x0F),
+  // For AI mode, write register + data in single I2C transaction
+  // Correct byte order for AI mode: OFF_L, OFF_H, ON_L, ON_H
+  uint8_t buffer[5] = {
+    reg,
     static_cast<uint8_t>(off & 0xFF),
-    static_cast<uint8_t>((off >> 8) & 0x0F)
+    static_cast<uint8_t>((off >> 8) & 0x0F),
+    static_cast<uint8_t>(on & 0xFF),
+    static_cast<uint8_t>((on >> 8) & 0x0F)
   };
 
-  if (write(i2c_fd_, &reg, 1) != 1)
-  {
-    last_error_ = "Failed to write register address";
-    return false;
-  }
-
-  if (write(i2c_fd_, data, 4) != 4)
+  if (write(i2c_fd_, buffer, 5) != 5)
   {
     last_error_ = "Failed to write PWM values";
     return false;
@@ -266,6 +263,7 @@ bool PCA9685Driver::setPWM(uint8_t channel, uint16_t on, uint16_t off)
 
 bool PCA9685Driver::setAllPWM(uint16_t on, uint16_t off)
 {
+  // CORRECT BYTE ORDER for AI mode: ON_L, ON_H, OFF_L, OFF_H
   uint8_t data[5] = {
     PCA9685_ALL_LED_ON_L,
     static_cast<uint8_t>(on & 0xFF),
