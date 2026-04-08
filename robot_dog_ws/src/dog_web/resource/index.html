@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robot Dog Control</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        
+        .card { background: #16213e; border-radius: 12px; padding: 20px; border: 1px solid #0f3460; }
+        h1 { grid-column: 1 / -1; text-align: center; margin-bottom: 20px; color: #e94560; }
+        h2 { color: #4ecca3; margin-bottom: 15px; font-size: 1.2em; }
+        
+        .status-bar { display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap; }
+        .status-item { background: #0f3460; padding: 8px 15px; border-radius: 6px; font-size: 0.9em; }
+        .status-item.emergency { background: #e94560; }
+        .status-item.ok { background: #4ecca3; color: #1a1a2e; }
+        
+        .control-pad { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .btn { background: #4ecca3; border: none; padding: 15px; border-radius: 8px; cursor: pointer; font-weight: bold; color: #1a1a2e; transition: 0.2s; }
+        .btn:hover { background: #3db892; transform: scale(1.05); }
+        .btn:active { transform: scale(0.95); }
+        .btn.stop { background: #e94560; color: white; }
+        .btn.stop:hover { background: #d63d55; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .joystick-area { height: 200px; background: #0f3460; border-radius: 8px; position: relative; margin-bottom: 15px; }
+        .joystick { width: 60px; height: 60px; background: #e94560; border-radius: 50%; position: absolute; cursor: grab; transform: translate(-50%, -50%); left: 50%; top: 50%; }
+        .joystick:active { cursor: grabbing; }
+        
+        .calibration-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
+        .calib-item { background: #0f3460; padding: 15px; border-radius: 8px; }
+        .calib-item label { display: block; margin-bottom: 8px; color: #4ecca3; font-size: 0.9em; }
+        .calib-item input[type="range"] { width: 100%; margin-bottom: 8px; }
+        .calib-value { text-align: center; font-family: monospace; color: #e94560; }
+        .calib-actions { grid-column: 1 / -1; display: flex; gap: 10px; margin-top: 15px; }
+        
+        .joint-display { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 15px; }
+        .joint-box { background: #0f3460; padding: 10px; border-radius: 6px; text-align: center; }
+        .joint-name { font-size: 0.75em; color: #888; margin-bottom: 5px; }
+        .joint-value { font-family: monospace; font-size: 0.9em; color: #4ecca3; }
+        
+        .leg-group { background: #0a1628; padding: 12px; border-radius: 8px; margin-bottom: 10px; }
+        .leg-title { color: #e94560; font-weight: bold; margin-bottom: 10px; display: block; }
+        
+        .speed-control { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; }
+        .speed-control label { color: #888; }
+        .speed-control input { flex: 1; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐕 Robot Dog Control</h1>
+        
+        <!-- Status -->
+        <div class="card" style="grid-column: 1 / -1;">
+            <div class="status-bar">
+                <div class="status-item" id="status-ros">ROS: <span>Connecting...</span></div>
+                <div class="status-item" id="status-emergency">Emergency: <span>OK</span></div>
+                <div class="status-item" id="status-servos">Servos: <span>Unknown</span></div>
+            </div>
+            <div class="joint-display" id="joint-display"></div>
+        </div>
+        
+        <!-- Manual Control -->
+        <div class="card">
+            <h2>🎮 Manual Control</h2>
+            
+            <div class="speed-control">
+                <label>Speed:</label>
+                <input type="range" id="speed-slider" min="0.1" max="2.0" step="0.1" value="0.5">
+                <span id="speed-value">0.5</span>
+            </div>
+            
+            <div class="joystick-area" id="joystick-area">
+                <div class="joystick" id="joystick"></div>
+            </div>
+            
+            <div class="control-pad">
+                <div></div>
+                <button class="btn" id="btn-fwd">⬆️ Forward</button>
+                <div></div>
+                <button class="btn" id="btn-left">⬅️ Left</button>
+                <button class="btn stop" id="btn-stop">⏹️ STOP</button>
+                <button class="btn" id="btn-right">➡️ Right</button>
+                <div></div>
+                <button class="btn" id="btn-back">⬇️ Back</button>
+                <div></div>
+            </div>
+            
+            <div class="control-pad">
+                <button class="btn" id="btn-ccw">↺ Rotate CCW</button>
+                <button class="btn" id="btn-sit">🪑 Sit</button>
+                <button class="btn" id="btn-cw">↻ Rotate CW</button>
+            </div>
+            
+            <div class="control-pad">
+                <button class="btn" id="btn-enable">✅ Enable Servos</button>
+                <button class="btn" id="btn-disable">❌ Disable Servos</button>
+                <button class="btn stop" id="btn-emergency">🚨 EMERGENCY</button>
+            </div>
+        </div>
+        
+        <!-- Calibration -->
+        <div class="card">
+            <h2>🔧 Leg Calibration</h2>
+            
+            <!-- Left Front -->
+            <div class="leg-group">
+                <span class="leg-title">Left Front (LF)</span>
+                <div class="calibration-grid">
+                    <div class="calib-item">
+                        <label>Hip (Roll)</label>
+                        <input type="range" id="cal-lf-hip" min="-1.5" max="1.5" step="0.01" value="0">
+                        <div class="calib-value" id="val-lf-hip">0.00 rad</div>
+                    </div>
+                    <div class="calib-item">
+                        <label>Thigh (Pitch)</label>
+                        <input type="range" id="cal-lf-thigh" min="-1.5" max="1.5" step="0.01" value="0">
+                        <div class="calib-value" id="val-lf-thigh">0.00 rad</div>
+                    </div>
+                    <div class="calib-item">
+                        <label>Calf (Knee)</label>
+                        <input type="range" id="cal-lf-calf" min="-3.0" max="0" step="0.01" value="-1.2">
+                        <div class="calib-value" id="val-lf-calf">-1.20 rad</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right Front -->
+            <div class="leg-group">
+                <span class="leg-title">Right Front (RF)</span>
+                <div class="calibration-grid">
+                    <div class="calib-item">
+                        <label>Hip (Roll)</label>
+                        <input type="range" id="cal-rf-hip" min="-1.5" max="1.5" step="0.01" value="0">
+                        <div class="calib-value" id="val-rf-hip">0.00 rad</div>
+                    </div>
+                    <div class="calib-item">
+                        <label>Thigh (Pitch)</label>
+                        <input type="range" id="cal-rf-thigh" min="-1.5" max="1.5" step="0.01" value="0">
+                        <div class="calib-value" id="val-rf-thigh">0.00 rad</div>
+                    </div>
+                    <div class="calib-item">
+                        <label>Calf (Knee)</label>
+                        <input type="range" id="cal-rf-calf" min="-3.0" max="0" step="0.01" value="-1.2">
+                        <div class="calib-value" id="val-rf-calf">-1.20 rad</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Left Rear -->
+            <div class="leg-group">
+                <span class="leg-title">Left Rear (LR)</span>
+                <div class="calibration-grid">
+                    <div class="calib-item">
+                        <label>Hip (Roll)</label>
+                        <input type="range" id="cal-lr-hip" min="-1.5" max="1.5" step="0.01" value="0">
+                        <div class="calib-value" id="val-lr-hip">0.00 rad</div>
+                    </div>
+                    <div class="calib-item">
+                        <label>Thigh (Pitch)</label>
+                        <input type="range" id="cal-lr-thigh" min="-1.5" max="1.5" step="0.01" value="0">
+                        <div class="calib-value" id="val-lr-thigh">0.00 rad</div>
+                    </div>
+                    <div class="calib-item">
+                        <label>Calf (Knee)</label>
+                        <input type="range" id="cal-lr-calf" min="-3.0" max="0" step="0.01" value="-1.2">
+                        <div class="calib-value" id="val-lr-calf">-1.20 rad</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right Rear -->
+            <div class="leg-group">
+                <span class="leg-title">Right Rear (RR)</span>
+                <div class="calibration-grid">
+                    <div class="calib-item">
+                        <label>Hip (Roll)</label>
+                        <input type="range" id="cal-rr-hip" min="-1.5" max="1.5" step="0.01" value="0">
+                        <div class="calib-value" id="val-rr-hip">0.00 rad</div>
+                    </div>
+                    <div class="calib-item">
+                        <label>Thigh (Pitch)</label>
+                        <input type="range" id="cal-rr-thigh" min="-1.5" max="1.5" step="0.01" value="0">
+                        <div class="calib-value" id="val-rr-thigh">0.00 rad</div>
+                    </div>
+                    <div class="calib-item">
+                        <label>Calf (Knee)</label>
+                        <input type="range" id="cal-rr-calf" min="-3.0" max="0" step="0.01" value="-1.2">
+                        <div class="calib-value" id="val-rr-calf">-1.20 rad</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="calib-actions">
+                <button class="btn" id="btn-apply-calib">Apply Calibration</button>
+                <button class="btn" id="btn-reset-calib">Reset to Default</button>
+                <button class="btn" id="btn-save-calib">Save & Apply</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const JOINT_NAMES = [
+            "lf_hip_joint", "lf_thigh_joint", "lf_calf_joint",
+            "rf_hip_joint", "rf_thigh_joint", "rf_calf_joint",
+            "lr_hip_joint", "lr_thigh_joint", "lr_calf_joint",
+            "rr_hip_joint", "rr_thigh_joint", "rr_calf_joint",
+        ];
+        
+        let speed = 0.5;
+        let ws = null;
+        let calibValues = {};
+        
+        // Initialize calibration values from sliders
+        document.querySelectorAll('[id^="cal-"]').forEach(slider => {
+            const key = slider.id.replace('cal-', '').replace('-', '_');
+            calibValues[key] = parseFloat(slider.value);
+        });
+        
+        // WebSocket connection
+        function connectWS() {
+            ws = new WebSocket(`ws://${window.location.host}/ws`);
+            ws.onopen = () => {
+                document.querySelector('#status-ros span').textContent = 'Connected';
+                document.querySelector('#status-ros').classList.add('ok');
+            };
+            ws.onmessage = (msg) => {
+                const state = JSON.parse(msg.data);
+                updateState(state);
+            };
+            ws.onclose = () => {
+                document.querySelector('#status-ros span').textContent = 'Disconnected';
+                document.querySelector('#status-ros').classList.remove('ok');
+                setTimeout(connectWS, 2000);
+            };
+        }
+        
+        function updateState(state) {
+            // Emergency status
+            const emergDiv = document.querySelector('#status-emergency');
+            if (state.emergency_stopped) {
+                emergDiv.classList.add('emergency');
+                emergDiv.querySelector('span').textContent = 'STOPPED';
+            } else {
+                emergDiv.classList.remove('emergency');
+                emergDiv.querySelector('span').textContent = 'OK';
+            }
+            
+            // Joint positions display
+            const display = document.querySelector('#joint-display');
+            display.innerHTML = JOINT_NAMES.map((name, i) => {
+                const val = state.joint_positions?.[i] || 0;
+                const calib = state.calibration?.[name] || 0;
+                return `
+                    <div class="joint-box">
+                        <div class="joint-name">${name}</div>
+                        <div class="joint-value">${val.toFixed(2)} rad</div>
+                        <div class="joint-name" style="margin-top:4px; font-size:0.7em">Offset: ${calib.toFixed(2)}</div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Update calibration sliders if they differ
+            if (state.calibration) {
+                Object.entries(state.calibration).forEach(([key, val]) => {
+                    const id = `cal-${key.replace('_', '-')}`;
+                    const slider = document.getElementById(id);
+                    if (slider && Math.abs(slider.value - val) > 0.001) {
+                        slider.value = val;
+                        document.getElementById(id.replace('cal-', 'val-')).textContent = `${val.toFixed(2)} rad`;
+                    }
+                });
+            }
+        }
+        
+        // API calls
+        async function apiCall(endpoint, data = {}) {
+            try {
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                return await res.json();
+            } catch (e) {
+                console.error('API error:', e);
+            }
+        }
+        
+        // Control functions
+        async function sendCmdVel(linear_x = 0, linear_y = 0, angular_z = 0) {
+            await apiCall('/api/cmd_vel', { 
+                linear_x: linear_x * speed, 
+                linear_y: linear_y * speed, 
+                angular_z: angular_z * speed 
+            });
+        }
+        
+        async function stopRobot() {
+            await sendCmdVel(0, 0, 0);
+        }
+        
+        // Button handlers
+        document.getElementById('btn-fwd').addEventListener('mousedown', () => sendCmdVel(0.5));
+        document.getElementById('btn-back').addEventListener('mousedown', () => sendCmdVel(-0.5));
+        document.getElementById('btn-left').addEventListener('mousedown', () => sendCmdVel(0, 0.5));
+        document.getElementById('btn-right').addEventListener('mousedown', () => sendCmdVel(0, -0.5));
+        document.getElementById('btn-ccw').addEventListener('mousedown', () => sendCmdVel(0, 0, 1.0));
+        document.getElementById('btn-cw').addEventListener('mousedown', () => sendCmdVel(0, 0, -1.0));
+        
+        document.querySelectorAll('[id^="btn-"], #btn-stop').forEach(btn => {
+            btn.addEventListener('mouseup', stopRobot);
+            btn.addEventListener('mouseleave', stopRobot);
+        });
+        
+        document.getElementById('btn-stop').addEventListener('click', async () => {
+            await apiCall('/api/stop');
+        });
+        
+        document.getElementById('btn-enable').addEventListener('click', async () => {
+            await apiCall('/api/servo_enable', { enable: true });
+            document.querySelector('#status-servos span').textContent = 'Enabled';
+            document.querySelector('#status-servos').classList.add('ok');
+        });
+        
+        document.getElementById('btn-disable').addEventListener('click', async () => {
+            await apiCall('/api/servo_enable', { enable: false });
+            document.querySelector('#status-servos span').textContent = 'Disabled';
+            document.querySelector('#status-servos').classList.remove('ok');
+        });
+        
+        document.getElementById('btn-emergency').addEventListener('click', async () => {
+            await apiCall('/api/emergency_stop', { stop: true });
+        });
+        
+        // Joystick
+        const joystick = document.getElementById('joystick');
+        const joystickArea = document.getElementById('joystick-area');
+        let joystickActive = false;
+        
+        function updateJoystick(clientX, clientY) {
+            const rect = joystickArea.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            
+            let dx = clientX - centerX;
+            let dy = clientY - centerY;
+            
+            const maxDist = rect.width / 2 - 30;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist > maxDist) {
+                dx = dx / dist * maxDist;
+                dy = dy / dist * maxDist;
+            }
+            
+            joystick.style.left = `${centerX + dx}px`;
+            joystick.style.top = `${centerY + dy}px`;
+            
+            const normX = -dx / maxDist;
+            const normY = dy / maxDist;
+            
+            if (joystickActive) {
+                sendCmdVel(normY, normX, 0);
+            }
+        }
+        
+        joystickArea.addEventListener('mousedown', (e) => {
+            joystickActive = true;
+            updateJoystick(e.clientX, e.clientY);
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (joystickActive) {
+                updateJoystick(e.clientX, e.clientY);
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (joystickActive) {
+                joystickActive = false;
+                joystick.style.left = '50%';
+                joystick.style.top = '50%';
+                stopRobot();
+            }
+        });
+        
+        // Speed slider
+        document.getElementById('speed-slider').addEventListener('input', (e) => {
+            speed = parseFloat(e.target.value);
+            document.getElementById('speed-value').textContent = speed.toFixed(1);
+        });
+        
+        // Calibration sliders
+        document.querySelectorAll('[id^="cal-"]').forEach(slider => {
+            slider.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById(e.target.id.replace('cal-', 'val-')).textContent = `${val.toFixed(2)} rad`;
+            });
+        });
+        
+        // Calibration buttons
+        document.getElementById('btn-apply-calib').addEventListener('click', async () => {
+            for (const [key, val] of Object.entries(calibValues)) {
+                await apiCall('/api/calibrate', { joint: key, offset: val });
+            }
+        });
+        
+        document.getElementById('btn-save-calib').addEventListener('click', async () => {
+            for (const [key, val] of Object.entries(calibValues)) {
+                await apiCall('/api/calibrate', { joint: key, offset: val });
+            }
+            await apiCall('/api/calibrate/apply');
+            alert('Calibration saved and applied!');
+        });
+        
+        document.getElementById('btn-reset-calib').addEventListener('click', () => {
+            document.querySelectorAll('[id^="cal-"]').forEach(slider => {
+                const defaultVal = slider.id.includes('calf') ? -1.2 : 0;
+                slider.value = defaultVal;
+                document.getElementById(slider.id.replace('cal-', 'val-')).textContent = `${defaultVal.toFixed(2)} rad`;
+            });
+        });
+        
+        // Start
+        connectWS();
+    </script>
+</body>
+</html>
