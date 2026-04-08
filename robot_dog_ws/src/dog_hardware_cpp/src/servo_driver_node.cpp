@@ -169,6 +169,9 @@ LifecycleCallbackReturn ServoDriverNode::on_activate(const rclcpp_lifecycle::Sta
   emergency_stop_pub_->on_activate();
   watchdog_pub_->on_activate();
 
+  // Enable all servos
+  controller_->setAllEnabled(true);
+
   // Start control loop
   auto period = std::chrono::duration<double>(1.0 / controller_config_.control_rate_hz);
   control_timer_ = create_wall_timer(

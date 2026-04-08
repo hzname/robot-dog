@@ -1,0 +1,31 @@
+version: '3.8'
+services:
+  robot_dog:
+    image: ros:jazzy
+    container_name: robot_dog
+    privileged: true
+    devices:
+      - /dev/i2c-0:/dev/i2c-0
+    volumes:
+      - /home/sg/robot-dog/robot_dog_ws:/workspace
+      - /dev/i2c-0:/dev/i2c-0
+    network_mode: host
+    working_dir: /workspace
+    command: >
+      bash -c "
+        source /opt/ros/jazzy/setup.bash &&
+        source /workspace/install/setup.bash &&
+        echo '=== SYSTEM READY ===' &&
+        echo 'Starting servo driver...' &&
+        ros2 run dog_hardware_cpp servo_driver_node --ros-args -p bus_type:=i2c -p device_port:=/dev/i2c-0 &
+        sleep 3 &&
+        echo 'Configuring...' &&
+        ros2 lifecycle set /servo_driver_node configure &&
+        ros2 lifecycle set /servo_driver_node activate &&
+        sleep 2 &&
+        echo 'Starting gait controller...' &&
+        ros2 run dog_control_cpp gait_controller &
+        echo '=== ALL SYSTEMS ONLINE ===' &&
+        tail -f /dev/null
+      "
+    restart: unless-stopped
