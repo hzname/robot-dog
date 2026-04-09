@@ -112,17 +112,17 @@
       }
 
       btn.addEventListener('mousedown', () => { send(); interval = setInterval(send, 200); });
-      btn.addEventListener('mouseup', () => { clearInterval(interval); api('/api/control/stop'); });
-      btn.addEventListener('mouseleave', () => { clearInterval(interval); api('/api/control/stop'); });
+      btn.addEventListener('mouseup', () => { clearInterval(interval); api('/api/control/stop', {}); });
+      btn.addEventListener('mouseleave', () => { clearInterval(interval); api('/api/control/stop', {}); });
 
       // Touch support
       btn.addEventListener('touchstart', e => { e.preventDefault(); send(); interval = setInterval(send, 200); });
-      btn.addEventListener('touchend', () => { clearInterval(interval); api('/api/control/stop'); });
+      btn.addEventListener('touchend', () => { clearInterval(interval); api('/api/control/stop', {}); });
     });
 
     // Stop button
     document.getElementById('btn-stop').addEventListener('click', () => {
-      api('/api/control/stop');
+      api('/api/control/stop', {});
       fbLog('STOP');
     });
 
@@ -167,7 +167,7 @@
         joyActive = false;
         clearInterval(joyInterval);
         handle.style.left = '50%'; handle.style.top = '50%';
-        api('/api/control/stop');
+        api('/api/control/stop', {});
       }
     });
 
@@ -184,7 +184,7 @@
       if (joyActive) {
         joyActive = false;
         handle.style.left = '50%'; handle.style.top = '50%';
-        api('/api/control/stop');
+        api('/api/control/stop', {});
       }
     });
 
