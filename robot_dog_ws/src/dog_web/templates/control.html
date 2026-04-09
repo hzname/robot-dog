@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Robot Dog - Control</title>
+  <title>Robot Dog</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <nav>
     <span class="logo">🐕 Robot Dog</span>
-    <a href="/dashboard">Dashboard</a>
-    <a href="/control" class="active">Control</a>
-    <a href="/state">State</a>
-    <a href="/calibration">Calibration</a>
+    <a href="/dashboard" data-i18n="nav.dashboard">Панель</a>
+    <a href="/control" class="active" data-i18n="nav.control">Управление</a>
+    <a href="/state" data-i18n="nav.state">Состояние</a>
+    <a href="/calibration" data-i18n="nav.calibration">Калибровка</a>
     <span class="status-dot" id="nav-dot"></span>
   </nav>
 
@@ -20,33 +20,31 @@
     <div class="grid-2">
       <!-- Joystick -->
       <div class="card">
-        <h2>Joystick Control</h2>
+        <h2 data-i18n="ctrl.joystick">Джойстик</h2>
         <div class="joystick-zone" id="joy-zone">
           <div class="joystick-handle" id="joy-handle"></div>
         </div>
-        <div style="text-align:center;margin-top:10px;color:var(--text-dim);font-size:.85em">
-          Drag to move: X = lateral, Y = forward/back
-        </div>
+        <div style="text-align:center;margin-top:10px;color:var(--text-dim);font-size:.85em" data-i18n="ctrl.joystick_hint">Тяните: X = вбок, Y = вперёд/назад</div>
       </div>
 
       <!-- D-Pad + rotation -->
       <div class="card">
-        <h2>D-Pad</h2>
+        <h2 data-i18n="ctrl.dpad">D-Pad</h2>
         <div class="dpad" style="margin-bottom:20px">
-          <button class="btn up" id="btn-fwd">↑ Fwd</button>
-          <button class="btn left" id="btn-left">← Left</button>
-          <button class="btn btn-red stop" id="btn-stop">■ STOP</button>
-          <button class="btn right" id="btn-right">→ Right</button>
-          <button class="btn down" id="btn-back">↓ Back</button>
+          <button class="btn up" id="btn-fwd" data-i18n="ctrl.fwd">↑ Вперёд</button>
+          <button class="btn left" id="btn-left" data-i18n="ctrl.left">← Влево</button>
+          <button class="btn btn-red stop" id="btn-stop" data-i18n="ctrl.stop">■ СТОП</button>
+          <button class="btn right" id="btn-right" data-i18n="ctrl.right">→ Вправо</button>
+          <button class="btn down" id="btn-back" data-i18n="ctrl.back">↓ Назад</button>
         </div>
 
-        <h2>Rotation</h2>
+        <h2 data-i18n="ctrl.rotation">Поворот</h2>
         <div class="btn-group" style="justify-content:center;margin-bottom:20px">
-          <button class="btn btn-blue" id="btn-ccw">↺ CCW</button>
-          <button class="btn btn-blue" id="btn-cw">↻ CW</button>
+          <button class="btn btn-blue" id="btn-ccw" data-i18n="ctrl.ccw">↺ Против ч.с.</button>
+          <button class="btn btn-blue" id="btn-cw" data-i18n="ctrl.cw">↻ По ч.с.</button>
         </div>
 
-        <h2>Speed</h2>
+        <h2 data-i18n="ctrl.speed">Скорость</h2>
         <div style="display:flex;align-items:center;gap:12px">
           <input type="range" id="speed" min="0.1" max="2.0" step="0.1" value="0.5" style="flex:1">
           <span id="speed-val" style="font-family:monospace;color:var(--green)">0.5</span>
@@ -57,21 +55,22 @@
     <!-- Emergency + Servos -->
     <div class="card">
       <div class="btn-group" style="justify-content:center">
-        <button class="btn" onclick="api('/api/control/servo_enable',{enable:true})">✅ Enable Servos</button>
-        <button class="btn btn-dark" onclick="api('/api/control/servo_enable',{enable:false})">❌ Disable Servos</button>
-        <button class="btn btn-red btn-lg" onclick="api('/api/control/emergency_stop',{stop:true})">🚨 EMERGENCY STOP</button>
-        <button class="btn btn-orange" onclick="api('/api/control/emergency_stop',{stop:false})">🔓 Release E-Stop</button>
+        <button class="btn" onclick="api('/api/control/servo_enable',{enable:true})" data-i18n="ctrl.servo_on">✅ Включить сервы</button>
+        <button class="btn btn-dark" onclick="api('/api/control/servo_enable',{enable:false})" data-i18n="ctrl.servo_off">❌ Выключить сервы</button>
+        <button class="btn btn-red btn-lg" onclick="api('/api/control/emergency_stop',{stop:true})" data-i18n="ctrl.estop">🚨 АВАРИЙНАЯ ОСТАНОВКА</button>
+        <button class="btn btn-orange" onclick="api('/api/control/emergency_stop',{stop:false})" data-i18n="ctrl.estop_release">🔓 Снять блокировку</button>
       </div>
     </div>
 
     <!-- Live feedback -->
     <div class="card">
-      <h2>Live Command Feedback</h2>
+      <h2 data-i18n="ctrl.feedback">Обратная связь</h2>
       <div id="feedback" style="font-family:monospace;font-size:.9em;color:var(--text-dim);max-height:120px;overflow-y:auto"></div>
     </div>
   </main>
 
   <script src="/static/common.js"></script>
+  <script src="/static/i18n.js"></script>
   <script>
     let speed = 0.5;
     let sending = false;
@@ -141,12 +140,10 @@
       const maxR = midX - 30;
       const dist = Math.sqrt(dx*dx + dy*dy);
       if (dist > maxR) { dx = dx/dist*maxR; dy = dy/dist*maxR; }
-      // Position handle relative to zone, account for handle size (60px)
       handle.style.left = (midX + dx - 30) + 'px';
       handle.style.top = (midY + dy - 30) + 'px';
-      // Normalize: -1 to 1
-      const nx = -dx / maxR; // left positive
-      const ny = -dy / maxR; // forward positive
+      const nx = -dx / maxR;
+      const ny = -dy / maxR;
       return { linear_x: ny * speed, linear_y: nx * speed, angular_z: 0 };
     }
 
@@ -161,18 +158,15 @@
     zone.addEventListener('mousedown', e => {
       e.preventDefault();
       joyActive = true;
-      joyUpdate(e.clientX, e.clientY); // position handle but don't send yet
+      joyUpdate(e.clientX, e.clientY);
     });
     document.addEventListener('mousemove', e => {
-      if (joyActive) {
-        joySend(e.clientX, e.clientY);
-      }
+      if (joyActive) joySend(e.clientX, e.clientY);
     });
     document.addEventListener('mouseup', () => {
       if (joyActive) {
         joyActive = false;
         lastJoyCmd = null;
-        // Reset handle to center
         handle.style.left = 'calc(50% - 30px)';
         handle.style.top = 'calc(50% - 30px)';
         api('/api/control/stop', {});
@@ -198,7 +192,7 @@
       }
     });
 
-    fbLog('Control page loaded');
+    fbLog(t('ctrl.loaded'));
   </script>
 </body>
 </html>

@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Robot Dog - Dashboard</title>
+  <title>Robot Dog</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <nav>
     <span class="logo">🐕 Robot Dog</span>
-    <a href="/dashboard" class="active">Dashboard</a>
-    <a href="/control">Control</a>
-    <a href="/state">State</a>
-    <a href="/calibration">Calibration</a>
+    <a href="/dashboard" class="active" data-i18n="nav.dashboard">Панель</a>
+    <a href="/control" data-i18n="nav.control">Управление</a>
+    <a href="/state" data-i18n="nav.state">Состояние</a>
+    <a href="/calibration" data-i18n="nav.calibration">Калибровка</a>
     <span class="status-dot" id="nav-dot"></span>
   </nav>
 
@@ -20,49 +20,50 @@
     <!-- Status bar -->
     <div class="card">
       <div class="status-bar">
-        <div class="status-pill"><span class="dot" id="ws-dot"></span> WebSocket</div>
-        <div class="status-pill"><span class="dot" id="ros-dot"></span> ROS2</div>
-        <div class="status-pill"><span class="dot" id="servo-dot"></span> Servos</div>
-        <div class="status-pill"><span class="dot" id="estop-dot"></span> E-Stop</div>
+        <div class="status-pill"><span class="dot" id="ws-dot"></span> <span data-i18n="common.ws">WebSocket</span></div>
+        <div class="status-pill"><span class="dot" id="ros-dot"></span> <span data-i18n="common.ros">ROS2</span></div>
+        <div class="status-pill"><span class="dot" id="servo-dot"></span> <span data-i18n="common.servos">Сервы</span></div>
+        <div class="status-pill"><span class="dot" id="estop-dot"></span> <span data-i18n="common.estop">E-Stop</span></div>
       </div>
     </div>
 
     <!-- Joint overview -->
     <div class="card">
-      <h2>Joint Positions</h2>
+      <h2 data-i18n="dash.joints">Позиции суставов</h2>
       <div class="joint-grid" id="joint-overview"></div>
     </div>
 
     <!-- Quick actions -->
     <div class="grid-2">
       <div class="card">
-        <h2>Quick Actions</h2>
+        <h2 data-i18n="dash.quick">Быстрые действия</h2>
         <div class="btn-group">
-          <button class="btn" onclick="api('/api/control/servo_enable',{enable:true})">Enable Servos</button>
-          <button class="btn btn-dark" onclick="api('/api/control/servo_enable',{enable:false})">Disable Servos</button>
-          <button class="btn btn-red btn-lg" onclick="api('/api/control/emergency_stop',{stop:true})">EMERGENCY STOP</button>
+          <button class="btn" onclick="api('/api/control/servo_enable',{enable:true})" data-i18n="dash.servo_on">Включить сервы</button>
+          <button class="btn btn-dark" onclick="api('/api/control/servo_enable',{enable:false})" data-i18n="dash.servo_off">Выключить сервы</button>
+          <button class="btn btn-red btn-lg" onclick="api('/api/control/emergency_stop',{stop:true})" data-i18n="dash.estop">АВАРИЙНАЯ ОСТАНОВКА</button>
         </div>
       </div>
       <div class="card">
-        <h2>Movement</h2>
+        <h2 data-i18n="dash.movement">Движение</h2>
         <div class="dpad">
-          <button class="btn up" onmousedown="api('/api/control/cmd_vel',{linear_x:0.5})" onmouseup="api('/api/control/stop')">↑</button>
-          <button class="btn left" onmousedown="api('/api/control/cmd_vel',{linear_y:0.5})" onmouseup="api('/api/control/stop')">←</button>
-          <button class="btn btn-red stop" onclick="api('/api/control/stop')">■</button>
-          <button class="btn right" onmousedown="api('/api/control/cmd_vel',{linear_y:-0.5})" onmouseup="api('/api/control/stop')">→</button>
-          <button class="btn down" onmousedown="api('/api/control/cmd_vel',{linear_x:-0.5})" onmouseup="api('/api/control/stop')">↓</button>
+          <button class="btn up" onmousedown="api('/api/control/cmd_vel',{linear_x:0.5})" onmouseup="api('/api/control/stop',{})">↑</button>
+          <button class="btn left" onmousedown="api('/api/control/cmd_vel',{linear_y:0.5})" onmouseup="api('/api/control/stop',{})">←</button>
+          <button class="btn btn-red stop" onclick="api('/api/control/stop',{})">■</button>
+          <button class="btn right" onmousedown="api('/api/control/cmd_vel',{linear_y:-0.5})" onmouseup="api('/api/control/stop',{})">→</button>
+          <button class="btn down" onmousedown="api('/api/control/cmd_vel',{linear_x:-0.5})" onmouseup="api('/api/control/stop',{})">↓</button>
         </div>
       </div>
     </div>
 
     <!-- Log -->
     <div class="card">
-      <h2>Event Log</h2>
+      <h2 data-i18n="dash.log">Журнал событий</h2>
       <div id="log" style="font-family:monospace;font-size:.85em;color:var(--text-dim);max-height:150px;overflow-y:auto;"></div>
     </div>
   </main>
 
   <script src="/static/common.js"></script>
+  <script src="/static/i18n.js"></script>
   <script>
     const logEl = document.getElementById('log');
     function log(msg) {
@@ -78,7 +79,6 @@
 
     // WebSocket
     const ws = new StateWS(state => {
-      // Update joints
       (state.joint_positions || []).forEach((v, i) => {
         const name = JOINT_NAMES[i];
         const el = document.getElementById('j-' + name);
@@ -90,14 +90,13 @@
         }
       });
 
-      // Status dots
       const edot = document.getElementById('estop-dot');
       if (edot) edot.className = 'dot ' + (state.emergency_stopped ? 'off' : 'on');
       const ndot = document.getElementById('nav-dot');
       if (ndot) ndot.className = 'status-dot ok';
     });
 
-    log('Dashboard loaded');
+    log(t('dash.loaded'));
   </script>
 </body>
 </html>
