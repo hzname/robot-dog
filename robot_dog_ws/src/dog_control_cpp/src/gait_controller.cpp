@@ -271,14 +271,11 @@ void GaitController::gaitLoop()
     current_phase_ = std::fmod(current_phase_, 1.0);
     step_length_ = local_vel.linear.x * gait_period_ * 0.5;
     calculateAllFootPositions(local_vel);
-  } else if (local_gait_enabled) {
-    // Standing (gait enabled, no velocity): compute stance pose
+  } else {
+    // Standing: compute stance pose (all feet on ground)
     step_length_ = 0.0;
     current_phase_ = 0.0;
     calculateStancePose(local_balance);
-  } else {
-    // Gait disabled: external control (calibration), don't publish
-    return;
   }
   
   // Publish

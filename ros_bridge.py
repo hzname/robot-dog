@@ -73,8 +73,6 @@ class Bridge:
             self.gait_enable_pub.publish(msg)
             return {'ok': True}
         elif t == 'joint_command':
-            # Stop gait while sending direct joint commands
-            self.gait_enable_pub.publish(Bool(data=False))
             msg = Float64MultiArray()
             msg.data = [float(v) for v in cmd.get('positions', [])]
             self.pos_pub.publish(msg)

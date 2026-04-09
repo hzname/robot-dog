@@ -41,6 +41,7 @@
           <button class="btn" onclick="api('/api/control/servo_enable',{enable:true})" data-i18n="dash.servo_on">Включить сервы</button>
           <button class="btn btn-dark" onclick="api('/api/control/servo_enable',{enable:false})" data-i18n="dash.servo_off">Выключить сервы</button>
           <button class="btn btn-red btn-lg" onclick="api('/api/control/emergency_stop',{stop:true})" data-i18n="dash.estop">АВАРИЙНАЯ ОСТАНОВКА</button>
+          <button class="btn btn-orange" onclick="api('/api/control/emergency_stop',{stop:false})" data-i18n="dash.estop_release">🔓 Снять блокировку</button>
         </div>
       </div>
       <div class="card">

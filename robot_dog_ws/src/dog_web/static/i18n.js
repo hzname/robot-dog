@@ -14,6 +14,7 @@ const I18N = {
     'dash.servo_on': 'Включить сервы',
     'dash.servo_off': 'Выключить сервы',
     'dash.estop': 'АВАРИЙНАЯ ОСТАНОВКА',
+    'dash.estop_release': '🔓 Снять блокировку',
     'dash.movement': 'Движение',
     'dash.log': 'Журнал событий',
     'dash.loaded': 'Панель загружена',
