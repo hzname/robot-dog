@@ -134,39 +134,47 @@
 
     function joyUpdate(cx, cy) {
       const rect = zone.getBoundingClientRect();
-      const midX = rect.left + rect.width / 2;
-      const midY = rect.top + rect.height / 2;
-      let dx = cx - midX;
-      let dy = cy - midY;
-      const maxR = rect.width / 2 - 30;
+      const midX = rect.width / 2;
+      const midY = rect.height / 2;
+      let dx = cx - rect.left - midX;
+      let dy = cy - rect.top - midY;
+      const maxR = midX - 30;
       const dist = Math.sqrt(dx*dx + dy*dy);
       if (dist > maxR) { dx = dx/dist*maxR; dy = dy/dist*maxR; }
-      handle.style.left = (midX + dx) + 'px';
-      handle.style.top = (midY + dy) + 'px';
+      // Position handle relative to zone, account for handle size (60px)
+      handle.style.left = (midX + dx - 30) + 'px';
+      handle.style.top = (midY + dy - 30) + 'px';
       // Normalize: -1 to 1
       const nx = -dx / maxR; // left positive
       const ny = -dy / maxR; // forward positive
       return { linear_x: ny * speed, linear_y: nx * speed, angular_z: 0 };
     }
 
+    let lastJoyCmd = null;
+
     function joySend(cx, cy) {
       const cmd = joyUpdate(cx, cy);
+      lastJoyCmd = cmd;
       api('/api/control/cmd_vel', cmd);
     }
 
     zone.addEventListener('mousedown', e => {
+      e.preventDefault();
       joyActive = true;
-      joySend(e.clientX, e.clientY);
-      joyInterval = setInterval(() => {
-        // repeat last - handled by mousemove
-      }, 200);
+      joyUpdate(e.clientX, e.clientY); // position handle but don't send yet
     });
-    document.addEventListener('mousemove', e => { if (joyActive) joySend(e.clientX, e.clientY); });
+    document.addEventListener('mousemove', e => {
+      if (joyActive) {
+        joySend(e.clientX, e.clientY);
+      }
+    });
     document.addEventListener('mouseup', () => {
       if (joyActive) {
         joyActive = false;
-        clearInterval(joyInterval);
-        handle.style.left = '50%'; handle.style.top = '50%';
+        lastJoyCmd = null;
+        // Reset handle to center
+        handle.style.left = 'calc(50% - 30px)';
+        handle.style.top = 'calc(50% - 30px)';
         api('/api/control/stop', {});
       }
     });
@@ -175,7 +183,7 @@
     zone.addEventListener('touchstart', e => {
       e.preventDefault();
       joyActive = true;
-      joySend(e.touches[0].clientX, e.touches[0].clientY);
+      joyUpdate(e.touches[0].clientX, e.touches[0].clientY);
     });
     document.addEventListener('touchmove', e => {
       if (joyActive) joySend(e.touches[0].clientX, e.touches[0].clientY);
@@ -183,7 +191,9 @@
     document.addEventListener('touchend', () => {
       if (joyActive) {
         joyActive = false;
-        handle.style.left = '50%'; handle.style.top = '50%';
+        lastJoyCmd = null;
+        handle.style.left = 'calc(50% - 30px)';
+        handle.style.top = 'calc(50% - 30px)';
         api('/api/control/stop', {});
       }
     });
