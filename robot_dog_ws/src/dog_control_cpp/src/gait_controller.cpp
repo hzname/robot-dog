@@ -23,6 +23,7 @@ GaitController::GaitController(const rclcpp::NodeOptions & options)
   control_rate_(100.0),
   balance_enabled_(true),
   balance_response_factor_(1.0),
+  gait_enabled_(true),
   joint_names_({
     "lf_hip_joint", "lf_thigh_joint", "lf_calf_joint",
     "rf_hip_joint", "rf_thigh_joint", "rf_calf_joint",
@@ -133,6 +134,15 @@ LifecycleCallbackReturn GaitController::on_configure(const rclcpp_lifecycle::Sta
       balanceAdjustmentCallback(msg);
     });
   
+  // Subscribe to gait enable/disable
+  gait_enable_sub_ = create_subscription<std_msgs::msg::Bool>(
+    "/gait_enable", 10,
+    [this](const std_msgs::msg::Bool::SharedPtr msg) {
+      std::lock_guard<std::mutex> lock(state_mutex_);
+      gait_enabled_ = msg->data;
+      RCLCPP_INFO(get_logger(), "Gait %s", gait_enabled_ ? "ENABLED" : "DISABLED");
+    });
+  
   RCLCPP_INFO(get_logger(), "Gait Controller configured (%s gait)", gait_type_.c_str());
   return LifecycleCallbackReturn::SUCCESS;
 }
@@ -238,21 +248,35 @@ void GaitController::gaitLoop()
     dt = 1.0 / control_rate_;
   }
   
-  // Update gait phase
-  current_phase_ += dt / gait_period_;
-  current_phase_ = std::fmod(current_phase_, 1.0);
-  
   // Копируем данные под локом
   geometry_msgs::msg::Twist local_vel;
   geometry_msgs::msg::Vector3 local_balance;
+  bool local_gait_enabled;
   {
     std::lock_guard<std::mutex> lock(state_mutex_);
     local_vel = velocity_cmd_;
     local_balance = balance_adjustment_;
+    local_gait_enabled = gait_enabled_;
   }
   
-  // Calculate foot positions and solve IK
-  calculateAllFootPositions(local_vel);
+  // Determine if we should walk
+  bool has_velocity = (std::abs(local_vel.linear.x) > 0.01 ||
+                       std::abs(local_vel.linear.y) > 0.01 ||
+                       std::abs(local_vel.angular.z) > 0.01);
+  bool should_walk = has_velocity && local_gait_enabled;
+  
+  if (should_walk) {
+    // Walking: update phase and generate gait
+    current_phase_ += dt / gait_period_;
+    current_phase_ = std::fmod(current_phase_, 1.0);
+    step_length_ = local_vel.linear.x * gait_period_ * 0.5;
+    calculateAllFootPositions(local_vel);
+  } else {
+    // Standing: compute stance pose (all feet on ground)
+    step_length_ = 0.0;
+    current_phase_ = 0.0;
+    calculateStancePose(local_balance);
+  }
   
   // Publish
   publishJointTrajectory();
@@ -392,6 +416,25 @@ void GaitController::solveLegIK(int leg_idx, double foot_x, double foot_y, doubl
     hip_angle = -hip_angle;
     thigh_angle = -thigh_angle;
     calf_angle = -calf_angle;
+  }
+}
+
+void GaitController::calculateStancePose(const geometry_msgs::msg::Vector3& balance)
+{
+  for (int leg_idx = 0; leg_idx < 4; ++leg_idx) {
+    double fx = leg_positions_[leg_idx][0] * 0.5;
+    double fy = leg_positions_[leg_idx][1] * 0.8;
+    double fz = -stance_height_;
+    
+    foot_positions_[leg_idx] = {{fx, fy, fz}};
+    applyBalanceCorrections(fx, fy, fz, leg_idx);
+    foot_positions_compensated_[leg_idx] = {{fx, fy, fz}};
+    
+    double hip, thigh, calf;
+    solveLegIK(leg_idx, fx, fy, fz, hip, thigh, calf);
+    joint_angles_[leg_idx * 3 + 0] = hip;
+    joint_angles_[leg_idx * 3 + 1] = thigh;
+    joint_angles_[leg_idx * 3 + 2] = calf;
   }
 }
 

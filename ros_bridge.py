@@ -26,6 +26,7 @@ class Bridge:
         self.servo_pub = self.node.create_publisher(Bool, '/servo_enable', 10)
         self.estop_pub = self.node.create_publisher(Bool, '/emergency_stop_trigger', 10)
         self.pos_pub = self.node.create_publisher(Float64MultiArray, '/joint_position_command', 10)
+        self.gait_enable_pub = self.node.create_publisher(Bool, '/gait_enable', 10)
         
         # Subscribe to joint states for feedback (BestEffort QoS)
         from sensor_msgs.msg import JointState
@@ -65,6 +66,11 @@ class Bridge:
             msg = Bool()
             msg.data = bool(cmd.get('stop', True))
             self.estop_pub.publish(msg)
+            return {'ok': True}
+        elif t == 'gait_enable':
+            msg = Bool()
+            msg.data = bool(cmd.get('enable', True))
+            self.gait_enable_pub.publish(msg)
             return {'ok': True}
         elif t == 'joint_command':
             msg = Float64MultiArray()

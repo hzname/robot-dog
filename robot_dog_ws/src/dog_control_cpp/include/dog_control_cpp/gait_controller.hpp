@@ -18,6 +18,7 @@
 #include "geometry_msgs/msg/vector3.hpp"
 #include "trajectory_msgs/msg/joint_trajectory.hpp"
 #include "std_msgs/msg/float64_multi_array.hpp"
+#include "std_msgs/msg/bool.hpp"
 #include "std_msgs/msg/header.hpp"
 
 namespace dog_control_cpp
@@ -62,6 +63,7 @@ protected:
                                double &x, double &y, double &z,
                                const geometry_msgs::msg::Twist& velocity_cmd);
   void calculateAllFootPositions(const geometry_msgs::msg::Twist& velocity_cmd);
+  void calculateStancePose(const geometry_msgs::msg::Vector3& balance);
   
   // Apply balance corrections to foot positions
   void applyBalanceCorrections(double &x, double &y, double &z, int leg_idx);
@@ -109,6 +111,7 @@ private:
   geometry_msgs::msg::Vector3 balance_adjustment_;
   bool balance_enabled_{true};
   double balance_response_factor_;
+  bool gait_enabled_{true};
   
   // Thread safety
   mutable std::mutex state_mutex_;
@@ -132,6 +135,7 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
   rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr body_pose_sub_;
   rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr balance_adjustment_sub_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr gait_enable_sub_;
   
   // Timer
   rclcpp::TimerBase::SharedPtr gait_timer_;
