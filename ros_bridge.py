@@ -15,7 +15,7 @@ from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from std_msgs.msg import Bool, Float64MultiArray
 
-SOCKET_PATH = '/tmp/ros_bridge.sock'
+SOCKET_PATH = '/tmp/robot_dog/ros_bridge.sock'
 
 class BridgeNode(Node):
     def __init__(self):
@@ -65,6 +65,7 @@ def main():
     spin_thread.start()
     
     # Clean old socket
+    os.makedirs(os.path.dirname(SOCKET_PATH), exist_ok=True)
     if os.path.exists(SOCKET_PATH):
         os.unlink(SOCKET_PATH)
     

@@ -30,7 +30,7 @@ PROFILES_DIR = Path.home() / "robot-dog" / "calibration_profiles"
 
 # --- ROS2 via docker exec ---
 
-BRIDGE_SOCKET = Path("/tmp/ros_bridge.sock")
+BRIDGE_SOCKET = Path("/tmp/robot_dog/ros_bridge.sock")
 
 def bridge_send(cmd: dict, timeout=2):
     """Send command to ROS2 bridge via Unix socket"""
