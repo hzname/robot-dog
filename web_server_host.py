@@ -72,30 +72,14 @@ class RobotState:
             json.dump(self.calibration, f, indent=2)
 
     def refresh(self):
-        """Refresh state from ROS2"""
-        out, code = ros2_cmd("ros2 topic echo /joint_states --once", timeout=2)
-        if code == 0 and out:
-            try:
-                positions = []
-                for line in out.split('\n'):
-                    line = line.strip()
-                    if line and not line.startswith(('header', 'name', '---')):
-                        try:
-                            val = float(line)
-                            positions.append(val)
-                        except ValueError:
-                            continue
-                if len(positions) == 12:
-                    self.joint_positions = positions
-                self.connected = True
-            except Exception:
-                pass
+        """Refresh state from bridge socket"""
+        result, code = bridge_send({"type": "get_state"})
+        if code == 0 and result.get("ok"):
+            self.joint_positions = result.get("joint_positions", self.joint_positions)
+            self.emergency_stopped = result.get("emergency_stopped", self.emergency_stopped)
+            self.connected = True
         else:
             self.connected = False
-
-        out, code = ros2_cmd("ros2 topic echo /emergency_stop --once", timeout=1)
-        if code == 0:
-            self.emergency_stopped = "true" in out.lower()
 
     def get_state(self):
         return {
