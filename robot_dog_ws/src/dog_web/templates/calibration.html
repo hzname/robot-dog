@@ -83,14 +83,27 @@
       container.innerHTML += html;
     });
 
+    let lastSendTime = 0;
     function onSlider(joint, val) {
       val = parseFloat(val);
       calibState[joint] = val;
       document.getElementById('cv-' + joint).textContent = val.toFixed(2) + ' rad';
-      // Send positions to robot immediately
-      const positions = JOINT_NAMES.map(j => calibState[j] || 0.0);
-      api('/api/calibration/live', {positions: positions});
+      // Throttle: send at most every 50ms
+      const now = Date.now();
+      if (now - lastSendTime > 50) {
+        lastSendTime = now;
+        const positions = JOINT_NAMES.map(j => calibState[j] || 0.0);
+        api('/api/calibration/live', {positions: positions});
+      }
     }
+
+    // Send final value when slider released
+    document.querySelectorAll('input[type=range][id^=cal-]').forEach(s => {
+      s.addEventListener('change', () => {
+        const positions = JOINT_NAMES.map(j => calibState[j] || 0.0);
+        api('/api/calibration/live', {positions: positions});
+      });
+    });
 
     // Apply calibration to robot
     async function applyCalibration() {
