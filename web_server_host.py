@@ -13,7 +13,6 @@ from datetime import datetime
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 import uvicorn
 
 BASE = Path(__file__).parent / "robot_dog_ws" / "src" / "dog_web"
@@ -122,7 +121,12 @@ static_dir = BASE / "static"
 templates_dir = BASE / "templates"
 
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
-templates = Jinja2Templates(directory=str(templates_dir))
+
+
+def render(template_name):
+    """Read and return HTML template directly"""
+    path = templates_dir / template_name
+    return HTMLResponse(content=path.read_text(), status_code=200)
 
 
 # Pages
@@ -132,20 +136,20 @@ async def root():
     return RedirectResponse("/dashboard")
 
 @app.get("/dashboard")
-async def dashboard(request: Request):
-    return templates.TemplateResponse("dashboard.html", {"request": request})
+async def dashboard():
+    return render("dashboard.html")
 
 @app.get("/control")
-async def control_page(request: Request):
-    return templates.TemplateResponse("control.html", {"request": request})
+async def control_page():
+    return render("control.html")
 
 @app.get("/state")
-async def state_page(request: Request):
-    return templates.TemplateResponse("state.html", {"request": request})
+async def state_page():
+    return render("state.html")
 
 @app.get("/calibration")
-async def calibration_page(request: Request):
-    return templates.TemplateResponse("calibration.html", {"request": request})
+async def calibration_page():
+    return render("calibration.html")
 
 
 # API - Control
