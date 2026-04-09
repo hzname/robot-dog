@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Robot Dog - Control</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <nav>
+    <span class="logo">🐕 Robot Dog</span>
+    <a href="/dashboard">Dashboard</a>
+    <a href="/control" class="active">Control</a>
+    <a href="/state">State</a>
+    <a href="/calibration">Calibration</a>
+    <span class="status-dot" id="nav-dot"></span>
+  </nav>
+
+  <main>
+    <div class="grid-2">
+      <!-- Joystick -->
+      <div class="card">
+        <h2>Joystick Control</h2>
+        <div class="joystick-zone" id="joy-zone">
+          <div class="joystick-handle" id="joy-handle"></div>
+        </div>
+        <div style="text-align:center;margin-top:10px;color:var(--text-dim);font-size:.85em">
+          Drag to move: X = lateral, Y = forward/back
+        </div>
+      </div>
+
+      <!-- D-Pad + rotation -->
+      <div class="card">
+        <h2>D-Pad</h2>
+        <div class="dpad" style="margin-bottom:20px">
+          <button class="btn up" id="btn-fwd">↑ Fwd</button>
+          <button class="btn left" id="btn-left">← Left</button>
+          <button class="btn btn-red stop" id="btn-stop">■ STOP</button>
+          <button class="btn right" id="btn-right">→ Right</button>
+          <button class="btn down" id="btn-back">↓ Back</button>
+        </div>
+
+        <h2>Rotation</h2>
+        <div class="btn-group" style="justify-content:center;margin-bottom:20px">
+          <button class="btn btn-blue" id="btn-ccw">↺ CCW</button>
+          <button class="btn btn-blue" id="btn-cw">↻ CW</button>
+        </div>
+
+        <h2>Speed</h2>
+        <div style="display:flex;align-items:center;gap:12px">
+          <input type="range" id="speed" min="0.1" max="2.0" step="0.1" value="0.5" style="flex:1">
+          <span id="speed-val" style="font-family:monospace;color:var(--green)">0.5</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Emergency + Servos -->
+    <div class="card">
+      <div class="btn-group" style="justify-content:center">
+        <button class="btn" onclick="api('/api/control/servo_enable',{enable:true})">✅ Enable Servos</button>
+        <button class="btn btn-dark" onclick="api('/api/control/servo_enable',{enable:false})">❌ Disable Servos</button>
+        <button class="btn btn-red btn-lg" onclick="api('/api/control/emergency_stop',{stop:true})">🚨 EMERGENCY STOP</button>
+        <button class="btn btn-orange" onclick="api('/api/control/emergency_stop',{stop:false})">🔓 Release E-Stop</button>
+      </div>
+    </div>
+
+    <!-- Live feedback -->
+    <div class="card">
+      <h2>Live Command Feedback</h2>
+      <div id="feedback" style="font-family:monospace;font-size:.9em;color:var(--text-dim);max-height:120px;overflow-y:auto"></div>
+    </div>
+  </main>
+
+  <script src="/static/common.js"></script>
+  <script>
+    let speed = 0.5;
+    let sending = false;
+
+    const fb = document.getElementById('feedback');
+    function fbLog(msg) {
+      const t = new Date().toLocaleTimeString();
+      fb.innerHTML = `<div>[${t}] ${msg}</div>` + fb.innerHTML;
+    }
+
+    // Speed slider
+    document.getElementById('speed').oninput = e => {
+      speed = parseFloat(e.target.value);
+      document.getElementById('speed-val').textContent = speed.toFixed(1);
+    };
+
+    // D-pad buttons - hold to move
+    const cmds = {
+      'btn-fwd':   { linear_x: 0.5 },
+      'btn-back':  { linear_x: -0.5 },
+      'btn-left':  { linear_y: 0.5 },
+      'btn-right': { linear_y: -0.5 },
+      'btn-ccw':   { angular_z: 1.0 },
+      'btn-cw':    { angular_z: -1.0 },
+    };
+
+    Object.entries(cmds).forEach(([id, base]) => {
+      const btn = document.getElementById(id);
+      let interval = null;
+
+      function send() {
+        const data = {};
+        if (base.linear_x !== undefined) data.linear_x = base.linear_x * speed;
+        if (base.linear_y !== undefined) data.linear_y = base.linear_y * speed;
+        if (base.angular_z !== undefined) data.angular_z = base.angular_z * speed;
+        api('/api/control/cmd_vel', data);
+        fbLog(`cmd_vel: lx=${data.linear_x?.toFixed(2)||0} ly=${data.linear_y?.toFixed(2)||0} az=${data.angular_z?.toFixed(2)||0}`);
+      }
+
+      btn.addEventListener('mousedown', () => { send(); interval = setInterval(send, 200); });
+      btn.addEventListener('mouseup', () => { clearInterval(interval); api('/api/control/stop'); });
+      btn.addEventListener('mouseleave', () => { clearInterval(interval); api('/api/control/stop'); });
+
+      // Touch support
+      btn.addEventListener('touchstart', e => { e.preventDefault(); send(); interval = setInterval(send, 200); });
+      btn.addEventListener('touchend', () => { clearInterval(interval); api('/api/control/stop'); });
+    });
+
+    // Stop button
+    document.getElementById('btn-stop').addEventListener('click', () => {
+      api('/api/control/stop');
+      fbLog('STOP');
+    });
+
+    // Joystick
+    const zone = document.getElementById('joy-zone');
+    const handle = document.getElementById('joy-handle');
+    let joyActive = false;
+    let joyInterval = null;
+
+    function joyUpdate(cx, cy) {
+      const rect = zone.getBoundingClientRect();
+      const midX = rect.left + rect.width / 2;
+      const midY = rect.top + rect.height / 2;
+      let dx = cx - midX;
+      let dy = cy - midY;
+      const maxR = rect.width / 2 - 30;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist > maxR) { dx = dx/dist*maxR; dy = dy/dist*maxR; }
+      handle.style.left = (midX + dx) + 'px';
+      handle.style.top = (midY + dy) + 'px';
+      // Normalize: -1 to 1
+      const nx = -dx / maxR; // left positive
+      const ny = -dy / maxR; // forward positive
+      return { linear_x: ny * speed, linear_y: nx * speed, angular_z: 0 };
+    }
+
+    function joySend(cx, cy) {
+      const cmd = joyUpdate(cx, cy);
+      api('/api/control/cmd_vel', cmd);
+    }
+
+    zone.addEventListener('mousedown', e => {
+      joyActive = true;
+      joySend(e.clientX, e.clientY);
+      joyInterval = setInterval(() => {
+        // repeat last - handled by mousemove
+      }, 200);
+    });
+    document.addEventListener('mousemove', e => { if (joyActive) joySend(e.clientX, e.clientY); });
+    document.addEventListener('mouseup', () => {
+      if (joyActive) {
+        joyActive = false;
+        clearInterval(joyInterval);
+        handle.style.left = '50%'; handle.style.top = '50%';
+        api('/api/control/stop');
+      }
+    });
+
+    // Touch joystick
+    zone.addEventListener('touchstart', e => {
+      e.preventDefault();
+      joyActive = true;
+      joySend(e.touches[0].clientX, e.touches[0].clientY);
+    });
+    document.addEventListener('touchmove', e => {
+      if (joyActive) joySend(e.touches[0].clientX, e.touches[0].clientY);
+    });
+    document.addEventListener('touchend', () => {
+      if (joyActive) {
+        joyActive = false;
+        handle.style.left = '50%'; handle.style.top = '50%';
+        api('/api/control/stop');
+      }
+    });
+
+    fbLog('Control page loaded');
+  </script>
+</body>
+</html>

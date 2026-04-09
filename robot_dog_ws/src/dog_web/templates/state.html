@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Robot Dog - State</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <nav>
+    <span class="logo">🐕 Robot Dog</span>
+    <a href="/dashboard">Dashboard</a>
+    <a href="/control">Control</a>
+    <a href="/state" class="active">State</a>
+    <a href="/calibration">Calibration</a>
+    <span class="status-dot" id="nav-dot"></span>
+  </nav>
+
+  <main>
+    <!-- Status -->
+    <div class="card">
+      <div class="status-bar">
+        <div class="status-pill"><span class="dot" id="ws-dot"></span> WebSocket</div>
+        <div class="status-pill"><span class="dot" id="estop-dot"></span> E-Stop</div>
+        <div class="status-pill" id="update-rate">Update: -- Hz</div>
+      </div>
+    </div>
+
+    <!-- All 12 joints - per leg -->
+    <div class="grid-2" id="legs-container">
+      <!-- LF -->
+      <div class="card">
+        <h2>Left Front (LF)</h2>
+        <div id="leg-lf"></div>
+      </div>
+      <!-- RF -->
+      <div class="card">
+        <h2>Right Front (RF)</h2>
+        <div id="leg-rf"></div>
+      </div>
+      <!-- LR -->
+      <div class="card">
+        <h2>Left Rear (LR)</h2>
+        <div id="leg-lr"></div>
+      </div>
+      <!-- RR -->
+      <div class="card">
+        <h2>Right Rear (RR)</h2>
+        <div id="leg-rr"></div>
+      </div>
+    </div>
+
+    <!-- Raw data -->
+    <div class="card">
+      <h2>Raw Joint Data</h2>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:.85em">
+          <thead>
+            <tr style="color:var(--green);border-bottom:1px solid var(--border)">
+              <th style="text-align:left;padding:8px">#</th>
+              <th style="text-align:left;padding:8px">Joint</th>
+              <th style="text-align:right;padding:8px">Position (rad)</th>
+              <th style="text-align:right;padding:8px">Position (deg)</th>
+              <th style="text-align:left;padding:8px">Visual</th>
+            </tr>
+          </thead>
+          <tbody id="joint-table"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="/static/common.js"></script>
+  <script>
+    const SHORT = {hip:'Hip',thigh:'Thigh',calf:'Calf'};
+
+    // Build leg displays
+    Object.entries(LEG_MAP).forEach(([leg, joints]) => {
+      const el = document.getElementById('leg-' + leg.toLowerCase());
+      joints.forEach(j => {
+        const short = j.replace(/^(lf|rf|lr|rr)_/, '').replace('_joint','');
+        el.innerHTML += `
+          <div style="margin-bottom:10px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+              <span style="color:var(--text-dim);font-size:.85em">${SHORT[short]||short}</span>
+              <span style="font-family:monospace;color:var(--green)" id="sv-${j}">0.000 rad</span>
+            </div>
+            <div style="height:8px;background:var(--bg-dark);border-radius:4px;overflow:hidden">
+              <div id="sb-${j}" style="height:100%;background:var(--green);border-radius:4px;transition:width .15s;width:50%"></div>
+            </div>
+          </div>`;
+      });
+    });
+
+    // Build table
+    const tbody = document.getElementById('joint-table');
+    JOINT_NAMES.forEach((j, i) => {
+      tbody.innerHTML += `
+        <tr style="border-bottom:1px solid var(--border)" id="tr-${i}">
+          <td style="padding:6px 8px">${i}</td>
+          <td style="padding:6px 8px;font-family:monospace">${j}</td>
+          <td style="padding:6px 8px;text-align:right;font-family:monospace" id="tr-${i}-rad">0.000</td>
+          <td style="padding:6px 8px;text-align:right;font-family:monospace" id="tr-${i}-deg">0.0</td>
+          <td style="padding:6px 8px"><div style="height:6px;background:var(--bg-dark);border-radius:3px;width:150px;overflow:hidden"><div id="tr-${i}-bar" style="height:100%;background:var(--accent);border-radius:3px;width:50%"></div></div></td>
+        </tr>`;
+    });
+
+    let lastTime = Date.now();
+    let updateCount = 0;
+
+    // WebSocket
+    const ws = new StateWS(state => {
+      updateCount++;
+      const now = Date.now();
+      if (now - lastTime > 1000) {
+        document.getElementById('update-rate').textContent = `Update: ${updateCount} Hz`;
+        updateCount = 0;
+        lastTime = now;
+      }
+
+      const pos = state.joint_positions || [];
+      (pos).forEach((v, i) => {
+        const name = JOINT_NAMES[i];
+        const deg = (v * 180 / Math.PI).toFixed(1);
+
+        // Leg cards
+        const sv = document.getElementById('sv-' + name);
+        if (sv) sv.textContent = v.toFixed(3) + ' rad';
+        const sb = document.getElementById('sb-' + name);
+        if (sb) sb.style.width = Math.min(100, Math.max(0, (v + 3.14) / 6.28 * 100)) + '%';
+
+        // Table
+        const tRad = document.getElementById('tr-' + i + '-rad');
+        if (tRad) tRad.textContent = v.toFixed(3);
+        const tDeg = document.getElementById('tr-' + i + '-deg');
+        if (tDeg) tDeg.textContent = deg;
+        const tBar = document.getElementById('tr-' + i + '-bar');
+        if (tBar) tBar.style.width = Math.min(100, Math.max(0, (v + 3.14) / 6.28 * 100)) + '%';
+      });
+
+      // E-stop
+      const edot = document.getElementById('estop-dot');
+      if (edot) edot.className = 'dot ' + (state.emergency_stopped ? 'off' : 'on');
+    });
+  </script>
+</body>
+</html>

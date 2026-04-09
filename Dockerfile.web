@@ -1,0 +1,13 @@
+FROM ros:jazzy
+
+# Установка pip
+RUN apt-get update && apt-get install -y python3-pip python3-venv --no-install-recommends && rm -rf /var/lib/apt/lists/*
+
+# Установка зависимостей
+RUN pip3 install --no-cache-dir fastapi uvicorn websockets
+
+# Монтируемая директория
+WORKDIR /workspace
+
+# Запуск веб-сервера
+CMD ["bash", "-lc", "source /opt/ros/jazzy/setup.bash && source /workspace/install/setup.bash && python3 -m dog_web.web_server"]

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Robot Dog - Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <nav>
+    <span class="logo">🐕 Robot Dog</span>
+    <a href="/dashboard" class="active">Dashboard</a>
+    <a href="/control">Control</a>
+    <a href="/state">State</a>
+    <a href="/calibration">Calibration</a>
+    <span class="status-dot" id="nav-dot"></span>
+  </nav>
+
+  <main>
+    <!-- Status bar -->
+    <div class="card">
+      <div class="status-bar">
+        <div class="status-pill"><span class="dot" id="ws-dot"></span> WebSocket</div>
+        <div class="status-pill"><span class="dot" id="ros-dot"></span> ROS2</div>
+        <div class="status-pill"><span class="dot" id="servo-dot"></span> Servos</div>
+        <div class="status-pill"><span class="dot" id="estop-dot"></span> E-Stop</div>
+      </div>
+    </div>
+
+    <!-- Joint overview -->
+    <div class="card">
+      <h2>Joint Positions</h2>
+      <div class="joint-grid" id="joint-overview"></div>
+    </div>
+
+    <!-- Quick actions -->
+    <div class="grid-2">
+      <div class="card">
+        <h2>Quick Actions</h2>
+        <div class="btn-group">
+          <button class="btn" onclick="api('/api/control/servo_enable',{enable:true})">Enable Servos</button>
+          <button class="btn btn-dark" onclick="api('/api/control/servo_enable',{enable:false})">Disable Servos</button>
+          <button class="btn btn-red btn-lg" onclick="api('/api/control/emergency_stop',{stop:true})">EMERGENCY STOP</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Movement</h2>
+        <div class="dpad">
+          <button class="btn up" onmousedown="api('/api/control/cmd_vel',{linear_x:0.5})" onmouseup="api('/api/control/stop')">↑</button>
+          <button class="btn left" onmousedown="api('/api/control/cmd_vel',{linear_y:0.5})" onmouseup="api('/api/control/stop')">←</button>
+          <button class="btn btn-red stop" onclick="api('/api/control/stop')">■</button>
+          <button class="btn right" onmousedown="api('/api/control/cmd_vel',{linear_y:-0.5})" onmouseup="api('/api/control/stop')">→</button>
+          <button class="btn down" onmousedown="api('/api/control/cmd_vel',{linear_x:-0.5})" onmouseup="api('/api/control/stop')">↓</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div class="card">
+      <h2>Event Log</h2>
+      <div id="log" style="font-family:monospace;font-size:.85em;color:var(--text-dim);max-height:150px;overflow-y:auto;"></div>
+    </div>
+  </main>
+
+  <script src="/static/common.js"></script>
+  <script>
+    const logEl = document.getElementById('log');
+    function log(msg) {
+      const t = new Date().toLocaleTimeString();
+      logEl.innerHTML = `<div>[${t}] ${msg}</div>` + logEl.innerHTML;
+    }
+
+    // Build joint overview
+    const jDiv = document.getElementById('joint-overview');
+    JOINT_NAMES.forEach(name => {
+      jDiv.innerHTML += `<div class="joint-card"><div class="name">${name}</div><div class="value" id="j-${name}">0.00</div><div class="bar-wrap"><div class="bar" id="jb-${name}" style="width:50%"></div></div></div>`;
+    });
+
+    // WebSocket
+    const ws = new StateWS(state => {
+      // Update joints
+      (state.joint_positions || []).forEach((v, i) => {
+        const name = JOINT_NAMES[i];
+        const el = document.getElementById('j-' + name);
+        const bar = document.getElementById('jb-' + name);
+        if (el) el.textContent = v.toFixed(3);
+        if (bar) {
+          const pct = Math.min(100, Math.max(0, (v + 3.14) / 6.28 * 100));
+          bar.style.width = pct + '%';
+        }
+      });
+
+      // Status dots
+      const edot = document.getElementById('estop-dot');
+      if (edot) edot.className = 'dot ' + (state.emergency_stopped ? 'off' : 'on');
+      const ndot = document.getElementById('nav-dot');
+      if (ndot) ndot.className = 'status-dot ok';
+    });
+
+    log('Dashboard loaded');
+  </script>
+</body>
+</html>

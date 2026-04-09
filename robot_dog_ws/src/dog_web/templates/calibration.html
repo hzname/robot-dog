@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Robot Dog - Calibration</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <nav>
+    <span class="logo">🐕 Robot Dog</span>
+    <a href="/dashboard">Dashboard</a>
+    <a href="/control">Control</a>
+    <a href="/state">State</a>
+    <a href="/calibration" class="active">Calibration</a>
+    <span class="status-dot" id="nav-dot"></span>
+  </nav>
+
+  <main>
+    <!-- Status -->
+    <div class="card">
+      <div class="status-bar">
+        <div class="status-pill"><span class="dot" id="ws-dot"></span> WebSocket</div>
+        <div class="status-pill"><span class="dot" id="estop-dot"></span> E-Stop</div>
+      </div>
+    </div>
+
+    <!-- Profiles -->
+    <div class="card">
+      <h2>Calibration Profiles</h2>
+      <div class="btn-group" style="margin-bottom:15px">
+        <button class="btn btn-sm" onclick="saveProfile()">💾 Save Current</button>
+        <button class="btn btn-sm btn-blue" onclick="applyCalibration()">⚡ Apply to Robot</button>
+        <button class="btn btn-sm btn-dark" onclick="loadProfile('default')">📂 Load Default</button>
+        <button class="btn btn-sm btn-red" onclick="resetCalibration()">🔄 Reset All</button>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:15px">
+        <input type="text" id="profile-name" placeholder="Profile name..." 
+               style="flex:1;background:var(--bg-input);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:.9em">
+        <button class="btn btn-sm" onclick="saveProfileWithName()">Save As</button>
+      </div>
+      <div id="profiles-list" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+    </div>
+
+    <!-- Per-leg calibration -->
+    <div class="grid-2" id="calib-container"></div>
+  </main>
+
+  <script src="/static/common.js"></script>
+  <script>
+    const calibState = {};
+    JOINT_NAMES.forEach(j => calibState[j] = 0.0);
+
+    // Build calibration UI per leg
+    const LEGS = {
+      'LF': {title: 'Left Front', color: '#e94560'},
+      'RF': {title: 'Right Front', color: '#3498db'},
+      'LR': {title: 'Left Rear', color: '#f39c12'},
+      'RR': {title: 'Right Rear', color: '#9b59b6'},
+    };
+
+    const JOINT_LABELS = {hip:'Hip (Roll)', thigh:'Thigh (Pitch)', calf:'Calf (Knee)'};
+    const JOINT_LIMITS = {hip:[-1.5,1.5], thigh:[-1.5,1.5], calf:[-3.0,0.5]};
+
+    const container = document.getElementById('calib-container');
+    Object.entries(LEGS).forEach(([leg, info]) => {
+      let html = `<div class="calib-leg" style="border-left:3px solid ${info.color}">`;
+      html += `<div class="leg-title">${info.title} (${leg})</div>`;
+      ['hip','thigh','calf'].forEach(axis => {
+        const joint = `${leg.toLowerCase()}_${axis}_joint`;
+        const [min, max] = JOINT_LIMITS[axis];
+        const def = axis === 'calf' ? -1.2 : 0.0;
+        calibState[joint] = def;
+        html += `
+          <div class="calib-row">
+            <label>${JOINT_LABELS[axis]}</label>
+            <input type="range" id="cal-${joint}" min="${min}" max="${max}" step="0.01" value="${def}"
+                   oninput="onSlider('${joint}',this.value)">
+            <span class="val" id="cv-${joint}">${def.toFixed(2)} rad</span>
+          </div>`;
+      });
+      html += '</div>';
+      container.innerHTML += html;
+    });
+
+    function onSlider(joint, val) {
+      val = parseFloat(val);
+      calibState[joint] = val;
+      document.getElementById('cv-' + joint).textContent = val.toFixed(2) + ' rad';
+    }
+
+    // Apply calibration to robot
+    async function applyCalibration() {
+      for (const [joint, offset] of Object.entries(calibState)) {
+        await api('/api/calibration/set', {joint, offset});
+      }
+      await api('/api/calibration/apply');
+      log('Calibration applied to robot');
+    }
+
+    // Save profile
+    async function saveProfile() {
+      const name = document.getElementById('profile-name').value || 'default';
+      await saveProfileWithName(name);
+    }
+
+    async function saveProfileWithName(name) {
+      if (!name) name = document.getElementById('profile-name').value;
+      if (!name) { alert('Enter profile name'); return; }
+      await api('/api/calibration/save', {profile_name: name, calibration: calibState});
+      log('Profile saved: ' + name);
+      loadProfiles();
+    }
+
+    // Load profile
+    async function loadProfile(name) {
+      const res = await api('/api/calibration/load', {profile_name: name});
+      if (res && res.calibration) {
+        Object.entries(res.calibration).forEach(([joint, val]) => {
+          calibState[joint] = val;
+          const slider = document.getElementById('cal-' + joint);
+          if (slider) slider.value = val;
+          const label = document.getElementById('cv-' + joint);
+          if (label) label.textContent = val.toFixed(2) + ' rad';
+        });
+        log('Profile loaded: ' + name);
+      }
+    }
+
+    // Reset
+    async function resetCalibration() {
+      if (!confirm('Reset all calibration to zero?')) return;
+      JOINT_NAMES.forEach(j => {
+        calibState[j] = 0.0;
+        const slider = document.getElementById('cal-' + j);
+        if (slider) slider.value = 0;
+        const label = document.getElementById('cv-' + j);
+        if (label) label.textContent = '0.00 rad';
+      });
+      await api('/api/calibration/reset');
+      log('Calibration reset');
+    }
+
+    // List profiles
+    async function loadProfiles() {
+      const res = await api('/api/calibration/profiles');
+      const el = document.getElementById('profiles-list');
+      if (!res || !res.profiles) return;
+      el.innerHTML = res.profiles.map(p => 
+        `<button class="btn btn-sm btn-dark" onclick="loadProfile('${p.name}')">📂 ${p.name}</button>`
+      ).join('');
+    }
+
+    // Logging
+    const logEl = document.createElement('div');
+    logEl.style.cssText = 'position:fixed;bottom:10px;right:10px;background:var(--bg-card);border:1px solid var(--border);padding:10px;border-radius:8px;font-size:.8em;max-width:300px;max-height:150px;overflow-y:auto;z-index:200';
+    document.body.appendChild(logEl);
+    function log(msg) {
+      const t = new Date().toLocaleTimeString();
+      logEl.innerHTML = `<div style="color:var(--text-dim)">[${t}] ${msg}</div>` + logEl.innerHTML;
+    }
+
+    // WebSocket - sync calibration from robot
+    const ws = new StateWS(state => {
+      if (state.calibration) {
+        Object.entries(state.calibration).forEach(([joint, val]) => {
+          if (calibState[joint] !== undefined && Math.abs(calibState[joint] - val) > 0.01) {
+            calibState[joint] = val;
+            const slider = document.getElementById('cal-' + joint);
+            if (slider) slider.value = val;
+            const label = document.getElementById('cv-' + joint);
+            if (label) label.textContent = val.toFixed(2) + ' rad';
+          }
+        });
+      }
+      const edot = document.getElementById('estop-dot');
+      if (edot) edot.className = 'dot ' + (state.emergency_stopped ? 'off' : 'on');
+    });
+
+    loadProfiles();
+    log('Calibration page loaded');
+  </script>
+</body>
+</html>
