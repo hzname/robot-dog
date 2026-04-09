@@ -87,6 +87,9 @@
       val = parseFloat(val);
       calibState[joint] = val;
       document.getElementById('cv-' + joint).textContent = val.toFixed(2) + ' rad';
+      // Send positions to robot immediately
+      const positions = JOINT_NAMES.map(j => calibState[j] || 0.0);
+      api('/api/calibration/live', {positions: positions});
     }
 
     // Apply calibration to robot

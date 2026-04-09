@@ -204,6 +204,15 @@ async def apply_calibration():
     bridge_send({"type": "joint_command", "positions": vals})
     return {"status": "ok"}
 
+@app.post("/api/calibration/live")
+async def live_calibration(data: dict):
+    """Apply calibration positions directly without saving"""
+    positions = data.get("positions", [])
+    if len(positions) == 12:
+        bridge_send({"type": "joint_command", "positions": positions})
+        return {"status": "ok"}
+    return {"error": "Need 12 positions"}
+
 @app.post("/api/calibration/save")
 async def save_profile(data: dict):
     name = data.get("profile_name", "default")
