@@ -160,19 +160,8 @@
       logEl.innerHTML = `<div style="color:var(--text-dim)">[${t}] ${msg}</div>` + logEl.innerHTML;
     }
 
-    // WebSocket - sync calibration from robot
+    // WebSocket - sync status only (don't overwrite calibration sliders)
     const ws = new StateWS(state => {
-      if (state.calibration) {
-        Object.entries(state.calibration).forEach(([joint, val]) => {
-          if (calibState[joint] !== undefined && Math.abs(calibState[joint] - val) > 0.01) {
-            calibState[joint] = val;
-            const slider = document.getElementById('cal-' + joint);
-            if (slider) slider.value = val;
-            const label = document.getElementById('cv-' + joint);
-            if (label) label.textContent = val.toFixed(2) + ' rad';
-          }
-        });
-      }
       const edot = document.getElementById('estop-dot');
       if (edot) edot.className = 'dot ' + (state.emergency_stopped ? 'off' : 'on');
     });
