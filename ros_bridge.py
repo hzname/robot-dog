@@ -27,10 +27,12 @@ class Bridge:
         self.estop_pub = self.node.create_publisher(Bool, '/emergency_stop_trigger', 10)
         self.pos_pub = self.node.create_publisher(Float64MultiArray, '/joint_position_command', 10)
         
-        # Subscribe to joint states for feedback
+        # Subscribe to joint states for feedback (BestEffort QoS)
         from sensor_msgs.msg import JointState
+        from rclpy.qos import QoSProfile, ReliabilityPolicy
+        joint_qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
         self.joint_positions = [0.0] * 12
-        self.node.create_subscription(JointState, '/joint_states', self._on_joints, 10)
+        self.node.create_subscription(JointState, '/joint_states', self._on_joints, joint_qos)
         
         # Subscribe to emergency stop state
         self.emergency_stopped = False
