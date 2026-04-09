@@ -5,6 +5,7 @@ Runs on Banana Pi host, communicates with ROS2 via docker exec
 
 import asyncio
 import json
+import socket
 import subprocess
 import threading
 from pathlib import Path
@@ -29,18 +30,22 @@ PROFILES_DIR = Path.home() / "robot-dog" / "calibration_profiles"
 
 # --- ROS2 via docker exec ---
 
-def ros2_cmd(cmd: str, timeout=5):
-    """Run ROS2 command inside the robot_dog container"""
-    full = f'docker exec robot_dog bash -lc "source /opt/ros/jazzy/setup.bash && source /workspace/install/setup.bash && {cmd}" 2>/dev/null'
-    try:
-        r = subprocess.run(full, shell=True, capture_output=True, text=True, timeout=timeout)
-        return r.stdout.strip(), r.returncode
-    except subprocess.TimeoutExpired:
-        return "", 1
+BRIDGE_SOCKET = Path("/tmp/ros_bridge.sock")
 
-def ros2_pub(topic, msg_type, msg):
-    """Publish a ROS2 message"""
-    return ros2_cmd(f'ros2 topic pub {topic} {msg_type} "{msg}" --once', timeout=3)
+def bridge_send(cmd: dict, timeout=2):
+    """Send command to ROS2 bridge via Unix socket"""
+    if not BRIDGE_SOCKET.exists():
+        return {"error": "bridge not available"}, 0
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        s.connect(str(BRIDGE_SOCKET))
+        s.send(json.dumps(cmd).encode())
+        data = s.recv(4096)
+        s.close()
+        return json.loads(data.decode()), 0
+    except Exception as e:
+        return {"error": str(e)}, 1
 
 # --- State ---
 
@@ -159,26 +164,22 @@ async def cmd_vel(data: dict):
     lx = data.get("linear_x", 0.0)
     ly = data.get("linear_y", 0.0)
     az = data.get("angular_z", 0.0)
-    ros2_pub("/cmd_vel", "geometry_msgs/msg/Twist",
-             f"linear: {{x: {lx}, y: {ly}, z: 0.0}}, angular: {{x: 0.0, y: 0.0, z: {az}}}")
+    bridge_send({"type": "cmd_vel", "linear_x": lx, "linear_y": ly, "angular_z": az})
     return {"status": "ok"}
 
 @app.post("/api/control/stop")
 async def stop_robot():
-    ros2_pub("/cmd_vel", "geometry_msgs/msg/Twist",
-             "linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}")
+    bridge_send({"type": "stop"})
     return {"status": "ok"}
 
 @app.post("/api/control/servo_enable")
 async def servo_enable(data: dict):
-    en = str(data.get("enable", True)).lower()
-    ros2_pub("/servo_enable", "std_msgs/msg/Bool", f"data: {en}")
+    bridge_send({"type": "servo_enable", "enable": data.get("enable", True)})
     return {"status": "ok"}
 
 @app.post("/api/control/emergency_stop")
 async def emergency_stop(data: dict):
-    stop = str(data.get("stop", True)).lower()
-    ros2_pub("/emergency_stop_trigger", "std_msgs/msg/Bool", f"data: {stop}")
+    bridge_send({"type": "emergency_stop", "stop": data.get("stop", True)})
     return {"status": "ok"}
 
 
@@ -215,8 +216,8 @@ async def set_calibration(data: dict):
 
 @app.post("/api/calibration/apply")
 async def apply_calibration():
-    vals = ",".join(str(state.calibration.get(n, 0.0)) for n in JOINT_NAMES)
-    ros2_pub("/joint_position_command", "std_msgs/msg/Float64MultiArray", f"data: [{vals}]")
+    vals = [state.calibration.get(n, 0.0) for n in JOINT_NAMES]
+    bridge_send({"type": "joint_command", "positions": vals})
     return {"status": "ok"}
 
 @app.post("/api/calibration/save")

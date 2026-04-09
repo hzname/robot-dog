@@ -23,7 +23,6 @@ ros2 run dog_hardware_cpp servo_driver_node --ros-args \
 SERVO_PID=$!
 sleep 3
 
-# Retry lifecycle config
 echo "Configuring servo driver..."
 for i in 1 2 3 4 5; do
   ros2 lifecycle set /servo_driver_node configure && break
@@ -32,7 +31,15 @@ for i in 1 2 3 4 5; do
 done
 ros2 lifecycle set /servo_driver_node activate
 
+# Start ROS2 bridge for web interface
+echo "Starting ROS2 bridge..."
+python3 /workspace/ros_bridge.py &
+BRIDGE_PID=$!
+
+# Make socket accessible from host
+chmod 666 /tmp/ros_bridge.sock 2>/dev/null
+
 echo "=== ALL SYSTEMS ONLINE ==="
 
-# Keep alive - wait for background processes
-wait $GAIT_PID $SERVO_PID 2>/dev/null
+# Wait for any process to exit
+wait $GAIT_PID $SERVO_PID $BRIDGE_PID 2>/dev/null
