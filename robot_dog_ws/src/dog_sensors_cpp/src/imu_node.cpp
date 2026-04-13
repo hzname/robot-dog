@@ -107,6 +107,10 @@ ImuNode::on_configure(const rclcpp_lifecycle::State & /*state*/)
   status_pub_ = create_publisher<std_msgs::msg::Bool>(
     "/imu/status", rclcpp::QoS(1).reliable());
 
+  // Health publisher — signals stale IMU data
+  health_pub_ = create_publisher<std_msgs::msg::Bool>(
+    "/imu/health", rclcpp::QoS(1).reliable());
+
   // Create velocity command subscriber for simulator
   if (current_driver_ == ImuDriverType::SIMULATOR || 
       (current_driver_ == ImuDriverType::NONE && simulate_)) {
@@ -187,6 +191,9 @@ ImuNode::on_activate(const rclcpp_lifecycle::State & /*state*/)
   }
   if (pose_pub_) {
     pose_pub_->on_activate();
+  }
+  if (health_pub_) {
+    health_pub_->on_activate();
   }
 
   // Calibrate if needed
@@ -297,10 +304,37 @@ void ImuNode::timer_callback()
   // Publish IMU data
   imu_pub_->publish(imu_msg);
 
+  // Track data freshness for health monitoring
+  last_imu_data_time_ = now();
+  imu_healthy_ = true;
+
   // Update and publish pose estimate if enabled
   if (publish_pose_ && pose_pub_->is_activated()) {
     update_pose_estimate(imu_msg);
     pose_pub_->publish(current_pose_);
+  }
+
+  // Publish health status
+  if (health_pub_ && health_pub_->is_activated()) {
+    auto health_msg = std::make_unique<std_msgs::msg::Bool>();
+    health_msg->data = imu_healthy_;
+    health_pub_->publish(std::move(health_msg));
+  }
+}
+
+void ImuNode::publish_health()
+{
+  if (!health_pub_ || !health_pub_->is_activated()) {
+    return;
+  }
+  auto msg = std::make_unique<std_msgs::msg::Bool>();
+  auto elapsed = (now() - last_imu_data_time_).seconds();
+  imu_healthy_ = (elapsed < max_stale_duration_);
+  msg->data = imu_healthy_;
+  health_pub_->publish(std::move(msg));
+
+  if (!imu_healthy_) {
+    RCLCPP_WARN(get_logger(), "IMU data stale: %.2f s (threshold %.2f s)", elapsed, max_stale_duration_);
   }
 }
 

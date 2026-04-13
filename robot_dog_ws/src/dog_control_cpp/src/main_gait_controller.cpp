@@ -11,7 +11,10 @@ int main(int argc, char ** argv)
   node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE);
   node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE);
 
-  rclcpp::spin(node->get_node_base_interface());
+  // MultiThreadedExecutor: timer callback on one thread, subscribers on another
+  rclcpp::executors::MultiThreadedExecutor exec;
+  exec.add_node(node->get_node_base_interface());
+  exec.spin();
   rclcpp::shutdown();
   return 0;
 }

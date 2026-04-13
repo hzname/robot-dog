@@ -18,27 +18,33 @@ from geometry_msgs.msg import Twist
 from std_msgs.msg import Bool, Float64MultiArray
 
 SOCKET_PATH = '/tmp/robot_dog/ros_bridge.sock'
+# Topic prefix — set DOG_TOPIC_PREFIX=/dog for namespaced topics, or leave empty for flat topics
+TOPIC_PREFIX = os.environ.get('DOG_TOPIC_PREFIX', '')
+
+def _t(name):
+    """Prefix a topic name."""
+    return f'{TOPIC_PREFIX}{name}'
 
 class Bridge:
     def __init__(self):
         rclpy.init()
         self.node = rclpy.create_node('web_bridge')
-        self.cmd_vel_pub = self.node.create_publisher(Twist, '/cmd_vel', 10)
-        self.servo_pub = self.node.create_publisher(Bool, '/servo_enable', 10)
-        self.estop_pub = self.node.create_publisher(Bool, '/emergency_stop_trigger', 10)
-        self.pos_pub = self.node.create_publisher(Float64MultiArray, '/joint_position_command', 10)
-        self.gait_enable_pub = self.node.create_publisher(Bool, '/gait_enable', 10)
-        
+        self.cmd_vel_pub = self.node.create_publisher(Twist, _t('/cmd_vel'), 10)
+        self.servo_pub = self.node.create_publisher(Bool, _t('/servo_enable'), 10)
+        self.estop_pub = self.node.create_publisher(Bool, _t('/emergency_stop_trigger'), 10)
+        self.pos_pub = self.node.create_publisher(Float64MultiArray, _t('/joint_position_command'), 10)
+        self.gait_enable_pub = self.node.create_publisher(Bool, _t('/gait_enable'), 10)
+
         # Subscribe to joint states for feedback (BestEffort QoS)
         from sensor_msgs.msg import JointState
         from rclpy.qos import QoSProfile, ReliabilityPolicy
         joint_qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
         self.joint_positions = [0.0] * 12
-        self.node.create_subscription(JointState, '/joint_states', self._on_joints, joint_qos)
-        
+        self.node.create_subscription(JointState, _t('/joint_states'), self._on_joints, joint_qos)
+
         # Subscribe to emergency stop state
         self.emergency_stopped = False
-        self.node.create_subscription(Bool, '/emergency_stop', self._on_estop, 10)
+        self.node.create_subscription(Bool, _t('/emergency_stop'), self._on_estop, 10)
 
     def _on_joints(self, msg):
         self.joint_positions = list(msg.position) if len(msg.position) == 12 else self.joint_positions

@@ -98,6 +98,11 @@ protected:
   sensor_msgs::msg::Imu simulate_imu_data();
 
   /**
+   * @brief Check IMU data freshness and publish health status
+   */
+  void publish_health();
+
+  /**
    * @brief Calibrate IMU offsets
    */
   void calibrate();
@@ -118,6 +123,7 @@ protected:
   rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_;
   rclcpp_lifecycle::LifecyclePublisher<geometry_msgs::msg::Pose>::SharedPtr pose_pub_;
   rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Bool>::SharedPtr status_pub_;
+  rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Bool>::SharedPtr health_pub_;
 
   // Subscribers
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
@@ -145,6 +151,9 @@ protected:
 
   // State
   bool is_calibrated_{false};
+  rclcpp::Time last_imu_data_time_{0, 0, RCL_ROS_TIME};  // Track last data timestamp
+  double max_stale_duration_{0.5};                       // Max time before IMU considered stale (seconds)
+  bool imu_healthy_{true};
 
   // Pose estimation (simple integration)
   geometry_msgs::msg::Pose current_pose_;

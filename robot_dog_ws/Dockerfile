@@ -1,42 +1,41 @@
-# ROS2 Humble для Banana Pi (ARM64)
-FROM arm64v8/ros:humble-ros-base
+# ROS2 Jazzy for Banana Pi (ARM64)
+FROM arm64v8/ros:jazzy-ros-base
 
-# Аргументы сборки
+# Build arguments
 ARG USERNAME=banana
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
-# Установка зависимостей
+# Install dependencies
 RUN apt-get update && apt-get install -y \
-    # ROS2 пакеты
-    ros-humble-robot-state-publisher \
-    ros-humble-joint-state-publisher \
-    ros-humble-xacro \
-    ros-humble-tf2-ros \
-    ros-humble-tf2 \
-    ros-humble-rviz2 \
-    ros-humble-geometry-msgs \
-    ros-humble-sensor-msgs \
-    ros-humble-trajectory-msgs \
-    ros-humble-std-msgs \
-    ros-humble-lifecycle-msgs \
-    ros-humble-rclcpp-lifecycle \
-    ros-humble-rclcpp-components \
-    ros-humble-ros2-control \
-    ros-humble-ros2-controllers \
-    ros-humble-hardware-interface \
-    ros-humble-controller-manager \
-    # ros-humble-gazebo-ros2-control \
+    # ROS2 packages
+    ros-jazzy-robot-state-publisher \
+    ros-jazzy-joint-state-publisher \
+    ros-jazzy-xacro \
+    ros-jazzy-tf2-ros \
+    ros-jazzy-tf2 \
+    ros-jazzy-rviz2 \
+    ros-jazzy-geometry-msgs \
+    ros-jazzy-sensor-msgs \
+    ros-jazzy-trajectory-msgs \
+    ros-jazzy-std-msgs \
+    ros-jazzy-lifecycle-msgs \
+    ros-jazzy-rclcpp-lifecycle \
+    ros-jazzy-rclcpp-components \
+    ros-jazzy-ros2-control \
+    ros-jazzy-ros2-controllers \
+    ros-jazzy-hardware-interface \
+    ros-jazzy-controller-manager \
     # Python
     python3-pip \
     python3-colcon-common-extensions \
     python3-rosdep \
-    # Инструменты
+    # Tools
     git \
     vim \
     htop \
     i2c-tools \
-    # Сборка
+    # Build tools
     build-essential \
     cmake \
     && rm -rf /var/lib/apt/lists/*
@@ -58,8 +57,8 @@ RUN pip3 install --no-cache-dir \
 # Инициализация rosdep
 RUN rosdep init || true && rosdep update
 
-# Настройка окружения
-RUN echo "source /opt/ros/humble/setup.bash" >> /home/$USERNAME/.bashrc
+# Setup environment
+RUN echo "source /opt/ros/jazzy/setup.bash" >> /home/$USERNAME/.bashrc
 
 # Рабочая директория
 WORKDIR /workspace

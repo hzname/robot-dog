@@ -4,6 +4,8 @@ services:
     image: ros:jazzy
     container_name: robot_dog
     privileged: true
+    cap_add:
+      - SYS_NICE       # For real-time scheduling (chrt)
     devices:
       - /dev/i2c-0:/dev/i2c-0
     volumes:
@@ -11,20 +13,56 @@ services:
       - /dev/i2c-0:/dev/i2c-0
     network_mode: host
     working_dir: /workspace
+    environment:
+      - DOG_TOPIC_PREFIX=/dog
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: cgroup
+              capabilities: [gpu]
     command: >
       bash -c "
         source /opt/ros/jazzy/setup.bash &&
         source /workspace/install/setup.bash &&
         echo '=== SYSTEM READY ===' &&
         echo 'Starting servo driver...' &&
-        ros2 run dog_hardware_cpp servo_driver_node --ros-args -p bus_type:=i2c -p device_port:=/dev/i2c-0 &
+        ros2 run dog_hardware_cpp servo_driver_node --ros-args
+          -p bus_type:=i2c
+          -p device_port:=/dev/i2c-0
+          -r /cmd_vel:=${DOG_TOPIC_PREFIX}/cmd_vel
+          -r /joint_states:=${DOG_TOPIC_PREFIX}/joint_states
+          -r /joint_trajectory:=${DOG_TOPIC_PREFIX}/joint_trajectory
+          -r /servo_enable:=${DOG_TOPIC_PREFIX}/servo_enable
+          -r /emergency_stop_trigger:=${DOG_TOPIC_PREFIX}/emergency_stop_trigger
+          -r /emergency_stop:=${DOG_TOPIC_PREFIX}/emergency_stop &
+        SERVO_PID=$! &&
         sleep 3 &&
         echo 'Configuring...' &&
         ros2 lifecycle set /servo_driver_node configure &&
         ros2 lifecycle set /servo_driver_node activate &&
-        sleep 2 &&
+        taskset -cp 1 $SERVO_PID 2>/dev/null &&
+        chrt -f -p 50 $SERVO_PID 2>/dev/null &&
+        echo 'Servo driver pinned to CPU 1, SCHED_FIFO priority 50' &&
+        sleep 1 &&
         echo 'Starting gait controller...' &&
-        ros2 run dog_control_cpp gait_controller &
+        ros2 run dog_control_cpp gait_controller --ros-args
+          -r /cmd_vel:=${DOG_TOPIC_PREFIX}/cmd_vel
+          -r /joint_states:=${DOG_TOPIC_PREFIX}/joint_states
+          -r /joint_trajectory:=${DOG_TOPIC_PREFIX}/joint_trajectory
+          -r /foot_positions:=${DOG_TOPIC_PREFIX}/foot_positions
+          -r /gait_state:=${DOG_TOPIC_PREFIX}/gait_state
+          -r /balance_adjustment:=${DOG_TOPIC_PREFIX}/balance_adjustment
+          -r /gait_enable:=${DOG_TOPIC_PREFIX}/gait_enable
+          -r /body_pose:=${DOG_TOPIC_PREFIX}/body_pose &
+        GAIT_PID=$! &&
+        taskset -cp 0 $GAIT_PID 2>/dev/null &&
+        chrt -f -p 50 $GAIT_PID 2>/dev/null &&
+        echo 'Gait controller pinned to CPU 0, SCHED_FIFO priority 50' &&
+        echo 'Starting ROS bridge...' &&
+        rm -f /tmp/robot_dog/ros_bridge.sock &&
+        mkdir -p /tmp/robot_dog &&
+        python3 -u /workspace/ros_bridge.py &
         echo '=== ALL SYSTEMS ONLINE ===' &&
         tail -f /dev/null
       "

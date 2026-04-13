@@ -117,6 +117,19 @@ LifecycleCallbackReturn BalanceController::on_configure(const rclcpp_lifecycle::
       "/cmd_body_pose", 10,
       [this](const geometry_msgs::msg::Pose::SharedPtr msg) { poseCmdCallback(msg); });
 
+  // IMU health subscription — disables balance corrections when IMU is stale
+  imu_health_sub_ = create_subscription<std_msgs::msg::Bool>(
+      "/imu/health", 1,
+      [this](const std_msgs::msg::Bool::SharedPtr msg) {
+        bool prev = imu_healthy_;
+        imu_healthy_ = msg->data;
+        if (prev && !imu_healthy_) {
+          RCLCPP_WARN(get_logger(), "IMU unhealthy — disabling balance corrections");
+        } else if (!prev && imu_healthy_) {
+          RCLCPP_INFO(get_logger(), "IMU healthy — resuming balance corrections");
+        }
+      });
+
   return LifecycleCallbackReturn::SUCCESS;
 }
 
@@ -162,6 +175,7 @@ LifecycleCallbackReturn BalanceController::on_cleanup(const rclcpp_lifecycle::St
   imu_sub_.reset();
   height_cmd_sub_.reset();
   pose_cmd_sub_.reset();
+  imu_health_sub_.reset();
 
   return LifecycleCallbackReturn::SUCCESS;
 }
@@ -238,6 +252,13 @@ void BalanceController::controlLoop()
   if (dt <= 0 || dt > 0.1)
   {
     dt = 1.0 / control_rate_;
+  }
+
+  // Graceful degradation: skip corrections when IMU is unhealthy
+  if (!imu_healthy_) {
+    // Publish zero corrections
+    publishBalanceAdjustment(0.0, 0.0, 0.0);
+    return;
   }
 
   // Compute errors
@@ -330,7 +351,8 @@ int main(int argc, char *argv[])
   node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE);
   node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE);
 
-  rclcpp::executors::SingleThreadedExecutor executor;
+  // MultiThreadedExecutor for concurrent timer + subscriber callbacks
+  rclcpp::executors::MultiThreadedExecutor executor;
   executor.add_node(node->get_node_base_interface());
   executor.spin();
 

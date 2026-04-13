@@ -450,7 +450,7 @@ int main(int argc, char *argv[])
 {
   rclcpp::init(argc, argv);
 
-  rclcpp::executors::SingleThreadedExecutor executor;
+  rclcpp::executors::MultiThreadedExecutor executor;
   auto node = std::make_shared<dog_hardware_cpp::ServoDriverNode>();
 
   // Automatically transition to ACTIVE state

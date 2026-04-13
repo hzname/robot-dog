@@ -109,6 +109,10 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
   rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr height_cmd_sub_;
   rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr pose_cmd_sub_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr imu_health_sub_;
+
+  // Health state
+  bool imu_healthy_{true};
   
   // Timer
   rclcpp::TimerBase::SharedPtr control_timer_;

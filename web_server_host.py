@@ -73,36 +73,76 @@ def _validate_positions(positions) -> str | None:
 
 BRIDGE_SOCKET = Path("/tmp/robot_dog/ros_bridge.sock")
 
+class BridgeClient:
+    """Persistent Unix socket connection with automatic reconnection."""
+
+    def __init__(self, timeout=2):
+        self._timeout = timeout
+        self._sock = None
+
+    def _ensure(self):
+        """Reconnect if the socket is dead or missing."""
+        if self._sock is None or self._sock.fileno() == -1:
+            if not BRIDGE_SOCKET.exists():
+                return False
+            try:
+                self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                self._sock.settimeout(self._timeout)
+                self._sock.connect(str(BRIDGE_SOCKET))
+                return True
+            except OSError:
+                self._sock = None
+                return False
+        return True
+
+    def send(self, cmd: dict) -> tuple[dict, int]:
+        """Send a command and receive the response. Returns (result_dict, error_code)."""
+        if not self._ensure():
+            return {"error": "bridge not available"}, 1
+        try:
+            payload = json.dumps(cmd).encode()
+            self._sock.send(len(payload).to_bytes(4, 'big') + payload)
+            # Read length-prefixed response
+            header = b''
+            while len(header) < 4:
+                chunk = self._sock.recv(4 - len(header))
+                if not chunk:
+                    self._sock = None  # Connection lost
+                    return {"error": "incomplete response"}, 1
+                header += chunk
+            msg_len = int.from_bytes(header, 'big')
+            if msg_len > 65536:
+                self._sock = None
+                return {"error": "response too large"}, 1
+            data = b''
+            while len(data) < msg_len:
+                chunk = self._sock.recv(msg_len - len(data))
+                if not chunk:
+                    self._sock = None
+                    return {"error": "incomplete response"}, 1
+                data += chunk
+            return json.loads(data.decode()), 0
+        except (OSError, json.JSONDecodeError) as e:
+            self._sock = None
+            return {"error": str(e)}, 1
+
+    def close(self):
+        if self._sock:
+            try:
+                self._sock.close()
+            except OSError:
+                pass
+            self._sock = None
+
+
+# Global persistent bridge client
+_bridge_client = BridgeClient()
+
+
 def bridge_send(cmd: dict, timeout=2):
-    """Send command to ROS2 bridge via Unix socket with length-prefix framing."""
-    if not BRIDGE_SOCKET.exists():
-        return {"error": "bridge not available"}, 0
-    try:
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(timeout)
-        s.connect(str(BRIDGE_SOCKET))
-        payload = json.dumps(cmd).encode()
-        s.send(len(payload).to_bytes(4, 'big') + payload)
-        # Read length-prefixed response
-        header = b''
-        while len(header) < 4:
-            chunk = s.recv(4 - len(header))
-            if not chunk:
-                break
-            header += chunk
-        if len(header) < 4:
-            return {"error": "incomplete response"}, 1
-        msg_len = int.from_bytes(header, 'big')
-        data = b''
-        while len(data) < msg_len:
-            chunk = s.recv(msg_len - len(data))
-            if not chunk:
-                break
-            data += chunk
-        s.close()
-        return json.loads(data.decode()), 0
-    except Exception as e:
-        return {"error": str(e)}, 1
+    """Send command to ROS2 bridge via persistent Unix socket connection."""
+    _bridge_client._timeout = timeout
+    return _bridge_client.send(cmd)
 
 # --- State ---
 
