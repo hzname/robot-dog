@@ -1,10 +1,12 @@
 """
-Robot Dog Web Server - Host version
+RobotDogQwen Web Server - Host version
 Runs on Banana Pi host, communicates with ROS2 via docker exec
 """
 
 import asyncio
 import json
+import math
+import re
 import socket
 import subprocess
 import threading
@@ -28,20 +30,75 @@ JOINT_NAMES = [
 CALIBRATION_FILE = Path.home() / "robot-dog" / "calibration.json"
 PROFILES_DIR = Path.home() / "robot-dog" / "calibration_profiles"
 
+# Profile name validation: only alphanumeric, hyphens, underscores
+_PROFILE_NAME_RE = re.compile(r'^[a-zA-Z0-9_-]+$')
+
+
+def _validate_profile_name(name: str) -> str | None:
+    """Return error message or None if name is valid."""
+    if not name:
+        return "profile_name required"
+    if not _PROFILE_NAME_RE.match(name):
+        return "Invalid profile name: only letters, digits, hyphens, underscores allowed"
+    if '..' in name or '/' in name or '\\' in name:
+        return "Invalid profile name: path traversal not allowed"
+    return None
+
+
+# --- Input validation for control commands ---
+
+_MAX_LINEAR = 1.0    # m/s
+_MAX_LATERAL = 0.5   # m/s
+_MAX_ANGULAR = 3.0   # rad/s
+
+
+def _clamp(value: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, float(value)))
+
+
+def _validate_positions(positions) -> str | None:
+    """Validate joint position array — must be exactly 12 finite numbers."""
+    if not isinstance(positions, (list, tuple)):
+        return "positions must be a list"
+    if len(positions) != 12:
+        return f"Need exactly 12 positions, got {len(positions)}"
+    for i, p in enumerate(positions):
+        if not isinstance(p, (int, float)):
+            return f"Position {i} is not a number"
+        if not math.isfinite(p):
+            return f"Position {i} is not a finite number"
+    return None
+
 # --- ROS2 via docker exec ---
 
 BRIDGE_SOCKET = Path("/tmp/robot_dog/ros_bridge.sock")
 
 def bridge_send(cmd: dict, timeout=2):
-    """Send command to ROS2 bridge via Unix socket"""
+    """Send command to ROS2 bridge via Unix socket with length-prefix framing."""
     if not BRIDGE_SOCKET.exists():
         return {"error": "bridge not available"}, 0
     try:
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         s.settimeout(timeout)
         s.connect(str(BRIDGE_SOCKET))
-        s.send(json.dumps(cmd).encode())
-        data = s.recv(4096)
+        payload = json.dumps(cmd).encode()
+        s.send(len(payload).to_bytes(4, 'big') + payload)
+        # Read length-prefixed response
+        header = b''
+        while len(header) < 4:
+            chunk = s.recv(4 - len(header))
+            if not chunk:
+                break
+            header += chunk
+        if len(header) < 4:
+            return {"error": "incomplete response"}, 1
+        msg_len = int.from_bytes(header, 'big')
+        data = b''
+        while len(data) < msg_len:
+            chunk = s.recv(msg_len - len(data))
+            if not chunk:
+                break
+            data += chunk
         s.close()
         return json.loads(data.decode()), 0
     except Exception as e:
@@ -104,7 +161,7 @@ def state_poller():
 
 # --- FastAPI ---
 
-app = FastAPI(title="Robot Dog Web Interface")
+app = FastAPI(title="RobotDogQwen Web Interface")
 
 static_dir = BASE / "static"
 templates_dir = BASE / "templates"
@@ -145,11 +202,11 @@ async def calibration_page():
 
 @app.post("/api/control/cmd_vel")
 async def cmd_vel(data: dict):
-    lx = data.get("linear_x", 0.0)
-    ly = data.get("linear_y", 0.0)
-    az = data.get("angular_z", 0.0)
+    lx = _clamp(data.get("linear_x", 0.0), -_MAX_LINEAR, _MAX_LINEAR)
+    ly = _clamp(data.get("linear_y", 0.0), -_MAX_LATERAL, _MAX_LATERAL)
+    az = _clamp(data.get("angular_z", 0.0), -_MAX_ANGULAR, _MAX_ANGULAR)
     bridge_send({"type": "cmd_vel", "linear_x": lx, "linear_y": ly, "angular_z": az})
-    return {"status": "ok"}
+    return {"status": "ok", "clamped": {"linear_x": lx, "linear_y": ly, "angular_z": az}}
 
 @app.post("/api/control/stop")
 async def stop_robot():
@@ -192,11 +249,13 @@ async def get_calibration():
 async def set_calibration(data: dict):
     joint = data.get("joint")
     offset = data.get("offset", 0.0)
-    if joint in JOINT_NAMES:
-        state.calibration[joint] = offset
-        state._save_calibration()
-        return {"status": "ok"}
-    return {"error": "Invalid joint"}
+    if joint not in JOINT_NAMES:
+        return {"error": "Invalid joint"}
+    if not isinstance(offset, (int, float)) or not math.isfinite(offset):
+        return {"error": "Offset must be a finite number"}
+    state.calibration[joint] = offset
+    state._save_calibration()
+    return {"status": "ok"}
 
 @app.post("/api/calibration/apply")
 async def apply_calibration():
@@ -208,14 +267,18 @@ async def apply_calibration():
 async def live_calibration(data: dict):
     """Apply calibration positions directly without saving"""
     positions = data.get("positions", [])
-    if len(positions) == 12:
-        bridge_send({"type": "joint_command", "positions": positions})
-        return {"status": "ok"}
-    return {"error": "Need 12 positions"}
+    err = _validate_positions(positions)
+    if err:
+        return {"error": err}
+    bridge_send({"type": "joint_command", "positions": positions})
+    return {"status": "ok"}
 
 @app.post("/api/calibration/save")
 async def save_profile(data: dict):
     name = data.get("profile_name", "default")
+    err = _validate_profile_name(name)
+    if err:
+        return {"error": err}
     calib = data.get("calibration", state.calibration)
     PROFILES_DIR.mkdir(parents=True, exist_ok=True)
     path = PROFILES_DIR / f"{name}.json"
@@ -226,8 +289,9 @@ async def save_profile(data: dict):
 @app.post("/api/calibration/load")
 async def load_profile(data: dict):
     name = data.get("profile_name")
-    if not name:
-        return {"error": "profile_name required"}
+    err = _validate_profile_name(name)
+    if err:
+        return {"error": err}
     path = PROFILES_DIR / f"{name}.json"
     if not path.exists():
         return {"error": f"Profile {name} not found"}
@@ -254,6 +318,9 @@ async def list_profiles():
 
 @app.delete("/api/calibration/profiles/{name}")
 async def delete_profile(name: str):
+    err = _validate_profile_name(name)
+    if err:
+        return {"error": err}
     path = PROFILES_DIR / f"{name}.json"
     if path.exists():
         path.unlink()

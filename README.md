@@ -1,4 +1,4 @@
-# Robot Dog ROS2 Workspace 🤖🐕
+# RobotDogQwen ROS2 Workspace 🤖🐕
 
 Квадрупедальный робот на базе ROS2 с C++ нодами для реального времени управления.
 

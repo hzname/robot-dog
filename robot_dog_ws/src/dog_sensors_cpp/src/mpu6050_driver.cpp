@@ -75,6 +75,12 @@ Mpu6050Driver::~Mpu6050Driver()
   }
 }
 
+Mpu6050Data Mpu6050Driver::get_data() const
+{
+  std::lock_guard<std::mutex> lock(filter_mutex_);
+  return data_;
+}
+
 bool Mpu6050Driver::initialize()
 {
   // Open I2C device
@@ -245,12 +251,13 @@ Mpu6050Data Mpu6050Driver::read(double dt)
 {
   Mpu6050RawData raw = read_raw();
   scale_data(raw);
-  
-  // Update Mahony filter
+
+  // Update Mahony filter under lock
+  std::lock_guard<std::mutex> lock(filter_mutex_);
   mahony_update(data_.accel_x, data_.accel_y, data_.accel_z,
                 data_.gyro_x, data_.gyro_y, data_.gyro_z, dt);
   compute_euler_angles();
-  
+
   return data_;
 }
 
@@ -289,6 +296,7 @@ void Mpu6050Driver::set_gyro_bias(double x, double y, double z)
 
 void Mpu6050Driver::reset_filter()
 {
+  std::lock_guard<std::mutex> lock(filter_mutex_);
   mahony_q0_ = 1.0;
   mahony_q1_ = 0.0;
   mahony_q2_ = 0.0;
@@ -296,7 +304,7 @@ void Mpu6050Driver::reset_filter()
   mahony_integral_x_ = 0.0;
   mahony_integral_y_ = 0.0;
   mahony_integral_z_ = 0.0;
-  
+
   data_.q_w = 1.0;
   data_.q_x = 0.0;
   data_.q_y = 0.0;

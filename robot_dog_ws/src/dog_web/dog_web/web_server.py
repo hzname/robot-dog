@@ -1,5 +1,5 @@
 """
-Robot Dog Web Server - Full Interface
+RobotDogQwen Web Server - Full Interface
 FastAPI + rclpy for ROS2 communication
 Multi-page interface: Dashboard, Control, State, Calibration
 """
@@ -140,7 +140,7 @@ def init_ros():
 
 
 # --- FastAPI App ---
-app = FastAPI(title="Robot Dog Web Interface")
+app = FastAPI(title="RobotDogQwen Web Interface")
 
 # Resolve static/templates - dev path first, then installed share
 def _find_dir(name):

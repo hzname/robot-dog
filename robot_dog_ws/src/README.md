@@ -1,4 +1,4 @@
-# Robot Dog Workspace
+# RobotDogQwen Workspace
 
 Этот репозиторий содержит проект квадрупедального робота на базе ROS2 Humble.
 

@@ -1,12 +1,9 @@
 #include "dog_teleop_cpp/gamepad_teleop.hpp"
 #include <rclcpp/executors.hpp>
-
 #include <rclcpp/qos.hpp>
-#include <rclcpp/executors.hpp>
+#include <lifecycle_msgs/msg/transition.hpp>
 #include <cmath>
-#include <rclcpp/executors.hpp>
 #include <algorithm>
-#include <rclcpp/executors.hpp>
 
 namespace dog_teleop_cpp
 {
@@ -382,6 +379,11 @@ int main(int argc, char * argv[])
   rclcpp::ExecutorOptions options;
   rclcpp::executors::SingleThreadedExecutor exec(options);
   auto node = std::make_shared<dog_teleop_cpp::GamepadTeleop>();
+
+  // Automatically transition to ACTIVE state
+  node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE);
+  node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE);
+
   exec.add_node(node->get_node_base_interface());
 
   exec.spin();

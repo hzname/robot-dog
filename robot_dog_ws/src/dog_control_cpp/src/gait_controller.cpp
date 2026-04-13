@@ -191,7 +191,8 @@ LifecycleCallbackReturn GaitController::on_cleanup(const rclcpp_lifecycle::State
   cmd_vel_sub_.reset();
   body_pose_sub_.reset();
   balance_adjustment_sub_.reset();
-  
+  gait_enable_sub_.reset();
+
   return LifecycleCallbackReturn::SUCCESS;
 }
 
@@ -292,10 +293,6 @@ void GaitController::calculateFootTrajectory(int leg_idx, double phase,
   double default_x = leg_positions_[leg_idx][0] * 0.5;
   double default_y = leg_positions_[leg_idx][1] * 0.8;
   double default_z = -stance_height_;
-  
-  double direction = (std::abs(velocity_cmd.linear.x) > 0.01) ? 
-                     std::copysign(1.0, velocity_cmd.linear.x) : 1.0;
-  (void)direction;
 
   double x_offset = 0.0;
   double z_offset = 0.0;
@@ -471,13 +468,19 @@ void GaitController::publishFootPositions()
 void GaitController::publishGaitState()
 {
   auto msg = std::make_unique<std_msgs::msg::Float64MultiArray>();
-  msg->data.push_back(current_phase_);  // Current gait phase
-  msg->data.push_back(step_length_);    // Current step length
-  msg->data.push_back(velocity_cmd_.linear.x);   // X velocity
-  msg->data.push_back(velocity_cmd_.angular.z);  // Angular velocity
-  msg->data.push_back(balance_adjustment_.x);    // Roll correction
-  msg->data.push_back(balance_adjustment_.y);    // Pitch correction
-  msg->data.push_back(balance_adjustment_.z);    // Height correction
+
+  // Read shared state under lock
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    msg->data.push_back(current_phase_);
+    msg->data.push_back(step_length_);
+    msg->data.push_back(velocity_cmd_.linear.x);
+    msg->data.push_back(velocity_cmd_.angular.z);
+    msg->data.push_back(balance_adjustment_.x);
+    msg->data.push_back(balance_adjustment_.y);
+    msg->data.push_back(balance_adjustment_.z);
+  }
+
   gait_state_pub_->publish(std::move(msg));
 }
 

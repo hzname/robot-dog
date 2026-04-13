@@ -1,10 +1,8 @@
 #include "dog_teleop_cpp/keyboard_teleop.hpp"
 #include <rclcpp/executors.hpp>
-
 #include <rclcpp/qos.hpp>
-#include <rclcpp/executors.hpp>
+#include <lifecycle_msgs/msg/transition.hpp>
 #include <algorithm>
-#include <rclcpp/executors.hpp>
 
 namespace dog_teleop_cpp
 {
@@ -75,6 +73,14 @@ LifecycleCallbackReturn KeyboardTeleop::on_activate(const rclcpp_lifecycle::Stat
   cmd_height_pub_->on_activate();
   emergency_stop_pub_->on_activate();
 
+  // Set terminal to raw mode ONCE
+  struct termios raw;
+  tcgetattr(STDIN_FILENO, &original_termios_);
+  raw = original_termios_;
+  raw.c_lflag &= ~(ICANON | ECHO);
+  tcsetattr(STDIN_FILENO, TCSADRAIN, &raw);
+  terminal_configured_ = true;
+
   // Start timers
   auto period = std::chrono::duration<double>(1.0 / publish_rate_);
   publish_timer_ = create_wall_timer(
@@ -108,7 +114,7 @@ LifecycleCallbackReturn KeyboardTeleop::on_deactivate(const rclcpp_lifecycle::St
     input_thread_.join();
   }
 
-  // Restore terminal
+  // Restore terminal ONCE
   if (terminal_configured_) {
     tcsetattr(STDIN_FILENO, TCSADRAIN, &original_termios_);
     terminal_configured_ = false;
@@ -149,6 +155,7 @@ LifecycleCallbackReturn KeyboardTeleop::on_shutdown(const rclcpp_lifecycle::Stat
     input_thread_.join();
   }
 
+  // Restore terminal ONCE — safe even if already restored in on_deactivate
   if (terminal_configured_) {
     tcsetattr(STDIN_FILENO, TCSADRAIN, &original_termios_);
     terminal_configured_ = false;
@@ -161,7 +168,7 @@ void KeyboardTeleop::printInstructions()
 {
   std::cout << R"(
 ========================================
-  Keyboard Teleop - Robot Dog Control
+  Keyboard Teleop - RobotDogQwen Control
 ========================================
 Movement:
     w - Forward        s - Backward
@@ -187,11 +194,9 @@ Other:
 
 char KeyboardTeleop::getKey()
 {
-  struct termios raw;
-  tcgetattr(STDIN_FILENO, &raw);
-  raw.c_lflag &= ~(ICANON | ECHO);
-  tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
-  terminal_configured_ = true;
+  if (!terminal_configured_) {
+    return 0;
+  }
 
   fd_set readfds;
   FD_ZERO(&readfds);
@@ -205,8 +210,6 @@ char KeyboardTeleop::getKey()
     read(STDIN_FILENO, &key, 1);
   }
 
-  tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_termios_);
-  terminal_configured_ = false;
   return key;
 }
 
@@ -416,6 +419,11 @@ int main(int argc, char * argv[])
   rclcpp::ExecutorOptions options;
   rclcpp::executors::SingleThreadedExecutor exec(options);
   auto node = std::make_shared<dog_teleop_cpp::KeyboardTeleop>();
+
+  // Automatically transition to ACTIVE state
+  node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE);
+  node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE);
+
   exec.add_node(node->get_node_base_interface());
 
   exec.spin();

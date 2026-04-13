@@ -1,4 +1,4 @@
-# Robot Dog ROS2 Workspace
+# RobotDogQwen ROS2 Workspace
 
 ROS2 workspace для квадрупедного робота-собаки с Python и Rust нодами.
 

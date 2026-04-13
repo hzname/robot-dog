@@ -1,4 +1,4 @@
-/* Robot Dog - i18n (EN/RU) */
+/* RobotDogQwen - i18n (EN/RU) */
 const I18N = {
   ru: {
     // Nav

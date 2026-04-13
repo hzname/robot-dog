@@ -310,11 +310,14 @@ bool ServoController::applySafetyLimits(uint8_t servo_id, double& position)
 {
   const auto& limits = joint_limits_[servo_id];
 
+  double original = position;
+
   // Position clamps
   position = std::max(limits.min_position_rad,
                       std::min(limits.max_position_rad, position));
 
-  return true;
+  // Return false if clamping occurred so caller can warn
+  return (std::abs(position - original) < 1e-9);
 }
 
 bool ServoController::applyRateLimiting(uint8_t servo_id, double& position)

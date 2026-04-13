@@ -1,4 +1,4 @@
-# Robot Dog Configuration
+# RobotDogQwen Configuration
 gait_controller:
   ros__parameters:
     # Walking parameters

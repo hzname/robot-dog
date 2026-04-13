@@ -1,5 +1,5 @@
 # Product Requirements Document (PRD)
-## Robot Dog - Квадрупедальный робот-собака
+## RobotDogQwen - Квадрупедальный робот-собака
 
 **Версия:** 1.0  
 **Дата:** 2026-03-12  

@@ -158,13 +158,9 @@ bool SimulationDriver::setServoEnabled(uint8_t servo_id, bool enable)
   return true;
 }
 
-bool SimulationDriver::setPosition(uint8_t servo_id, double position_rad)
+bool SimulationDriver::setPositionInternal(uint8_t servo_id, double position_rad)
 {
-  if (servo_id >= servo_count_)
-  {
-    last_error_ = "Invalid servo ID: " + std::to_string(servo_id);
-    return false;
-  }
+  // Caller must hold servos_mutex_
 
   if (emergency_stopped_)
   {
@@ -177,8 +173,6 @@ bool SimulationDriver::setPosition(uint8_t servo_id, double position_rad)
     last_error_ = "Servo " + std::to_string(servo_id) + " not enabled";
     return false;
   }
-
-  std::lock_guard<std::mutex> lock(servos_mutex_);
 
   // Apply position limits
   const auto& config = servos_[servo_id].config;
@@ -196,6 +190,18 @@ bool SimulationDriver::setPosition(uint8_t servo_id, double position_rad)
   return true;
 }
 
+bool SimulationDriver::setPosition(uint8_t servo_id, double position_rad)
+{
+  if (servo_id >= servo_count_)
+  {
+    last_error_ = "Invalid servo ID: " + std::to_string(servo_id);
+    return false;
+  }
+
+  std::lock_guard<std::mutex> lock(servos_mutex_);
+  return setPositionInternal(servo_id, position_rad);
+}
+
 bool SimulationDriver::setPositionWithVelocity(uint8_t servo_id, double position_rad, double velocity_rad_s)
 {
   if (servo_id >= servo_count_)
@@ -210,7 +216,7 @@ bool SimulationDriver::setPositionWithVelocity(uint8_t servo_id, double position
   double original_velocity = servos_[servo_id].config.max_velocity_rad_s;
   servos_[servo_id].config.max_velocity_rad_s = velocity_rad_s;
 
-  bool result = setPosition(servo_id, position_rad);
+  bool result = setPositionInternal(servo_id, position_rad);
 
   // Restore original
   servos_[servo_id].config.max_velocity_rad_s = original_velocity;

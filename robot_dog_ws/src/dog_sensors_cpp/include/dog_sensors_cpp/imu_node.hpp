@@ -145,8 +145,7 @@ protected:
 
   // State
   bool is_calibrated_{false};
-  rclcpp::Time last_publish_time_;
-  
+
   // Pose estimation (simple integration)
   geometry_msgs::msg::Pose current_pose_;
   std::vector<double> linear_velocity_{0.0, 0.0, 0.0};

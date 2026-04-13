@@ -71,6 +71,9 @@ private:
   void physicsLoop();
   double applyPhysics(uint8_t servo_id, double dt);
 
+  // Internal version without lock — caller must hold servos_mutex_
+  bool setPositionInternal(uint8_t servo_id, double position_rad);
+
   bool initialized_ = false;
   bool emergency_stopped_ = false;
   std::string last_error_;

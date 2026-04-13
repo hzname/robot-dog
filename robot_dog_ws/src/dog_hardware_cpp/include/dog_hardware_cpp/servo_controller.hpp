@@ -1,6 +1,6 @@
 /**
  * @file servo_controller.hpp
- * @brief High-level servo controller for robot dog
+ * @brief High-level servo controller for RobotDogQwen
  * 
  * Manages 12 servos (3 per leg × 4 legs) with:
  * - Safety limits (position, velocity, torque)

@@ -7,6 +7,7 @@
 
 #include <rclcpp/qos.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <lifecycle_msgs/msg/transition.hpp>
 #include <cmath>
 #include <algorithm>
 
@@ -448,13 +449,17 @@ void ServoDriverNode::publishJointStates()
 int main(int argc, char *argv[])
 {
   rclcpp::init(argc, argv);
-  
+
   rclcpp::executors::SingleThreadedExecutor executor;
   auto node = std::make_shared<dog_hardware_cpp::ServoDriverNode>();
-  
+
+  // Automatically transition to ACTIVE state
+  node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE);
+  node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE);
+
   executor.add_node(node->get_node_base_interface());
   executor.spin();
-  
+
   rclcpp::shutdown();
   return 0;
 }

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-ROS2 Command Bridge - runs INSIDE the robot_dog container
+ROS2 Command Bridge - runs INSIDE the RobotDogQwen container
 Listens on Unix socket for JSON commands and publishes to ROS2 topics
 """
 import json
+import math
 import os
 import socket
 import sys
@@ -52,6 +53,11 @@ class Bridge:
             msg.linear.x = float(cmd.get('linear_x', 0.0))
             msg.linear.y = float(cmd.get('linear_y', 0.0))
             msg.angular.z = float(cmd.get('angular_z', 0.0))
+            # Reject NaN values
+            if not (math.isfinite(msg.linear.x) and
+                    math.isfinite(msg.linear.y) and
+                    math.isfinite(msg.angular.z)):
+                return {'error': 'cmd_vel values must be finite numbers'}
             self.cmd_vel_pub.publish(msg)
             return {'ok': True}
         elif t == 'stop':
@@ -73,8 +79,11 @@ class Bridge:
             self.gait_enable_pub.publish(msg)
             return {'ok': True}
         elif t == 'joint_command':
+            positions = cmd.get('positions', [])
+            if len(positions) != 12:
+                return {'error': f'joint_command requires exactly 12 positions, got {len(positions)}'}
             msg = Float64MultiArray()
-            msg.data = [float(v) for v in cmd.get('positions', [])]
+            msg.data = [float(v) for v in positions]
             self.pos_pub.publish(msg)
             return {'ok': True}
         elif t == 'get_state':
@@ -86,48 +95,77 @@ class Bridge:
         return {'error': 'unknown command: ' + str(t)}
 
 
+def _handle_connection(bridge, conn):
+    """Handle a single client connection in its own thread."""
+    try:
+        # Read full message with length-prefix framing
+        # First 4 bytes = message length (big-endian), rest = JSON payload
+        header = b''
+        while len(header) < 4:
+            chunk = conn.recv(4 - len(header))
+            if not chunk:
+                return
+            header += chunk
+        msg_len = int.from_bytes(header, 'big')
+        if msg_len > 65536:
+            conn.send(json.dumps({'error': 'message too large'}).encode())
+            return
+        data = b''
+        while len(data) < msg_len:
+            chunk = conn.recv(msg_len - len(data))
+            if not chunk:
+                break
+            data += chunk
+        if data:
+            cmd = json.loads(data.decode())
+            result = bridge.handle(cmd)
+            response = json.dumps(result).encode()
+            conn.send(len(response).to_bytes(4, 'big') + response)
+    except json.JSONDecodeError:
+        try:
+            conn.send(json.dumps({'error': 'invalid JSON'}).encode())
+        except Exception:
+            pass
+    except Exception as e:
+        try:
+            conn.send(json.dumps({'error': str(e)}).encode())
+        except Exception:
+            pass
+    finally:
+        conn.close()
+
+
 def main():
     bridge = Bridge()
-    
+
     # Spin ROS2 in background thread
     executor = executors.SingleThreadedExecutor()
     executor.add_node(bridge.node)
     spin_thread = threading.Thread(target=executor.spin, daemon=True)
     spin_thread.start()
-    
+
     # Setup Unix socket
     os.makedirs(os.path.dirname(SOCKET_PATH), exist_ok=True)
     if os.path.exists(SOCKET_PATH):
         os.unlink(SOCKET_PATH)
-    
+
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server.bind(SOCKET_PATH)
     server.listen(5)
     server.settimeout(1.0)
     os.chmod(SOCKET_PATH, 0o666)
-    
+
     print(f'Bridge listening on {SOCKET_PATH}', flush=True)
-    
+
     while rclpy.ok():
         try:
             conn, _ = server.accept()
-            data = conn.recv(4096)
-            if data:
-                cmd = json.loads(data.decode())
-                result = bridge.handle(cmd)
-                conn.send(json.dumps(result).encode())
-            conn.close()
+            t = threading.Thread(target=_handle_connection, args=(bridge, conn), daemon=True)
+            t.start()
         except socket.timeout:
             continue
         except Exception as e:
-            try:
-                conn.send(json.dumps({'error': str(e)}).encode())
-            except:
-                pass
-            try:
-                conn.close()
-            except:
-                pass
+            print(f'Bridge accept error: {e}', flush=True)
 
 
 if __name__ == '__main__':

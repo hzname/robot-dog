@@ -1,4 +1,4 @@
-# Servo Driver Configuration for Robot Dog
+# Servo Driver Configuration for RobotDogQwen
 # 12 servos: 3 per leg × 4 legs
 # Joint names MUST match URDF joints in dog_description/urdf/
 

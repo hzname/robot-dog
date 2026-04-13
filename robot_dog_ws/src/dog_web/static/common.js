@@ -1,4 +1,4 @@
-/* Robot Dog - Common JS */
+/* RobotDogQwen - Common JS */
 
 const JOINT_NAMES = [
   "lf_hip_joint","lf_thigh_joint","lf_calf_joint",

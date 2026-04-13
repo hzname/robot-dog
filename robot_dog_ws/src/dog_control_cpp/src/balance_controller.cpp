@@ -1,6 +1,7 @@
 #include "dog_control_cpp/balance_controller.hpp"
 
 #include <rclcpp/qos.hpp>
+#include <lifecycle_msgs/msg/transition.hpp>
 #include <cmath>
 #include <limits>
 
@@ -324,6 +325,10 @@ int main(int argc, char *argv[])
 {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<dog_control_cpp::BalanceController>();
+
+  // Automatically transition to ACTIVE state
+  node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE);
+  node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE);
 
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node->get_node_base_interface());

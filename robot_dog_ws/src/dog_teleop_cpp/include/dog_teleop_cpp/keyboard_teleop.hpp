@@ -73,7 +73,7 @@ private:
 
   // Terminal settings
   struct termios original_termios_;
-  bool terminal_configured_;
+  std::atomic<bool> terminal_configured_{false};
 
   // Publishers (lifecycle)
   rclcpp_lifecycle::LifecyclePublisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;

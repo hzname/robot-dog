@@ -196,7 +196,6 @@ ImuNode::on_activate(const rclcpp_lifecycle::State & /*state*/)
 
   // Start timer
   timer_->reset();
-  last_publish_time_ = now();
 
   // Publish initial status
   std_msgs::msg::Bool status_msg;
@@ -303,8 +302,6 @@ void ImuNode::timer_callback()
     update_pose_estimate(imu_msg);
     pose_pub_->publish(current_pose_);
   }
-
-  last_publish_time_ = now();
 }
 
 sensor_msgs::msg::Imu ImuNode::read_imu_data()

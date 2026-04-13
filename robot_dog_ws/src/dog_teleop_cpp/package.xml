@@ -3,8 +3,8 @@
 <package format="3">
   <name>dog_teleop_cpp</name>
   <version>0.2.0</version>
-  <description>C++ teleoperation nodes for robot dog</description>
-  <maintainer email="dev@robot.dog">Developer</maintainer>
+  <description>C++ teleoperation nodes for RobotDogQwen</description>
+  <maintainer email="dev@robot.dog">RobotDogQwen Developer</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

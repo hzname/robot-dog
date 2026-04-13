@@ -1,17 +1,11 @@
 #include "dog_teleop_cpp/udp_teleop.hpp"
 #include <rclcpp/executors.hpp>
-
 #include <rclcpp/qos.hpp>
-#include <rclcpp/executors.hpp>
+#include <lifecycle_msgs/msg/transition.hpp>
 #include <rcutils/allocator.h>
-#include <rclcpp/executors.hpp>
-
 #include <cmath>
-#include <rclcpp/executors.hpp>
 #include <algorithm>
-#include <rclcpp/executors.hpp>
 #include <sstream>
-#include <rclcpp/executors.hpp>
 
 namespace dog_teleop_cpp
 {
@@ -370,12 +364,17 @@ void UdpTeleop::watchdogLoop()
 int main(int argc, char * argv[])
 {
   rclcpp::init(argc, argv);
-  
+
   rclcpp::ExecutorOptions options;
   rclcpp::executors::SingleThreadedExecutor exec(options);
   auto node = std::make_shared<dog_teleop_cpp::UdpTeleop>();
+
+  // Automatically transition to ACTIVE state
+  node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE);
+  node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE);
+
   exec.add_node(node->get_node_base_interface());
-  
+
   exec.spin();
   rclcpp::shutdown();
   return 0;

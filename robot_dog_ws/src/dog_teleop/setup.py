@@ -19,7 +19,7 @@ setup(
     zip_safe=True,
     maintainer='user',
     maintainer_email='user@example.com',
-    description='Teleoperation package for robot dog (keyboard, joystick, UDP)',
+    description='Teleoperation package for RobotDogQwen (keyboard, joystick, UDP)',
     license='MIT',
     tests_require=['pytest'],
     entry_points={

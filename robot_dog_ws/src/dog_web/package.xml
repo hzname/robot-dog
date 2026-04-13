@@ -3,7 +3,7 @@
 <package format="3">
   <name>dog_web</name>
   <version>0.1.0</version>
-  <description>Web interface for robot dog control and calibration</description>
+  <description>Web interface for RobotDogQwen control and calibration</description>
   <maintainer email="sg@todo.todo">sg</maintainer>
   <license>MIT</license>
 
