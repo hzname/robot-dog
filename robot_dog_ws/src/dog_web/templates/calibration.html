@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Robot Dog</title>
+  <title>RobotDogQwen — Калибровка</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -31,175 +31,376 @@
       </div>
     </div>
 
-    <!-- Calibration controls -->
-    <div class="card">
-      <h2>Калибровка суставов</h2>
-      <div id="calib-sliders"></div>
+    <!-- Tab navigation -->
+    <div class="card" style="padding:0">
+      <div class="cal-tabs">
+        <button class="cal-tab active" data-tab="zero" onclick="switchTab('zero')">🔧 Нуль (сборка)</button>
+        <button class="cal-tab" data-tab="limits" onclick="switchTab('limits')">⚠️ Границы</button>
+      </div>
     </div>
 
-    <!-- Profiles -->
-    <div class="card">
-      <h2 data-i18n="cal.profiles">Профили калибровки</h2>
-      <div class="btn-group" style="margin-bottom:15px">
-        <button class="btn btn-sm" onclick="saveProfile()" data-i18n="cal.save">💾 Сохранить текущий</button>
-        <button class="btn btn-sm btn-blue" onclick="applyCalibration()" data-i18n="cal.apply">⚡ Применить к роботу</button>
-        <button class="btn btn-sm btn-dark" onclick="loadProfile('default')" data-i18n="cal.load_default">📂 Загрузить по умолчанию</button>
-        <button class="btn btn-sm btn-red" onclick="resetCalibration()" data-i18n="cal.reset">🔄 Сбросить всё</button>
+    <!-- TAB 1: Zero calibration -->
+    <div id="tab-zero" class="cal-tab-content active">
+      <div class="card">
+        <h2>🔧 Калибровка нуля</h2>
+        <p style="color:var(--text-dim);font-size:.9em;margin-bottom:15px">
+          Установите offset для каждого сустава, чтобы команда 0° соответствовала реальному
+          нейтральному положению. Шаг: <strong>0.5°</strong> за нажатие.
+        </p>
+        <div id="zero-controls"></div>
+        <div class="btn-group" style="margin-top:15px">
+          <button class="btn btn-dark" onclick="resetAllZero()">🔄 Сбросить всё</button>
+          <button class="btn" onclick="saveAllZero()">💾 Сохранить калибровку нуля</button>
+        </div>
       </div>
-      <div style="display:flex;gap:10px;align-items:center;margin-bottom:15px">
-        <input type="text" id="profile-name" data-i18n-placeholder="cal.profile_name"
-               style="flex:1;background:var(--bg-input);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:.9em" placeholder="Имя профиля...">
-        <button class="btn btn-sm" onclick="saveProfileWithName()" data-i18n="cal.save_as">Сохранить как</button>
-      </div>
-      <div id="profiles-list" style="display:flex;gap:8px;flex-wrap:wrap"></div>
     </div>
 
-    <!-- Per-leg calibration -->
-    <div class="grid-2" id="calib-container"></div>
+    <!-- TAB 2: Joint limits -->
+    <div id="tab-limits" class="cal-tab-content">
+      <div class="card">
+        <h2>⚠️ Калибровка границ суставов</h2>
+        <p style="color:var(--text-dim);font-size:.9em;margin-bottom:15px">
+          Найдите физические пределы каждого сустава. Двигайте шаг за шагом (0.5°),
+          пока рычаг не упрётся. Нажмите кнопку фиксации — система автоматически
+          отступит <strong>1°</strong> для безопасного запаса.
+        </p>
+
+        <!-- Joint selector -->
+        <div style="margin-bottom:15px">
+          <label style="color:var(--text-dim);font-size:.85em">Сустав:</label>
+          <select id="limit-joint-select" onchange="selectLimitJoint()" style="margin-left:8px;padding:6px 12px;background:var(--bg-input);color:var(--text);border:1px solid var(--border);border-radius:6px">
+          </select>
+        </div>
+
+        <!-- Limits display -->
+        <div id="limits-display" style="display:none">
+          <div class="limits-card">
+            <div class="limits-header">
+              <span class="limits-joint-name" id="limits-name"></span>
+              <span class="limits-range" id="limits-range"></span>
+            </div>
+
+            <!-- MIN section -->
+            <div class="limit-section">
+              <div class="limit-label">🔴 MIN (отрицательная сторона)</div>
+              <div class="limit-value" id="limits-min-val"></div>
+              <div class="step-controls">
+                <button class="btn btn-sm btn-blue" onclick="stepJoint(-0.5)">◀◀ 0.5°</button>
+                <button class="btn btn-sm btn-dark" onclick="goToZero()">⏮ К нулю</button>
+                <span class="step-info">Позиция: <strong id="limits-current">0.0</strong>°</span>
+              </div>
+              <button class="btn btn-sm btn-red" onclick="setLimit('min')" style="margin-top:8px;width:100%">
+                ⚡ Установить MIN здесь (с запасом 1°)
+              </button>
+            </div>
+
+            <!-- MAX section -->
+            <div class="limit-section">
+              <div class="limit-label">🟢 MAX (положительная сторона)</div>
+              <div class="limit-value" id="limits-max-val"></div>
+              <div class="step-controls">
+                <button class="btn btn-sm btn-dark" onclick="goToZero()">⏮ К нулю</button>
+                <button class="btn btn-sm btn-blue" onclick="stepJoint(0.5)">▶▶ 0.5°</button>
+                <span class="step-info">Шагов: <strong id="limits-steps">0</strong></span>
+              </div>
+              <button class="btn btn-sm btn-green" onclick="setLimit('max')" style="margin-top:8px;width:100%">
+                ⚡ Установить MAX здесь (с запасом 1°)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- All limits summary -->
+        <div style="margin-top:20px">
+          <h3 style="margin-bottom:10px">📊 Все границы</h3>
+          <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:.85em">
+              <thead>
+                <tr style="color:var(--green);border-bottom:2px solid var(--border)">
+                  <th style="text-align:left;padding:8px">Сустав</th>
+                  <th style="text-align:right;padding:8px">MIN (°)</th>
+                  <th style="text-align:right;padding:8px">MAX (°)</th>
+                  <th style="text-align:right;padding:8px">Диапазон</th>
+                </tr>
+              </thead>
+              <tbody id="limits-tbody"></tbody>
+            </table>
+          </div>
+          <div class="btn-group" style="margin-top:15px">
+            <button class="btn btn-dark" onclick="resetAllLimits()">🔄 Сбросить к умолч.</button>
+            <button class="btn" onclick="saveAllLimits()">💾 Сохранить границы</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </main>
 
   <script src="/static/common.js"></script>
   <script src="/static/i18n.js"></script>
   <script>
-    const calibState = {};
-    JOINT_NAMES.forEach(j => calibState[j] = 0.0);
-
-    // PWM channel mapping (PCA9685 channels)
-    const PWM_CHANNELS = {
-      'lf_hip_joint': 0,  'lf_thigh_joint': 1,  'lf_calf_joint': 2,
-      'rf_hip_joint': 3,  'rf_thigh_joint': 4,  'rf_calf_joint': 5,
-      'lr_hip_joint': 6,  'lr_thigh_joint': 7,  'lr_calf_joint': 8,
-      'rr_hip_joint': 9,  'rr_thigh_joint': 10, 'rr_calf_joint': 11,
-    };
-
-    // Build calibration UI per leg
-    const LEGS = {
-      'LF': {titleKey: 'cal.lf', color: '#e94560'},
-      'RF': {titleKey: 'cal.rf', color: '#3498db'},
-      'LR': {titleKey: 'cal.lr', color: '#f39c12'},
-      'RR': {titleKey: 'cal.rr', color: '#9b59b6'},
-    };
-
-    const AXIS_LABELS = {hip: 'cal.hip', thigh: 'cal.thigh', calf: 'cal.calf'};
-    const JOINT_LIMITS = {hip:[-1.5,1.5], thigh:[-1.5,1.5], calf:[-3.0,0.5]};
-
-    const container = document.getElementById('calib-container');
-    Object.entries(LEGS).forEach(([leg, info]) => {
-      let html = `<div class="calib-leg" style="border-left:3px solid ${info.color}">`;
-      html += `<div class="leg-title" data-i18n="${info.titleKey}">${t(info.titleKey)}</div>`;
-      html += `<div style="font-size:.75em;color:var(--text-dim);margin-bottom:8px">${leg}</div>`;
-      ['hip','thigh','calf'].forEach(axis => {
-        const joint = `${leg.toLowerCase()}_${axis}_joint`;
-        const [min, max] = JOINT_LIMITS[axis];
-        const def = axis === 'calf' ? -1.2 : 0.0;
-        const pwm = PWM_CHANNELS[joint];
-        calibState[joint] = def;
-        html += `
-          <div class="calib-row">
-            <label data-i18n="${AXIS_LABELS[axis]}">${t(AXIS_LABELS[axis])}</label>
-            <span style="font-size:.7em;color:var(--accent);font-family:monospace;min-width:40px">PWM:${pwm}</span>
-            <input type="range" id="cal-${joint}" min="${min}" max="${max}" step="0.01" value="${def}"
-                   oninput="onSlider('${joint}',this.value)">
-            <span class="val" id="cv-${joint}">${def.toFixed(2)} rad</span>
-          </div>`;
-      });
-      html += '</div>';
-      container.innerHTML += html;
-    });
-
-    let lastSendTime = 0;
-    function onSlider(joint, val) {
-      val = parseFloat(val);
-      calibState[joint] = val;
-      document.getElementById('cv-' + joint).textContent = val.toFixed(2) + ' rad';
-      const now = Date.now();
-      if (now - lastSendTime > 50) {
-        lastSendTime = now;
-        const positions = JOINT_NAMES.map(j => calibState[j] || 0.0);
-        api('/api/calibration/live', {positions: positions});
-      }
+    // ─── Tab switching ───
+    function switchTab(tab) {
+      document.querySelectorAll('.cal-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.cal-tab-content').forEach(c => c.classList.remove('active'));
+      document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+      document.getElementById('tab-' + tab).classList.add('active');
+      if (tab === 'limits') initLimitsTab();
     }
 
-    // Send final value when slider released
-    document.querySelectorAll('input[type=range][id^=cal-]').forEach(s => {
-      s.addEventListener('change', () => {
-        const positions = JOINT_NAMES.map(j => calibState[j] || 0.0);
-        api('/api/calibration/live', {positions: positions});
-      });
-    });
+    // ─── ZERO calibration ───
+    const ZERO_STEP = 0.5; // degrees per click
+    let zeroOffsets = {};
+    JOINT_NAMES.forEach(n => zeroOffsets[n] = 0.0);
 
-    // Apply calibration to robot
-    async function applyCalibration() {
-      for (const [joint, offset] of Object.entries(calibState)) {
-        await api('/api/calibration/set', {joint, offset});
-      }
-      await api('/api/calibration/apply');
-      log(t('cal.applied'));
-    }
-
-    // Save profile
-    async function saveProfile() {
-      const name = document.getElementById('profile-name').value || 'default';
-      await saveProfileWithName(name);
-    }
-
-    async function saveProfileWithName(name) {
-      if (!name) name = document.getElementById('profile-name').value;
-      if (!name) { alert(getLang() === 'ru' ? 'Введите имя профиля' : 'Enter profile name'); return; }
-      await api('/api/calibration/save', {profile_name: name, calibration: calibState});
-      log(t('cal.saved') + name);
-      loadProfiles();
-    }
-
-    // Load profile
-    async function loadProfile(name) {
-      const res = await api('/api/calibration/load', {profile_name: name});
-      if (res && res.calibration) {
-        Object.entries(res.calibration).forEach(([joint, val]) => {
-          calibState[joint] = val;
-          const slider = document.getElementById('cal-' + joint);
-          if (slider) slider.value = val;
-          const label = document.getElementById('cv-' + joint);
-          if (label) label.textContent = val.toFixed(2) + ' rad';
+    // Load current calibration
+    async function loadZeroCalibration() {
+      const data = await api('/api/calibration');
+      if (data && data.calibration) {
+        Object.keys(data.calibration).forEach(name => {
+          if (zeroOffsets[name] !== undefined) zeroOffsets[name] = data.calibration[name];
         });
-        log(t('cal.loaded_profile') + name);
       }
+      renderZeroControls();
     }
 
-    // Reset
-    async function resetCalibration() {
-      if (!confirm(t('cal.reset_confirm'))) return;
-      JOINT_NAMES.forEach(j => {
-        calibState[j] = 0.0;
-        const slider = document.getElementById('cal-' + j);
-        if (slider) slider.value = 0;
-        const label = document.getElementById('cv-' + j);
-        if (label) label.textContent = '0.00 rad';
+    function renderZeroControls() {
+      const container = document.getElementById('zero-controls');
+      container.innerHTML = '';
+
+      const legs = {
+        'Передняя левая (LF)': ['lf_hip_joint','lf_thigh_joint','lf_calf_joint'],
+        'Передняя правая (RF)': ['rf_hip_joint','rf_thigh_joint','rf_calf_joint'],
+        'Задняя левая (LR)': ['lr_hip_joint','lr_thigh_joint','lr_calf_joint'],
+        'Задняя правая (RR)': ['rr_hip_joint','rr_thigh_joint','rr_calf_joint'],
+      };
+
+      Object.entries(legs).forEach(([leg, joints]) => {
+        container.innerHTML += `<div style="margin-bottom:15px;padding:10px;background:var(--bg-dark);border-radius:8px">
+          <div style="color:var(--green);font-size:.85em;margin-bottom:8px">${leg}</div>
+          ${joints.map(name => {
+            const deg = ((zeroOffsets[name] || 0) * 180 / Math.PI).toFixed(1);
+            const short = name.replace(/^(lf|rf|lr|rr)_/, '').replace('_joint','');
+            const labels = {hip:'Hip',thigh:'Thigh',calf:'Calf'};
+            return `<div style="display:flex;align-items:center;gap:8px;margin:6px 0">
+              <span style="color:var(--text-dim);font-size:.85em;width:90px">${labels[short]||short}</span>
+              <button class="btn btn-sm" onclick="adjustZero('${name}',-${ZERO_STEP})">◀◀ ${ZERO_STEP}°</button>
+              <span id="zero-val-${name}" style="font-family:monospace;color:var(--green);width:60px;text-align:center">${deg}°</span>
+              <button class="btn btn-sm" onclick="adjustZero('${name}',${ZERO_STEP})">${ZERO_STEP}° ▶▶</button>
+            </div>`;
+          }).join('')}
+        </div>`;
       });
-      await api('/api/calibration/reset');
-      log(t('cal.reset_done'));
     }
 
-    // List profiles
-    async function loadProfiles() {
-      const res = await api('/api/calibration/profiles');
-      const el = document.getElementById('profiles-list');
-      if (!res || !res.profiles) return;
-      el.innerHTML = res.profiles.map(p =>
-        `<button class="btn btn-sm btn-dark" onclick="loadProfile('${p.name}')">📂 ${p.name}</button>`
+    async function adjustZero(name, deltaDeg) {
+      zeroOffsets[name] = (zeroOffsets[name] || 0) + (deltaDeg * Math.PI / 180);
+      const deg = (zeroOffsets[name] * 180 / Math.PI).toFixed(1);
+      const el = document.getElementById('zero-val-' + name);
+      if (el) el.textContent = deg + '°';
+
+      // Send live position update
+      const positions = JOINT_NAMES.map(n => zeroOffsets[n] || 0);
+      await api('/api/calibration/live', { positions });
+    }
+
+    async function resetAllZero() {
+      JOINT_NAMES.forEach(n => zeroOffsets[n] = 0);
+      renderZeroControls();
+    }
+
+    async function saveAllZero() {
+      for (const name of JOINT_NAMES) {
+        await api('/api/calibration/set', { joint: name, offset: zeroOffsets[name] || 0 });
+      }
+      const positions = JOINT_NAMES.map(n => zeroOffsets[n] || 0);
+      await api('/api/calibration/apply', { positions });
+      log(t('cal.saved'));
+    }
+
+    // ─── LIMITS calibration ───
+    let limits = {};
+    let selectedLimitJoint = JOINT_NAMES[0];
+    let currentPosDeg = 0;
+    let stepsFromZero = 0;
+
+    // Default limits (from servo_controller.cpp defaults)
+    const DEFAULT_LIMITS = {
+      hip:   { min: -0.80, max:  0.80 },
+      thigh: { min: -1.50, max:  1.50 },
+      calf:  { min: -2.50, max: -0.50 },
+    };
+
+    function getJointType(name) {
+      if (name.includes('hip')) return 'hip';
+      if (name.includes('thigh')) return 'thigh';
+      return 'calf';
+    }
+
+    function getShortName(name) {
+      const short = name.replace(/^(lf|rf|lr|rr)_/, '').replace('_joint','');
+      return {hip:'Hip',thigh:'Thigh',calf:'Calf'}[short] || short;
+    }
+
+    function initLimitsTab() {
+      // Populate joint selector
+      const sel = document.getElementById('limit-joint-select');
+      sel.innerHTML = JOINT_NAMES.map(n =>
+        `<option value="${n}">${n}</option>`
       ).join('');
+
+      // Load saved limits
+      loadLimits().then(() => {
+        selectLimitJoint();
+        renderLimitsTable();
+      });
     }
 
-    // Logging
-    const logEl = document.createElement('div');
-    logEl.style.cssText = 'position:fixed;bottom:10px;right:10px;background:var(--bg-card);border:1px solid var(--border);padding:10px;border-radius:8px;font-size:.8em;max-width:300px;max-height:150px;overflow-y:auto;z-index:200';
-    document.body.appendChild(logEl);
-    function log(msg) {
-      const t = new Date().toLocaleTimeString();
-      logEl.innerHTML = `<div style="color:var(--text-dim)">[${t}] ${msg}</div>` + logEl.innerHTML;
+    async function loadLimits() {
+      try {
+        const data = await api('/api/calibration/limits');
+        if (data && data.joints) {
+          limits = data.joints;
+        }
+      } catch(e) {}
+
+      // Fill in defaults for joints without saved limits
+      JOINT_NAMES.forEach(name => {
+        if (!limits[name]) {
+          const type = getJointType(name);
+          limits[name] = {
+            min_rad: DEFAULT_LIMITS[type].min,
+            max_rad: DEFAULT_LIMITS[type].max,
+            min_deg: (DEFAULT_LIMITS[type].min * 180 / Math.PI).toFixed(1),
+            max_deg: (DEFAULT_LIMITS[type].max * 180 / Math.PI).toFixed(1),
+          };
+        }
+      });
     }
 
-    // WebSocket - sync status only
+    function selectLimitJoint() {
+      selectedLimitJoint = document.getElementById('limit-joint-select').value;
+      const lim = limits[selectedLimitJoint];
+      const type = getJointType(selectedLimitJoint);
+
+      document.getElementById('limits-name').textContent = selectedLimitJoint;
+      document.getElementById('limits-min-val').textContent = lim.min_deg + '° (' + lim.min_rad.toFixed(3) + ' рад)';
+      document.getElementById('limits-max-val').textContent = lim.max_deg + '° (' + lim.max_rad.toFixed(3) + ' рад)';
+
+      const rangeDeg = ((lim.max_rad - lim.min_rad) * 180 / Math.PI).toFixed(1);
+      document.getElementById('limits-range').textContent = 'Диапазон: ' + rangeDeg + '°';
+
+      currentPosDeg = 0;
+      stepsFromZero = 0;
+      updateLimitDisplay();
+      document.getElementById('limits-display').style.display = 'block';
+    }
+
+    function updateLimitDisplay() {
+      document.getElementById('limits-current').textContent = currentPosDeg.toFixed(1);
+      document.getElementById('limits-steps').textContent = stepsFromZero;
+    }
+
+    async function stepJoint(deltaDeg) {
+      const deltaRad = deltaDeg * Math.PI / 180;
+      const lim = limits[selectedLimitJoint];
+
+      // Get current position from robot
+      const stateData = await api('/api/state');
+      const idx = JOINT_NAMES.indexOf(selectedLimitJoint);
+      if (idx >= 0 && stateData && stateData.joint_positions) {
+        currentPosDeg = (stateData.joint_positions[idx] || 0) * 180 / Math.PI;
+      }
+
+      const newPosDeg = currentPosDeg + deltaDeg;
+      const newPosRad = newPosDeg * Math.PI / 180;
+
+      // Send single joint position
+      const positions = JOINT_NAMES.map((n, i) => {
+        if (n === selectedLimitJoint) return newPosRad;
+        return stateData && stateData.joint_positions ? stateData.joint_positions[i] : 0;
+      });
+      await api('/api/calibration/live', { positions });
+      currentPosDeg = newPosDeg;
+      stepsFromZero = Math.round(currentPosDeg / ZERO_STEP);
+      updateLimitDisplay();
+    }
+
+    async function goToZero() {
+      const stateData = await api('/api/state');
+      const idx = JOINT_NAMES.indexOf(selectedLimitJoint);
+      if (idx >= 0 && stateData && stateData.joint_positions) {
+        currentPosDeg = (stateData.joint_positions[idx] || 0) * 180 / Math.PI;
+      }
+      stepsFromZero = Math.round(currentPosDeg / ZERO_STEP);
+      updateLimitDisplay();
+
+      // Move to zero
+      const positions = JOINT_NAMES.map((n, i) => {
+        if (n === selectedLimitJoint) return 0;
+        return stateData && stateData.joint_positions ? stateData.joint_positions[i] : 0;
+      });
+      await api('/api/calibration/live', { positions });
+      currentPosDeg = 0;
+      stepsFromZero = 0;
+      updateLimitDisplay();
+    }
+
+    async function setLimit(type) {
+      const safetyMargin = 1.0; // degrees
+      const currentRad = currentPosDeg * Math.PI / 180;
+      const marginRad = safetyMargin * Math.PI / 180;
+
+      const lim = limits[selectedLimitJoint];
+      if (type === 'min') {
+        lim.min_rad = currentRad + marginRad; // step back for safety
+        lim.min_deg = (lim.min_rad * 180 / Math.PI).toFixed(1);
+      } else {
+        lim.max_rad = currentRad - marginRad;
+        lim.max_deg = (lim.max_rad * 180 / Math.PI).toFixed(1);
+      }
+
+      selectLimitJoint();
+      renderLimitsTable();
+      log(`${selectedLimitJoint} ${type.toUpperCase()} установлен: ${type === 'min' ? lim.min_deg : lim.max_deg}°`);
+    }
+
+    function renderLimitsTable() {
+      const tbody = document.getElementById('limits-tbody');
+      tbody.innerHTML = JOINT_NAMES.map(name => {
+        const lim = limits[name];
+        const range = ((lim.max_rad - lim.min_rad) * 180 / Math.PI).toFixed(1);
+        return `<tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:6px 8px;font-family:monospace">${name}</td>
+          <td style="padding:6px 8px;text-align:right;font-family:monospace;color:var(--red)">${lim.min_deg}</td>
+          <td style="padding:6px 8px;text-align:right;font-family:monospace;color:var(--green)">${lim.max_deg}</td>
+          <td style="padding:6px 8px;text-align:right;font-family:monospace">${range}°</td>
+        </tr>`;
+      }).join('');
+    }
+
+    async function saveAllLimits() {
+      await api('/api/calibration/limits/save', { joints: limits });
+      log(t('cal.limits_saved'));
+    }
+
+    function resetAllLimits() {
+      JOINT_NAMES.forEach(name => {
+        const type = getJointType(name);
+        limits[name] = {
+          min_rad: DEFAULT_LIMITS[type].min,
+          max_rad: DEFAULT_LIMITS[type].max,
+          min_deg: (DEFAULT_LIMITS[type].min * 180 / Math.PI).toFixed(1),
+          max_deg: (DEFAULT_LIMITS[type].max * 180 / Math.PI).toFixed(1),
+        };
+      });
+      selectLimitJoint();
+      renderLimitsTable();
+    }
+
+    // ─── Init ───
+    loadZeroCalibration();
+
+    // WebSocket for status bar
     const ws = new StateWS(state => {
       const wsDot = document.getElementById('ws-dot');
       if (wsDot) wsDot.className = 'dot on';
@@ -216,7 +417,6 @@
       if (ndot) ndot.className = 'status-dot ok';
     });
 
-    loadProfiles();
     log(t('cal.loaded'));
   </script>
 </body>

@@ -375,6 +375,62 @@ async def reset_calibration():
     return {"status": "ok"}
 
 
+# ─── Joint limits calibration ───
+
+LIMITS_FILE = Path.home() / "robot-dog" / "joint_limits.json"
+
+DEFAULT_LIMITS = {
+    "hip":   {"min_rad": -0.80, "max_rad":  0.80},
+    "thigh": {"min_rad": -1.50, "max_rad":  1.50},
+    "calf":  {"min_rad": -2.50, "max_rad": -0.50},
+}
+
+def _get_joint_type(name):
+    if "hip" in name: return "hip"
+    if "thigh" in name: return "thigh"
+    return "calf"
+
+def _load_limits():
+    if LIMITS_FILE.exists():
+        try:
+            with open(LIMITS_FILE) as f:
+                return json.load(f).get("joints", {})
+        except Exception:
+            pass
+    defaults = {}
+    for name in JOINT_NAMES:
+        t = _get_joint_type(name)
+        defaults[name] = {
+            "min_rad": DEFAULT_LIMITS[t]["min_rad"],
+            "max_rad": DEFAULT_LIMITS[t]["max_rad"],
+            "min_deg": round(DEFAULT_LIMITS[t]["min_rad"] * 180 / 3.14159, 1),
+            "max_deg": round(DEFAULT_LIMITS[t]["max_rad"] * 180 / 3.14159, 1),
+        }
+    return defaults
+
+def _save_limits(joints):
+    LIMITS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(LIMITS_FILE, 'w') as f:
+        json.dump({"version": 1, "joints": joints}, f, indent=2)
+
+
+@app.get("/api/calibration/limits")
+async def get_limits():
+    return {"joints": _load_limits()}
+
+@app.post("/api/calibration/limits/save")
+async def save_limits(data: dict):
+    joints = data.get("joints", {})
+    # Ensure min_deg/max_deg are present
+    for name, lim in joints.items():
+        if "min_deg" not in lim:
+            lim["min_deg"] = round(lim["min_rad"] * 180 / 3.14159, 1)
+        if "max_deg" not in lim:
+            lim["max_deg"] = round(lim["max_rad"] * 180 / 3.14159, 1)
+    _save_limits(joints)
+    return {"status": "ok", "path": str(LIMITS_FILE)}
+
+
 # WebSocket
 
 @app.websocket("/ws")

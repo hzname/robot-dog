@@ -20,6 +20,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <memory>
 #include <array>
+#include <map>
 #include <functional>
 #include <chrono>
 
@@ -167,12 +168,35 @@ public:
    */
   std::string getLastError() const { return last_error_; }
 
+  /**
+   * @brief Load zero offsets from JSON calibration file
+   * @param path Path to calibration.json
+   */
+  bool loadZeroOffsets(const std::string& path);
+
+  /**
+   * @brief Load calibrated joint limits from JSON file
+   * @param path Path to joint_limits.json
+   */
+  bool loadCalibratedLimits(const std::string& path);
+
+  /**
+   * @brief Apply zero offset and inversion to a position
+   * Called before sending to hardware for right-leg servo mirroring
+   */
+  double applyServoTransform(uint8_t servo_id, double position_rad);
+
 private:
   bool applySafetyLimits(uint8_t servo_id, double& position);
   bool applyRateLimiting(uint8_t servo_id, double& position);
   void interpolatePositions();
   void checkWatchdog();
   void sendToHardware();
+
+  /// Convert internal position to hardware position (zero offset + inversion)
+  double toHardware(uint8_t servo_id, double position_rad);
+  /// Convert hardware position to internal (for feedback)
+  double fromHardware(uint8_t servo_id, double position_rad);
 
   rclcpp::Logger logger_;
   ControllerConfig config_;
@@ -181,6 +205,20 @@ private:
   std::shared_ptr<ServoInterface> hardware_;
   std::array<JointLimits, 12> joint_limits_;
   std::array<ServoConfig, 12> servo_configs_;
+
+  // Zero calibration offsets (radians, per joint name)
+  std::map<std::string, double> zero_offsets_;
+
+  // Inversion flags: right legs (RF indices 3,4,5 and RR indices 9,10,11) are inverted
+  // because servo mounting is mirrored
+  std::array<bool, 12> inverted_ = {false, false, false,
+                                     true,  true,  true,
+                                     false, false, false,
+                                     true,  true,  true};
+
+  // Calibrated joint limits (overrides defaults if loaded from JSON)
+  std::map<std::string, double> calibrated_min_;
+  std::map<std::string, double> calibrated_max_;
 
   // State
   std::array<double, 12> target_positions_;

@@ -119,6 +119,10 @@ LifecycleCallbackReturn ServoDriverNode::on_configure(const rclcpp_lifecycle::St
 
   loadJointLimitsFromParams();
 
+  // Load calibration files (zero offsets and calibrated joint limits)
+  controller_->loadZeroOffsets("/home/sg/robot-dog/calibration.json");
+  controller_->loadCalibratedLimits("/home/sg/robot-dog/joint_limits.json");
+
   // QoS profiles
   rclcpp::QoS cmd_qos(5);
   cmd_qos.reliable();
