@@ -248,7 +248,7 @@ private:
 
   // Filter state
   Mpu6050Data data_;
-  std::mutex filter_mutex_;  // Protects Mahony filter state and data_
+  mutable std::mutex filter_mutex_;  // Protects Mahony filter state and data_
   double mahony_q0_{1.0}, mahony_q1_{0.0}, mahony_q2_{0.0}, mahony_q3_{0.0};  // Quaternion
   double mahony_integral_x_{0.0}, mahony_integral_y_{0.0}, mahony_integral_z_{0.0};  // Integral error
   static constexpr double MAHONY_KP_{2.0};   // Proportional gain

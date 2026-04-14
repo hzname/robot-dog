@@ -1,4 +1,5 @@
 #include "dog_control_cpp/balance_controller.hpp"
+#include "dog_control_cpp/lifecycle_helper.hpp"
 
 #include <rclcpp/qos.hpp>
 #include <lifecycle_msgs/msg/transition.hpp>
@@ -348,8 +349,7 @@ int main(int argc, char *argv[])
   auto node = std::make_shared<dog_control_cpp::BalanceController>();
 
   // Automatically transition to ACTIVE state
-  node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE);
-  node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE);
+  dog_monitor_cpp::lifecycle_activate(node);
 
   // MultiThreadedExecutor for concurrent timer + subscriber callbacks
   rclcpp::executors::MultiThreadedExecutor executor;

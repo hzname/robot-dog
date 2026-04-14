@@ -1,11 +1,30 @@
 #include "dog_teleop_cpp/keyboard_teleop.hpp"
 #include <rclcpp/executors.hpp>
 #include <rclcpp/qos.hpp>
+#include <lifecycle_msgs/srv/change_state.hpp>
 #include <lifecycle_msgs/msg/transition.hpp>
 #include <algorithm>
 
 namespace dog_teleop_cpp
 {
+
+static bool auto_activate(rclcpp_lifecycle::LifecycleNode::SharedPtr node)
+{
+  auto client = node->create_client<lifecycle_msgs::srv::ChangeState>(
+    node->get_name() + std::string("/change_state"));
+  if (!client->wait_for_service(std::chrono::seconds(5))) return false;
+  auto req = std::make_shared<lifecycle_msgs::srv::ChangeState::Request>();
+  req->transition.id = lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE;
+  auto r = client->async_send_request(req);
+  rclcpp::spin_until_future_complete(node->get_node_base_interface(), r);
+  req = std::make_shared<lifecycle_msgs::srv::ChangeState::Request>();
+  req->transition.id = lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE;
+  client = node->create_client<lifecycle_msgs::srv::ChangeState>(
+    node->get_name() + std::string("/change_state"));
+  r = client->async_send_request(req);
+  rclcpp::spin_until_future_complete(node->get_node_base_interface(), r);
+  return true;
+}
 
 KeyboardTeleop::KeyboardTeleop(const rclcpp::NodeOptions & options)
 : rclcpp_lifecycle::LifecycleNode("keyboard_teleop", options),
@@ -421,8 +440,7 @@ int main(int argc, char * argv[])
   auto node = std::make_shared<dog_teleop_cpp::KeyboardTeleop>();
 
   // Automatically transition to ACTIVE state
-  node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE);
-  node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE);
+  auto_activate(node);
 
   exec.add_node(node->get_node_base_interface());
 

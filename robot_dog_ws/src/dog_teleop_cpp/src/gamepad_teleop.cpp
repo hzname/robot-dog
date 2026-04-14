@@ -1,6 +1,8 @@
 #include "dog_teleop_cpp/gamepad_teleop.hpp"
+#include "dog_teleop_cpp/lifecycle_helper.hpp"
 #include <rclcpp/executors.hpp>
 #include <rclcpp/qos.hpp>
+#include <lifecycle_msgs/srv/change_state.hpp>
 #include <lifecycle_msgs/msg/transition.hpp>
 #include <cmath>
 #include <algorithm>
@@ -381,8 +383,7 @@ int main(int argc, char * argv[])
   auto node = std::make_shared<dog_teleop_cpp::GamepadTeleop>();
 
   // Automatically transition to ACTIVE state
-  node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE);
-  node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE);
+  dog_monitor_cpp::lifecycle_activate(node);
 
   exec.add_node(node->get_node_base_interface());
 

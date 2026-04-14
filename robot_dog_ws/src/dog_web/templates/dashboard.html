@@ -33,8 +33,37 @@
       <div class="joint-grid" id="joint-overview"></div>
     </div>
 
-    <!-- Quick actions -->
+    <!-- IMU + Quick actions -->
     <div class="grid-2">
+      <div class="card">
+        <h2>📐 IMU Orientation</h2>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="imu-card">
+            <div class="imu-label">Roll (X)</div>
+            <div class="imu-value" id="imu-roll">0.00°</div>
+          </div>
+          <div class="imu-card">
+            <div class="imu-label">Pitch (Y)</div>
+            <div class="imu-value" id="imu-pitch">0.00°</div>
+          </div>
+          <div class="imu-card">
+            <div class="imu-label">Yaw (Z)</div>
+            <div class="imu-value" id="imu-yaw">0.00°</div>
+          </div>
+          <div class="imu-card">
+            <div class="imu-label">Gyro Z</div>
+            <div class="imu-value" id="imu-gyro">0.00 rad/s</div>
+          </div>
+        </div>
+        <div style="margin-top:12px">
+          <div style="color:var(--text-dim);font-size:.8em;margin-bottom:4px">Ускорение</div>
+          <div style="display:flex;gap:8px;font-family:monospace;font-size:.85em">
+            <span style="color:var(--green)">X: <span id="imu-ax">0.00</span></span>
+            <span style="color:var(--blue)">Y: <span id="imu-ay">0.00</span></span>
+            <span style="color:var(--orange)">Z: <span id="imu-az">0.00</span></span>
+          </div>
+        </div>
+      </div>
       <div class="card">
         <h2 data-i18n="dash.quick">Быстрые действия</h2>
         <div class="btn-group">
@@ -42,16 +71,6 @@
           <button class="btn btn-dark" onclick="api('/api/control/servo_enable',{enable:false})" data-i18n="dash.servo_off">Выключить сервы</button>
           <button class="btn btn-red btn-lg" onclick="api('/api/control/emergency_stop',{stop:true})" data-i18n="dash.estop">АВАРИЙНАЯ ОСТАНОВКА</button>
           <button class="btn btn-orange" onclick="api('/api/control/emergency_stop',{stop:false})" data-i18n="dash.estop_release">🔓 Снять блокировку</button>
-        </div>
-      </div>
-      <div class="card">
-        <h2 data-i18n="dash.movement">Движение</h2>
-        <div class="dpad">
-          <button class="btn up" onmousedown="api('/api/control/cmd_vel',{linear_x:0.5})" onmouseup="api('/api/control/stop',{})">↑</button>
-          <button class="btn left" onmousedown="api('/api/control/cmd_vel',{linear_y:0.5})" onmouseup="api('/api/control/stop',{})">←</button>
-          <button class="btn btn-red stop" onclick="api('/api/control/stop',{})">■</button>
-          <button class="btn right" onmousedown="api('/api/control/cmd_vel',{linear_y:-0.5})" onmouseup="api('/api/control/stop',{})">→</button>
-          <button class="btn down" onmousedown="api('/api/control/cmd_vel',{linear_x:-0.5})" onmouseup="api('/api/control/stop',{})">↓</button>
         </div>
       </div>
     </div>
@@ -90,6 +109,41 @@
           bar.style.width = pct + '%';
         }
       });
+
+      // Update IMU data
+      if (state.imu_orientation) {
+        const o = state.imu_orientation;
+        // Convert quaternion to Euler angles (roll, pitch, yaw)
+        const roll = Math.atan2(2 * (o.w * o.x + o.y * o.z), 1 - 2 * (o.x * o.x + o.y * o.y));
+        const pitch = Math.asin(Math.max(-1, Math.min(1, 2 * (o.w * o.y - o.z * o.x))));
+        const yaw = Math.atan2(2 * (o.w * o.z + o.x * o.y), 1 - 2 * (o.y * o.y + o.z * o.z));
+
+        const rollDeg = (roll * 180 / Math.PI).toFixed(2);
+        const pitchDeg = (pitch * 180 / Math.PI).toFixed(2);
+        const yawDeg = (yaw * 180 / Math.PI).toFixed(2);
+
+        const rollEl = document.getElementById('imu-roll');
+        const pitchEl = document.getElementById('imu-pitch');
+        const yawEl = document.getElementById('imu-yaw');
+        if (rollEl) rollEl.textContent = rollDeg + '°';
+        if (pitchEl) pitchEl.textContent = pitchDeg + '°';
+        if (yawEl) yawEl.textContent = yawDeg + '°';
+      }
+
+      if (state.imu_angular_vel) {
+        const gyro = state.imu_angular_vel.z.toFixed(3);
+        const gyroEl = document.getElementById('imu-gyro');
+        if (gyroEl) gyroEl.textContent = gyro + ' rad/s';
+      }
+
+      if (state.imu_acceleration) {
+        const ax = document.getElementById('imu-ax');
+        const ay = document.getElementById('imu-ay');
+        const az = document.getElementById('imu-az');
+        if (ax) ax.textContent = state.imu_acceleration.x.toFixed(2);
+        if (ay) ay.textContent = state.imu_acceleration.y.toFixed(2);
+        if (az) az.textContent = state.imu_acceleration.z.toFixed(2);
+      }
 
       const edot = document.getElementById('estop-dot');
       if (edot) edot.className = 'dot ' + (state.emergency_stopped ? 'off' : 'on');

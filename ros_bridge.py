@@ -16,6 +16,7 @@ import rclpy
 from rclpy import executors
 from geometry_msgs.msg import Twist
 from std_msgs.msg import Bool, Float64MultiArray
+from sensor_msgs.msg import Imu
 
 SOCKET_PATH = '/tmp/robot_dog/ros_bridge.sock'
 # Topic prefix — set DOG_TOPIC_PREFIX=/dog for namespaced topics, or leave empty for flat topics
@@ -45,6 +46,22 @@ class Bridge:
         # Subscribe to emergency stop state
         self.emergency_stopped = False
         self.node.create_subscription(Bool, _t('/emergency_stop'), self._on_estop, 10)
+
+        # Subscribe to IMU data
+        from rclpy.qos import QoSProfile, ReliabilityPolicy
+        imu_qos = QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT)
+        self.latest_imu = None
+        self.node.create_subscription(Imu, _t('/imu/data'), self._on_imu, imu_qos)
+
+    def _on_imu(self, msg):
+        self.latest_imu = {
+            'orientation': {'x': msg.orientation.x, 'y': msg.orientation.y,
+                           'z': msg.orientation.z, 'w': msg.orientation.w},
+            'angular_velocity': {'x': msg.angular_velocity.x, 'y': msg.angular_velocity.y,
+                                'z': msg.angular_velocity.z},
+            'linear_acceleration': {'x': msg.linear_acceleration.x, 'y': msg.linear_acceleration.y,
+                                   'z': msg.linear_acceleration.z}
+        }
 
     def _on_joints(self, msg):
         self.joint_positions = list(msg.position) if len(msg.position) == 12 else self.joint_positions
@@ -98,6 +115,10 @@ class Bridge:
                 'joint_positions': self.joint_positions,
                 'emergency_stopped': self.emergency_stopped
             }
+        elif t == 'get_imu':
+            if self.latest_imu:
+                return {'ok': True, 'imu': self.latest_imu}
+            return {'ok': False, 'error': 'No IMU data yet'}
         return {'error': 'unknown command: ' + str(t)}
 
 

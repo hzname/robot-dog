@@ -16,6 +16,8 @@
 namespace dog_monitor_cpp
 {
 
+using LifecycleCallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
+
 struct MonitoredNode
 {
   std::string name;
@@ -67,8 +69,6 @@ private:
   int total_restart_attempts_{0};
   bool system_healthy_{true};
 };
-
-using LifecycleCallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
 }  // namespace dog_monitor_cpp
 

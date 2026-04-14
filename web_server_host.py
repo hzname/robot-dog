@@ -74,73 +74,52 @@ def _validate_positions(positions) -> str | None:
 BRIDGE_SOCKET = Path("/tmp/robot_dog/ros_bridge.sock")
 
 class BridgeClient:
-    """Persistent Unix socket connection with automatic reconnection."""
+    """Unix socket client with length-prefix framing."""
 
     def __init__(self, timeout=2):
         self._timeout = timeout
-        self._sock = None
-
-    def _ensure(self):
-        """Reconnect if the socket is dead or missing."""
-        if self._sock is None or self._sock.fileno() == -1:
-            if not BRIDGE_SOCKET.exists():
-                return False
-            try:
-                self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                self._sock.settimeout(self._timeout)
-                self._sock.connect(str(BRIDGE_SOCKET))
-                return True
-            except OSError:
-                self._sock = None
-                return False
-        return True
 
     def send(self, cmd: dict) -> tuple[dict, int]:
         """Send a command and receive the response. Returns (result_dict, error_code)."""
-        if not self._ensure():
+        if not BRIDGE_SOCKET.exists():
             return {"error": "bridge not available"}, 1
         try:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.settimeout(self._timeout)
+            sock.connect(str(BRIDGE_SOCKET))
             payload = json.dumps(cmd).encode()
-            self._sock.send(len(payload).to_bytes(4, 'big') + payload)
+            sock.send(len(payload).to_bytes(4, 'big') + payload)
             # Read length-prefixed response
             header = b''
             while len(header) < 4:
-                chunk = self._sock.recv(4 - len(header))
+                chunk = sock.recv(4 - len(header))
                 if not chunk:
-                    self._sock = None  # Connection lost
+                    sock.close()
                     return {"error": "incomplete response"}, 1
                 header += chunk
             msg_len = int.from_bytes(header, 'big')
             if msg_len > 65536:
-                self._sock = None
+                sock.close()
                 return {"error": "response too large"}, 1
             data = b''
             while len(data) < msg_len:
-                chunk = self._sock.recv(msg_len - len(data))
+                chunk = sock.recv(msg_len - len(data))
                 if not chunk:
-                    self._sock = None
+                    sock.close()
                     return {"error": "incomplete response"}, 1
                 data += chunk
+            sock.close()
             return json.loads(data.decode()), 0
         except (OSError, json.JSONDecodeError) as e:
-            self._sock = None
             return {"error": str(e)}, 1
 
-    def close(self):
-        if self._sock:
-            try:
-                self._sock.close()
-            except OSError:
-                pass
-            self._sock = None
 
-
-# Global persistent bridge client
+# Global bridge client
 _bridge_client = BridgeClient()
 
 
 def bridge_send(cmd: dict, timeout=2):
-    """Send command to ROS2 bridge via persistent Unix socket connection."""
+    """Send command to ROS2 bridge via Unix socket."""
     _bridge_client._timeout = timeout
     return _bridge_client.send(cmd)
 
@@ -152,6 +131,9 @@ class RobotState:
         self.emergency_stopped = False
         self.calibration = self._load_calibration()
         self.connected = False
+        self.imu_orientation = {'x': 0.0, 'y': 0.0, 'z': 0.0, 'w': 1.0}
+        self.imu_angular_vel = {'x': 0.0, 'y': 0.0, 'z': 0.0}
+        self.imu_acceleration = {'x': 0.0, 'y': 0.0, 'z': 0.0}
         self._stop = False
 
     def _load_calibration(self):
@@ -177,6 +159,17 @@ class RobotState:
             self.connected = True
         else:
             self.connected = False
+            print(f"DEBUG: get_state failed: code={code}, result={result}")
+
+        # Fetch IMU data
+        imu_result, imu_code = bridge_send({"type": "get_imu"})
+        if imu_code == 0 and imu_result.get("ok") and imu_result.get("imu"):
+            imu = imu_result["imu"]
+            self.imu_orientation = imu.get("orientation", self.imu_orientation)
+            self.imu_angular_vel = imu.get("angular_velocity", self.imu_angular_vel)
+            self.imu_acceleration = imu.get("linear_acceleration", self.imu_acceleration)
+        else:
+            print(f"DEBUG: get_imu failed: code={imu_code}, result={imu_result}")
 
     def get_state(self):
         return {
@@ -185,6 +178,9 @@ class RobotState:
             "emergency_stopped": self.emergency_stopped,
             "calibration": self.calibration,
             "connected": self.connected,
+            "imu_orientation": self.imu_orientation,
+            "imu_angular_vel": self.imu_angular_vel,
+            "imu_acceleration": self.imu_acceleration,
         }
 
 state = RobotState()

@@ -13,6 +13,7 @@
 #include "geometry_msgs/msg/pose.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "std_msgs/msg/float64.hpp"
+#include "std_msgs/msg/bool.hpp"
 #include "std_msgs/msg/float64_multi_array.hpp"
 
 namespace dog_control_cpp

@@ -4,6 +4,7 @@
  */
 
 #include "dog_hardware_cpp/servo_driver_node.hpp"
+#include "dog_hardware_cpp/lifecycle_helper.hpp"
 
 #include <rclcpp/qos.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
@@ -454,8 +455,7 @@ int main(int argc, char *argv[])
   auto node = std::make_shared<dog_hardware_cpp::ServoDriverNode>();
 
   // Automatically transition to ACTIVE state
-  node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE);
-  node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE);
+  dog_monitor_cpp::lifecycle_activate(node);
 
   executor.add_node(node->get_node_base_interface());
   executor.spin();

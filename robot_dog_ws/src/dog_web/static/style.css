@@ -286,6 +286,25 @@ input[type=range]::-webkit-slider-thumb {
   padding: 14px 0;
 }
 
+/* IMU cards */
+.imu-card {
+  background: var(--bg-dark);
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+}
+.imu-label {
+  color: var(--text-dim);
+  font-size: .8em;
+  margin-bottom: 4px;
+}
+.imu-value {
+  font-family: monospace;
+  font-size: 1.1em;
+  color: var(--green);
+  font-weight: bold;
+}
+
 /* Responsive */
 @media (max-width: 900px) {
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }

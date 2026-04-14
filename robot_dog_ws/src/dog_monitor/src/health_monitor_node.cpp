@@ -1,11 +1,11 @@
 #include "dog_monitor_cpp/health_monitor.hpp"
 
-#include <rclcpp/node_graph.hpp>
 #include <rclcpp/client.hpp>
 #include <lifecycle_msgs/msg/state.hpp>
 #include <lifecycle_msgs/msg/transition.hpp>
 
 #include <sstream>
+#include <unordered_set>
 
 namespace dog_monitor_cpp
 {
@@ -72,6 +72,12 @@ LifecycleCallbackReturn HealthMonitor::on_activate(const rclcpp_lifecycle::State
   system_health_pub_->on_activate();
   diag_pub_->on_activate();
 
+  // Give other nodes time to start up — initialize last_seen to now
+  auto now_time = now();
+  for (auto & node : nodes_) {
+    node.last_seen = now_time;
+  }
+
   // Start check loop
   check_timer_ = create_wall_timer(
     std::chrono::duration<double>(check_interval_s_),
@@ -113,12 +119,8 @@ void HealthMonitor::checkLoop()
 void HealthMonitor::checkNodeLiveness()
 {
   // Get all known node names from the ROS graph
-  auto node_names = get_node_names();
-  std::unordered_set<std::string> alive_nodes;
-  for (const auto & [name, ns] : node_names) {
-    std::string full = ns.empty() ? name : ns + name;
-    alive_nodes.insert(full);
-  }
+  auto node_names = get_node_names();  // vector<string>
+  std::unordered_set<std::string> alive_nodes(node_names.begin(), node_names.end());
 
   bool all_healthy = true;
 
@@ -173,44 +175,45 @@ bool HealthMonitor::restartNode(const std::string & node_name)
     return false;
   }
 
+  // Transition: unconfigured → inactive (configure) → active (activate)
+  // If node is already active, configure will fail gracefully
   auto request = std::make_shared<lifecycle_msgs::srv::ChangeState::Request>();
-
-  // First try to transition to inactive (deactivate), then configure, then activate
-  // Step 1: Shutdown (reset from any state)
-  request->transition.id = lifecycle_msgs::msg::Transition::TRANSITION_SHUTDOWN;
+  request->transition.id = lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE;
   auto result = client->async_send_request(request);
 
-  // Give it a moment to process
-  std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  // Wait for result (blocking, but this is a rare event — node restart)
+  auto future = result.get();
+  if (!future->success) {
+    RCLCPP_WARN(get_logger(), "Configure failed for %s, trying deactivate first", node_name.c_str());
+    // Try deactivating first
+    client = create_client<lifecycle_msgs::srv::ChangeState>(node_name + "/change_state");
+    if (!client->wait_for_service(std::chrono::seconds(2))) {
+      return false;
+    }
+    request = std::make_shared<lifecycle_msgs::srv::ChangeState::Request>();
+    request->transition.id = lifecycle_msgs::msg::Transition::TRANSITION_DEACTIVATE;
+    client->async_send_request(request);
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-  // Recreate client after state change
-  client = create_client<lifecycle_msgs::srv::ChangeState>(
-    node_name + "/change_state");
-
-  if (!client->wait_for_service(std::chrono::seconds(2))) {
-    RCLCPP_WARN(get_logger(), "Node %s not responding after shutdown", node_name.c_str());
-    return false;
+    // Then configure
+    client = create_client<lifecycle_msgs::srv::ChangeState>(node_name + "/change_state");
+    if (!client->wait_for_service(std::chrono::seconds(2))) {
+      return false;
+    }
+    request = std::make_shared<lifecycle_msgs::srv::ChangeState::Request>();
+    request->transition.id = lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE;
+    client->async_send_request(request);
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
   }
 
-  // Step 2: Configure
-  request = std::make_shared<lifecycle_msgs::srv::ChangeState::Request>();
-  request->transition.id = lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE;
-  auto configure_result = client->async_send_request(request);
-
-  std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
-  // Step 3: Activate
-  client = create_client<lifecycle_msgs::srv::ChangeState>(
-    node_name + "/change_state");
-
+  // Finally activate
+  client = create_client<lifecycle_msgs::srv::ChangeState>(node_name + "/change_state");
   if (!client->wait_for_service(std::chrono::seconds(2))) {
-    RCLCPP_WARN(get_logger(), "Node %s not responding after configure", node_name.c_str());
     return false;
   }
-
   request = std::make_shared<lifecycle_msgs::srv::ChangeState::Request>();
   request->transition.id = lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE;
-  auto activate_result = client->async_send_request(request);
+  client->async_send_request(request);
 
   return true;
 }

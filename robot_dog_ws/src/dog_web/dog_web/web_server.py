@@ -13,7 +13,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 
 from geometry_msgs.msg import Twist
-from sensor_msgs.msg import JointState
+from sensor_msgs.msg import JointState, Imu
 from std_msgs.msg import Bool, Float64MultiArray
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
@@ -56,17 +56,32 @@ class DogWebNode(Node):
             JointState, '/joint_states', self._on_joint_states, qos)
         self.emergency_sub = self.create_subscription(
             Bool, '/emergency_stop', self._on_emergency_stop, 10)
+        self.imu_sub = self.create_subscription(
+            Imu, '/imu/data', self._on_imu, qos)
 
         # State
         self.joint_positions = [0.0] * 12
         self.emergency_stopped = False
         self.calibration = self._load_calibration()
 
+        # IMU state
+        self.imu_orientation = {'x': 0.0, 'y': 0.0, 'z': 0.0, 'w': 1.0}
+        self.imu_angular_vel = {'x': 0.0, 'y': 0.0, 'z': 0.0}
+        self.imu_acceleration = {'x': 0.0, 'y': 0.0, 'z': 0.0}
+
     def _on_joint_states(self, msg):
         self.joint_positions = list(msg.position) if msg.position else [0.0] * 12
 
     def _on_emergency_stop(self, msg):
         self.emergency_stopped = msg.data
+
+    def _on_imu(self, msg):
+        self.imu_orientation = {'x': msg.orientation.x, 'y': msg.orientation.y,
+                                'z': msg.orientation.z, 'w': msg.orientation.w}
+        self.imu_angular_vel = {'x': msg.angular_velocity.x, 'y': msg.angular_velocity.y,
+                                'z': msg.angular_velocity.z}
+        self.imu_acceleration = {'x': msg.linear_acceleration.x, 'y': msg.linear_acceleration.y,
+                                 'z': msg.linear_acceleration.z}
 
     def _load_calibration(self):
         if CALIBRATION_FILE.exists():
@@ -120,6 +135,9 @@ class DogWebNode(Node):
             'joint_names': JOINT_NAMES,
             'emergency_stopped': self.emergency_stopped,
             'calibration': self.calibration,
+            'imu_orientation': self.imu_orientation,
+            'imu_angular_vel': self.imu_angular_vel,
+            'imu_acceleration': self.imu_acceleration,
         }
 
 
