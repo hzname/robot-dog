@@ -17,6 +17,20 @@
   </nav>
 
   <main>
+    <!-- Shared status bar with E-Stop buttons -->
+    <div class="card">
+      <div class="status-bar">
+        <div class="status-pill"><span class="dot" id="ws-dot"></span> <span data-i18n="common.ws">WebSocket</span></div>
+        <div class="status-pill"><span class="dot" id="ros-dot"></span> <span data-i18n="common.ros">ROS2</span></div>
+        <div class="status-pill"><span class="dot" id="servo-dot"></span> <span data-i18n="common.servos">Сервы</span></div>
+        <div class="status-pill"><span class="dot" id="estop-dot"></span> <span data-i18n="common.estop">E-Stop</span></div>
+        <div class="estop-btns">
+          <button class="btn btn-red btn-sm" onclick="api('/api/control/emergency_stop',{stop:true})">🛑 Стоп</button>
+          <button class="btn btn-orange btn-sm" onclick="api('/api/control/emergency_stop',{stop:false})">🔓 Снять</button>
+        </div>
+      </div>
+    </div>
+
     <div class="grid-2">
       <!-- Joystick -->
       <div class="card">
@@ -193,6 +207,23 @@
     });
 
     fbLog(t('ctrl.loaded'));
+
+    // Status bar updates via WebSocket
+    const ws = new StateWS(state => {
+      const wsDot = document.getElementById('ws-dot');
+      if (wsDot) wsDot.className = 'dot on';
+      const rosDot = document.getElementById('ros-dot');
+      if (rosDot) rosDot.className = 'dot ' + (state.connected ? 'on' : 'off');
+      const servoDot = document.getElementById('servo-dot');
+      if (servoDot) {
+        const active = state.connected && state.servos_enabled && !state.emergency_stopped;
+        servoDot.className = 'dot ' + (active ? 'on' : 'off');
+      }
+      const estopDot = document.getElementById('estop-dot');
+      if (estopDot) estopDot.className = 'dot ' + (state.emergency_stopped ? 'off' : 'on');
+      const navDot = document.getElementById('nav-dot');
+      if (navDot) navDot.className = 'status-dot ok';
+    });
   </script>
 </body>
 </html>

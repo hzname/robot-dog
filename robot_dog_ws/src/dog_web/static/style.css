@@ -140,6 +140,18 @@ input[type=range]::-webkit-slider-thumb {
   gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 15px;
+  align-items: center;
+}
+
+.estop-btns {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: .8em;
 }
 
 .status-pill {

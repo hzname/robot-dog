@@ -17,12 +17,17 @@
   </nav>
 
   <main>
-    <!-- Status -->
+    <!-- Shared status bar with E-Stop buttons -->
     <div class="card">
       <div class="status-bar">
         <div class="status-pill"><span class="dot" id="ws-dot"></span> <span data-i18n="common.ws">WebSocket</span></div>
+        <div class="status-pill"><span class="dot" id="ros-dot"></span> <span data-i18n="common.ros">ROS2</span></div>
+        <div class="status-pill"><span class="dot" id="servo-dot"></span> <span data-i18n="common.servos">Сервы</span></div>
         <div class="status-pill"><span class="dot" id="estop-dot"></span> <span data-i18n="common.estop">E-Stop</span></div>
-        <div class="status-pill" id="update-rate">-- Гц</div>
+        <div class="estop-btns">
+          <button class="btn btn-red btn-sm" onclick="api('/api/control/emergency_stop',{stop:true})">🛑 Стоп</button>
+          <button class="btn btn-orange btn-sm" onclick="api('/api/control/emergency_stop',{stop:false})">🔓 Снять</button>
+        </div>
       </div>
     </div>
 
@@ -134,8 +139,19 @@
         if (tBar) tBar.style.width = Math.min(100, Math.max(0, (v + 3.14) / 6.28 * 100)) + '%';
       });
 
+      const wsDot = document.getElementById('ws-dot');
+      if (wsDot) wsDot.className = 'dot on';
+      const rosDot = document.getElementById('ros-dot');
+      if (rosDot) rosDot.className = 'dot ' + (state.connected ? 'on' : 'off');
+      const servoDot = document.getElementById('servo-dot');
+      if (servoDot) {
+        const active = state.connected && state.servos_enabled && !state.emergency_stopped;
+        servoDot.className = 'dot ' + (active ? 'on' : 'off');
+      }
       const edot = document.getElementById('estop-dot');
       if (edot) edot.className = 'dot ' + (state.emergency_stopped ? 'off' : 'on');
+      const ndot = document.getElementById('nav-dot');
+      if (ndot) ndot.className = 'status-dot ok';
     });
   </script>
 </body>

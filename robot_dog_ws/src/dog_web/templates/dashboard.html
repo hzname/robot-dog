@@ -17,13 +17,17 @@
   </nav>
 
   <main>
-    <!-- Status bar -->
+    <!-- Shared status bar with E-Stop buttons -->
     <div class="card">
       <div class="status-bar">
         <div class="status-pill"><span class="dot" id="ws-dot"></span> <span data-i18n="common.ws">WebSocket</span></div>
         <div class="status-pill"><span class="dot" id="ros-dot"></span> <span data-i18n="common.ros">ROS2</span></div>
         <div class="status-pill"><span class="dot" id="servo-dot"></span> <span data-i18n="common.servos">Сервы</span></div>
         <div class="status-pill"><span class="dot" id="estop-dot"></span> <span data-i18n="common.estop">E-Stop</span></div>
+        <div class="estop-btns">
+          <button class="btn btn-red btn-sm" onclick="api('/api/control/emergency_stop',{stop:true})">🛑 Стоп</button>
+          <button class="btn btn-orange btn-sm" onclick="api('/api/control/emergency_stop',{stop:false})">🔓 Снять</button>
+        </div>
       </div>
     </div>
 
@@ -33,45 +37,43 @@
       <div class="joint-grid" id="joint-overview"></div>
     </div>
 
-    <!-- IMU + Quick actions -->
-    <div class="grid-2">
-      <div class="card">
-        <h2>📐 IMU Orientation</h2>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div class="imu-card">
-            <div class="imu-label">Roll (X)</div>
-            <div class="imu-value" id="imu-roll">0.00°</div>
-          </div>
-          <div class="imu-card">
-            <div class="imu-label">Pitch (Y)</div>
-            <div class="imu-value" id="imu-pitch">0.00°</div>
-          </div>
-          <div class="imu-card">
-            <div class="imu-label">Yaw (Z)</div>
-            <div class="imu-value" id="imu-yaw">0.00°</div>
-          </div>
-          <div class="imu-card">
-            <div class="imu-label">Gyro Z</div>
-            <div class="imu-value" id="imu-gyro">0.00 rad/s</div>
-          </div>
+    <!-- IMU -->
+    <div class="card">
+      <h2>📐 IMU Orientation</h2>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+        <div class="imu-card">
+          <div class="imu-label">Roll (X)</div>
+          <div class="imu-value" id="imu-roll">0.00°</div>
         </div>
-        <div style="margin-top:12px">
-          <div style="color:var(--text-dim);font-size:.8em;margin-bottom:4px">Ускорение</div>
-          <div style="display:flex;gap:8px;font-family:monospace;font-size:.85em">
-            <span style="color:var(--green)">X: <span id="imu-ax">0.00</span></span>
-            <span style="color:var(--blue)">Y: <span id="imu-ay">0.00</span></span>
-            <span style="color:var(--orange)">Z: <span id="imu-az">0.00</span></span>
-          </div>
+        <div class="imu-card">
+          <div class="imu-label">Pitch (Y)</div>
+          <div class="imu-value" id="imu-pitch">0.00°</div>
+        </div>
+        <div class="imu-card">
+          <div class="imu-label">Yaw (Z)</div>
+          <div class="imu-value" id="imu-yaw">0.00°</div>
+        </div>
+        <div class="imu-card">
+          <div class="imu-label">Gyro Z</div>
+          <div class="imu-value" id="imu-gyro">0.00 rad/s</div>
         </div>
       </div>
-      <div class="card">
-        <h2 data-i18n="dash.quick">Быстрые действия</h2>
-        <div class="btn-group">
-          <button class="btn" onclick="api('/api/control/servo_enable',{enable:true})" data-i18n="dash.servo_on">Включить сервы</button>
-          <button class="btn btn-dark" onclick="api('/api/control/servo_enable',{enable:false})" data-i18n="dash.servo_off">Выключить сервы</button>
-          <button class="btn btn-red btn-lg" onclick="api('/api/control/emergency_stop',{stop:true})" data-i18n="dash.estop">АВАРИЙНАЯ ОСТАНОВКА</button>
-          <button class="btn btn-orange" onclick="api('/api/control/emergency_stop',{stop:false})" data-i18n="dash.estop_release">🔓 Снять блокировку</button>
+      <div style="margin-top:12px">
+        <div style="color:var(--text-dim);font-size:.8em;margin-bottom:4px">Ускорение</div>
+        <div style="display:flex;gap:8px;font-family:monospace;font-size:.85em">
+          <span style="color:var(--green)">X: <span id="imu-ax">0.00</span></span>
+          <span style="color:var(--blue)">Y: <span id="imu-ay">0.00</span></span>
+          <span style="color:var(--orange)">Z: <span id="imu-az">0.00</span></span>
         </div>
+      </div>
+    </div>
+
+    <!-- Quick actions -->
+    <div class="card">
+      <h2 data-i18n="dash.quick">Быстрые действия</h2>
+      <div class="btn-group">
+        <button class="btn" onclick="api('/api/control/servo_enable',{enable:true})" data-i18n="dash.servo_on">Включить сервы</button>
+        <button class="btn btn-dark" onclick="api('/api/control/servo_enable',{enable:false})" data-i18n="dash.servo_off">Выключить сервы</button>
       </div>
     </div>
 
@@ -143,6 +145,18 @@
         if (ax) ax.textContent = state.imu_acceleration.x.toFixed(2);
         if (ay) ay.textContent = state.imu_acceleration.y.toFixed(2);
         if (az) az.textContent = state.imu_acceleration.z.toFixed(2);
+      }
+
+      // Status dots
+      const rosDot = document.getElementById('ros-dot');
+      if (rosDot) rosDot.className = 'dot ' + (state.connected ? 'on' : 'off');
+
+      const servoDot = document.getElementById('servo-dot');
+      if (servoDot) {
+        // Green when connected AND servos enabled AND NOT emergency stopped
+        // Red/off when disconnected, servos disabled, or emergency stopped
+        const servosActive = state.connected && state.servos_enabled && !state.emergency_stopped;
+        servoDot.className = 'dot ' + (servosActive ? 'on' : 'off');
       }
 
       const edot = document.getElementById('estop-dot');

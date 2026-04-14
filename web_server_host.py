@@ -129,6 +129,7 @@ class RobotState:
     def __init__(self):
         self.joint_positions = [0.0] * 12
         self.emergency_stopped = False
+        self.servos_enabled = True  # Track servo enable state
         self.calibration = self._load_calibration()
         self.connected = False
         self.imu_orientation = {'x': 0.0, 'y': 0.0, 'z': 0.0, 'w': 1.0}
@@ -176,6 +177,7 @@ class RobotState:
             "joint_positions": self.joint_positions,
             "joint_names": JOINT_NAMES,
             "emergency_stopped": self.emergency_stopped,
+            "servos_enabled": self.servos_enabled,
             "calibration": self.calibration,
             "connected": self.connected,
             "imu_orientation": self.imu_orientation,
@@ -251,7 +253,9 @@ async def stop_robot():
 
 @app.post("/api/control/servo_enable")
 async def servo_enable(data: dict):
-    bridge_send({"type": "servo_enable", "enable": data.get("enable", True)})
+    enable = data.get("enable", True)
+    state.servos_enabled = enable  # Track local state
+    bridge_send({"type": "servo_enable", "enable": enable})
     return {"status": "ok"}
 
 @app.post("/api/control/emergency_stop")
