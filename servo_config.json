@@ -1,0 +1,29 @@
+{
+  "body_dimensions": {
+    "width_mm": 120,
+    "length_mm": 180,
+    "hip_mm": 55,
+    "thigh_mm": 105,
+    "calf_mm": 105
+  },
+  "joints": [
+    {"name": "lf_hip_joint",  "servo_id": 0,  "sign": 1,  "zero_deg": 0, "min_deg": -60, "max_deg": 60, "coupled_to": null, "coupling_coeff": 0, "enabled": true},
+    {"name": "lf_thigh_joint", "servo_id": 1, "sign": 1,  "zero_deg": 0, "min_deg": -90, "max_deg": 90, "coupled_to": null, "coupling_coeff": 0, "enabled": true},
+    {"name": "lf_calf_joint",  "servo_id": 2,  "sign": 1,  "zero_deg": 0, "min_deg": -90, "max_deg": 90, "coupled_to": null, "coupling_coeff": 0, "enabled": true},
+    {"name": "rf_hip_joint",  "servo_id": 3,  "sign": 1,  "zero_deg": 0, "min_deg": -60, "max_deg": 60, "coupled_to": null, "coupling_coeff": 0, "enabled": true},
+    {"name": "rf_thigh_joint", "servo_id": 4,  "sign": 1,  "zero_deg": 0, "min_deg": -90, "max_deg": 90, "coupled_to": null, "coupling_coeff": 0, "enabled": true},
+    {"name": "rf_calf_joint",  "servo_id": 5,  "sign": 1,  "zero_deg": 0, "min_deg": -90, "max_deg": 90, "coupled_to": null, "coupling_coeff": 0, "enabled": true},
+    {"name": "lr_hip_joint",  "servo_id": 6,  "sign": 1,  "zero_deg": 0, "min_deg": -60, "max_deg": 60, "coupled_to": null, "coupling_coeff": 0, "enabled": true},
+    {"name": "lr_thigh_joint", "servo_id": 7,  "sign": 1,  "zero_deg": 0, "min_deg": -90, "max_deg": 90, "coupled_to": null, "coupling_coeff": 0, "enabled": true},
+    {"name": "lr_calf_joint",  "servo_id": 8,  "sign": 1,  "zero_deg": 0, "min_deg": -90, "max_deg": 90, "coupled_to": null, "coupling_coeff": 0, "enabled": true},
+    {"name": "rr_hip_joint",  "servo_id": 9,  "sign": 1,  "zero_deg": 0, "min_deg": -60, "max_deg": 60, "coupled_to": null, "coupling_coeff": 0, "enabled": true},
+    {"name": "rr_thigh_joint", "servo_id": 10, "sign": 1, "zero_deg": 0, "min_deg": -90, "max_deg": 90, "coupled_to": null, "coupling_coeff": 0, "enabled": true},
+    {"name": "rr_calf_joint",  "servo_id": 11, "sign": 1,  "zero_deg": 0, "min_deg": -90, "max_deg": 90, "coupled_to": null, "coupling_coeff": 0, "enabled": true}
+  ],
+  "aux_servos": [
+    {"name": "head_pan",     "servo_id": 12, "sign": 1, "zero_deg": 0, "min_deg": -90, "max_deg": 90, "enabled": false},
+    {"name": "head_tilt",    "servo_id": 13, "sign": 1, "zero_deg": 0, "min_deg": -90, "max_deg": 90, "enabled": false},
+    {"name": "arm_joint_1",  "servo_id": 14, "sign": 1, "zero_deg": 0, "min_deg": -90, "max_deg": 90, "enabled": false},
+    {"name": "arm_joint_2",  "servo_id": 15, "sign": 1, "zero_deg": 0, "min_deg": -90, "max_deg": 90, "enabled": false}
+  ]
+}
