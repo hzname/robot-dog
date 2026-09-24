@@ -19,6 +19,7 @@ from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import Twist, Vector3
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from sensor_msgs.msg import BatteryState
 from std_msgs.msg import Bool, String
 
 from dog_web import protocol
@@ -46,6 +47,8 @@ class WebTeleop(Node):
         latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                              durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(String, 'state', self._on_state, latched)
+        self.create_subscription(BatteryState, 'power', self._on_power, 10)
+        self._last_power = 0.0
 
         self.mode = 'unknown'
         self.web_clients = set()
@@ -56,6 +59,21 @@ class WebTeleop(Node):
         self.mode = msg.data
         if self._aio_loop:
             self._aio_loop.call_soon_threadsafe(lambda: asyncio.ensure_future(self._broadcast_state()))
+
+    def _on_power(self, msg: BatteryState):
+        now = time.monotonic()
+        if now - self._last_power < 0.5 or not self._aio_loop:
+            return
+        self._last_power = now
+        text = protocol.power(msg.voltage, -msg.current)
+        self._aio_loop.call_soon_threadsafe(lambda: asyncio.ensure_future(self._broadcast(text)))
+
+    async def _broadcast(self, text):
+        for ws in list(self.web_clients):
+            try:
+                await ws.send(text)
+            except WebSocketClosed:
+                self.web_clients.discard(ws)
 
     def send_actions(self, actions: protocol.Actions):
         if actions.estop is not None:

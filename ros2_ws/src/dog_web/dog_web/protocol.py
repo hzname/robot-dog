@@ -9,6 +9,7 @@ Client -> server (JSON text frames):
 Server -> client:
   {"type": "hello", "limits": {...}}
   {"type": "state", "mode": "...", "estop": bool, "clients": n}
+  {"type": "power", "voltage": V, "current": A}      only when a current sensor is fitted
 """
 
 import json
@@ -111,3 +112,8 @@ def hello(limits: Limits) -> str:
 
 def state(mode: str, estop: bool, clients: int) -> str:
     return json.dumps({'type': 'state', 'mode': mode, 'estop': estop, 'clients': clients})
+
+
+def power(voltage: float, current: float) -> str:
+    return json.dumps({'type': 'power', 'voltage': round(float(voltage), 2),
+                       'current': round(float(current), 2)})

@@ -41,7 +41,8 @@ if(BUILD_TESTING)
   ament_add_gtest(test_mapping test/test_mapping.cpp)
   target_link_libraries(test_mapping dog_teleop_mapping)
   find_package(launch_testing_ament_cmake REQUIRED)
-  add_launch_test(test/test_gamepad_fifo.py TIMEOUT 60)
+  # Own DDS domain: colcon runs packages in parallel and every test uses /dog.
+  add_launch_test(test/test_gamepad_fifo.py TIMEOUT 60 ENV ROS_DOMAIN_ID=42)
 endif()
 
 ament_export_targets(export_dog_teleop HAS_LIBRARY_TARGET)

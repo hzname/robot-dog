@@ -22,6 +22,12 @@ function connect() {
     if (msg.type === 'hello') limits = msg.limits;
     else if (msg.type === 'state') setMode(msg.mode);
     else if (msg.type === 'error') showError(msg.message);
+    else if (msg.type === 'power') {
+      const el = $('power');
+      el.hidden = false;
+      el.textContent = `${msg.voltage.toFixed(1)} В · ${msg.current.toFixed(1)} А`;
+      el.className = 'pill ' + (msg.voltage < 5.2 ? 'estop' : '');
+    }
   };
 }
 function send(obj) {

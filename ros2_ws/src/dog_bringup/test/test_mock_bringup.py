@@ -31,7 +31,7 @@ def generate_test_description():
         launch.actions.IncludeLaunchDescription(
             PythonLaunchDescriptionSource(launch_file),
             launch_arguments={'backend': 'mock', 'gamepad': 'false', 'web': 'true',
-                              'web_port': str(WEB_PORT)}.items()),
+                              'web_port': str(WEB_PORT), 'power': 'mock'}.items()),
         launch_testing.actions.ReadyToTest(),
     ])
 
@@ -153,6 +153,12 @@ class TestMockBringup(unittest.TestCase):
             hello = ws.recv()
             self.assertEqual(hello['type'], 'hello')
             self.assertAlmostEqual(hello['limits']['max_vx'], 0.15)
+            # Power readings from the (mock) current sensor reach the page.
+            msg = ws.recv()
+            while msg['type'] != 'power':
+                msg = ws.recv()
+            self.assertAlmostEqual(msg['voltage'], 6.0, places=2)
+            self.assertAlmostEqual(msg['current'], 1.0, places=2)
             drive = {'type': 'drive', 'vx': 1.0, 'vy': 0.0, 'wz': 0.0}
             self.assertTrue(self.spin_until(
                 lambda: self.state == 'walk', 4.0, publish=lambda: ws.send(drive)))

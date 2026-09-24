@@ -29,6 +29,9 @@ def _setup(context):
     share = get_package_share_directory('dog_bringup')
     robot_yaml = cfg('robot_config') or os.path.join(share, 'config', 'robot.yaml')
     servos_yaml = cfg('servo_config') or os.path.join(share, 'config', 'servos.yaml')
+    power_yaml = os.path.join(share, 'config', 'power.yaml')
+    # Power sensor: probe the bus on the robot; off for mock runs unless asked.
+    power_backend = cfg('power') or ('auto' if cfg('backend') == 'pca9685' else 'off')
     teleop_yaml = os.path.join(share, 'config', 'teleop.yaml')
     teleop_files = [teleop_yaml]
     if cfg('gamepad_profile') == 'ps':
@@ -46,6 +49,10 @@ def _setup(context):
              namespace=NS, parameters=[servos_yaml, {'backend': cfg('backend')}],
              output='screen'),
     ]
+    if power_backend != 'off':
+        actions.append(
+            Node(package='dog_hardware', executable='power_monitor_node', name='power_monitor',
+                 namespace=NS, parameters=[power_yaml, {'backend': power_backend}], output='screen'))
     if on('gamepad'):
         actions += [
             Node(package='dog_teleop', executable='gamepad_node', name='gamepad',
@@ -76,6 +83,9 @@ def generate_launch_description():
         DeclareLaunchArgument('web', default_value='true', description='start the web teleop page'),
         DeclareLaunchArgument('web_port', default_value='8080'),
         DeclareLaunchArgument('rviz', default_value='false', description='start RViz (PC only)'),
+        DeclareLaunchArgument('power', default_value='',
+                              description='current sensor: auto (probe I2C), mock or off; '
+                                          'default auto on the robot, off with backend:=mock'),
         DeclareLaunchArgument('robot_config', default_value='',
                               description='override path to robot.yaml'),
         DeclareLaunchArgument('servo_config', default_value='',
