@@ -24,6 +24,10 @@
                                   joint_states                │ joint_command_bridge ─▶ Gazebo│
                                         ▼                     │ gz ─▶ joint_states, imu, odom │
                               robot_state_publisher ─▶ /tf    └───────────────────────────────┘
+
+ Необязательные датчики (узел сам ищет чип на I2C и завершается, если его нет):
+   imu_node (MPU6050) ── imu/data ──▶ locomotion (компенсация уклона)
+   power_monitor (INA226/219) ── power, estop, command
 ```
 
 ## Пакеты (`ros2_ws/src`)
@@ -31,12 +35,12 @@
 | Пакет | Язык | Что внутри |
 |---|---|---|
 | `dog_control` | C++ | `kinematics`, `gait` (рысь), `locomotion` (режимы) — библиотека без зависимости от ROS; нода `locomotion_node` |
-| `dog_hardware` | C++ | PCA9685 через Linux i2c-dev и mock-шина; ядро драйвера (калибровка, ограничение скорости, поочерёдное включение ног, E-STOP); нода `servo_driver_node`; утилита `pca9685_probe` |
+| `dog_hardware` | C++ | PCA9685 через Linux i2c-dev и mock-шина; ядро драйвера (калибровка, ограничение скорости, поочерёдное включение ног, E-STOP); нода `servo_driver_node`; `power_monitor_node` (INA226/INA219), `imu_node` (MPU6050, фильтр ориентации); утилита `pca9685_probe` |
 | `dog_teleop` | C++ | `gamepad_node` (Linux joystick API), `joy_teleop_node`, `keyboard_teleop`; логика раскладок без зависимости от ROS |
 | `dog_web` | Python | `web_teleop`: HTTP и WebSocket на стандартной библиотеке, страница с виртуальными стиками, клавиатурой и Gamepad API |
 | `dog_description` | Python | генератор URDF из `robot.yaml` (xacro не нужен) |
 | `dog_bringup` | launch | `robot.launch.py`, конфиги (`robot.yaml`, `servos.yaml`, `teleop*.yaml`), `calib_pose` |
-| `dog_gazebo` | Python | `sim.launch.py`, мир, мост команд в Gazebo, `walk_check` |
+| `dog_gazebo` | Python | `sim.launch.py`, миры (ровный, уклон, волны, камни), мост команд в Gazebo, `walk_check`, `terrain_sweep` |
 
 Внешние зависимости — только `ros-base`: rclcpp, rclpy, стандартные сообщения, robot_state_publisher, launch. Для симуляции нужен ещё ros_gz.
 
@@ -52,6 +56,7 @@ PASSIVE ──stand──▶ STANDING_UP ──▶ STAND ◀──cmd_vel≠0 / 
 - **Вставание и укладывание** идут по высоте корпуса с профилем минимального рывка (min-jerk). Стопы движутся строго вертикально, не скользя по полу.
 - **Скорость** ограничивается по модулю и по ускорению (0.5 м/с², 2 рад/с²). При `cmd_vel` старше 0.5 с команда обнуляется.
 - **Позу корпуса** (тангаж, крен, высота) можно менять в STAND и WALK, с ограничением скорости изменения.
+- **Компенсация уклона.** Если приходит `imu/data`, стопы сдвигаются вниз по склону на h·tan(уклон), см. [TERRAIN.md](TERRAIN.md).
 
 ## Походка
 

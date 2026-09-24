@@ -32,6 +32,8 @@ def _setup(context):
     power_yaml = os.path.join(share, 'config', 'power.yaml')
     # Power sensor: probe the bus on the robot; off for mock runs unless asked.
     power_backend = cfg('power') or ('auto' if cfg('backend') == 'pca9685' else 'off')
+    imu_yaml = os.path.join(share, 'config', 'imu.yaml')
+    imu_backend = cfg('imu') or ('auto' if cfg('backend') == 'pca9685' else 'off')
     teleop_yaml = os.path.join(share, 'config', 'teleop.yaml')
     teleop_files = [teleop_yaml]
     if cfg('gamepad_profile') == 'ps':
@@ -53,6 +55,10 @@ def _setup(context):
         actions.append(
             Node(package='dog_hardware', executable='power_monitor_node', name='power_monitor',
                  namespace=NS, parameters=[power_yaml, {'backend': power_backend}], output='screen'))
+    if imu_backend != 'off':
+        actions.append(
+            Node(package='dog_hardware', executable='imu_node', name='imu',
+                 namespace=NS, parameters=[imu_yaml, {'backend': imu_backend}], output='screen'))
     if on('gamepad'):
         actions += [
             Node(package='dog_teleop', executable='gamepad_node', name='gamepad',
@@ -85,6 +91,9 @@ def generate_launch_description():
         DeclareLaunchArgument('rviz', default_value='false', description='start RViz (PC only)'),
         DeclareLaunchArgument('power', default_value='',
                               description='current sensor: auto (probe I2C), mock or off; '
+                                          'default auto on the robot, off with backend:=mock'),
+        DeclareLaunchArgument('imu', default_value='',
+                              description='IMU (MPU6050): auto (probe I2C), mock or off; '
                                           'default auto on the robot, off with backend:=mock'),
         DeclareLaunchArgument('robot_config', default_value='',
                               description='override path to robot.yaml'),

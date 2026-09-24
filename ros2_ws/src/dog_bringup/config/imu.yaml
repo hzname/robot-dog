@@ -1,0 +1,17 @@
+# Optional IMU (MPU6050 on the v1 board, 0x68). Probed at start: without it
+# locomotion simply walks without slope compensation.
+/**/imu:
+  ros__parameters:
+    backend: auto            # auto (probe I2C) | mock | off
+    i2c:
+      device: /dev/i2c-0
+      addresses: [104, 105]  # 0x68, 0x69
+    rate: 100.0
+    # Sensor axes -> body axes (x forward, y left, z up). Check once: tilt the
+    # nose down and `ros2 topic echo /dog/imu/data` must show positive pitch
+    # (see docs/TERRAIN.md). E.g. "-y,x,z" for a board turned 90 deg.
+    axes: "x,y,z"
+    filter_tau: 1.0          # [s] accelerometer pull on roll / pitch
+    accel_gate: 0.15         # ignore accel samples off 1 g by more (footfalls)
+    bias_time: 1.0           # [s] gyro bias at start: keep the robot still
+    frame_id: base_link

@@ -17,8 +17,8 @@ import rclpy
 from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import Twist
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
-from sensor_msgs.msg import JointState
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
+from sensor_msgs.msg import Imu, JointState
 from std_msgs.msg import Bool, String
 
 WEB_PORT = 18080
@@ -31,7 +31,8 @@ def generate_test_description():
         launch.actions.IncludeLaunchDescription(
             PythonLaunchDescriptionSource(launch_file),
             launch_arguments={'backend': 'mock', 'gamepad': 'false', 'web': 'true',
-                              'web_port': str(WEB_PORT), 'power': 'mock'}.items()),
+                              'web_port': str(WEB_PORT), 'power': 'mock',
+                              'imu': 'mock'}.items()),
         launch_testing.actions.ReadyToTest(),
     ])
 
@@ -128,6 +129,15 @@ class TestMockBringup(unittest.TestCase):
             if predicate():
                 return True
         return False
+
+    def test_imu_mock(self):
+        got = []
+        sub = self.node.create_subscription(Imu, 'imu/data', got.append, qos_profile_sensor_data)
+        # 1 s gyro bias measurement first, then level attitude at 100 Hz
+        self.assertTrue(self.spin_until(lambda: len(got) > 5, 15.0), 'no /dog/imu/data')
+        self.assertAlmostEqual(got[-1].orientation.w, 1.0, places=3)
+        self.assertAlmostEqual(got[-1].linear_acceleration.z, 9.80665, places=2)
+        self.node.destroy_subscription(sub)
 
     def test_topics_then_web(self):
         # Wait for the stack to come up (latched state).

@@ -5,11 +5,13 @@
 //   command        std_msgs/String        "stand" | "lie"
 //   body_pose      geometry_msgs/Vector3  x=roll [rad], y=pitch [rad], z=height offset [m]
 //   estop          std_msgs/Bool          true = limp, requires "stand" after release
+//   imu/data       sensor_msgs/Imu        optional: slope compensation when present
 // Publishes:
 //   joint_commands sensor_msgs/JointState 12 joint positions [rad]
 //   state          std_msgs/String        current mode, or "estop" (latched)
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <memory>
 #include <string>
 #include <vector>
@@ -18,6 +20,7 @@
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/vector3.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "std_msgs/msg/bool.hpp"
 #include "std_msgs/msg/string.hpp"
@@ -77,6 +80,22 @@ public:
         controller_->setEstop(msg->data);
       });
 
+    imu_sub_ = create_subscription<sensor_msgs::msg::Imu>(
+      "imu/data", rclcpp::SensorDataQoS(), [this](sensor_msgs::msg::Imu::ConstSharedPtr msg) {
+        const auto & q = msg->orientation;
+        if (msg->orientation_covariance[0] < 0.0) {return;}  // no orientation in this message
+        const double roll = std::atan2(2.0 * (q.w * q.x + q.y * q.z), 1.0 - 2.0 * (q.x * q.x + q.y * q.y));
+        const double pitch = std::asin(std::clamp(2.0 * (q.w * q.y - q.z * q.x), -1.0, 1.0));
+        const auto t = now();
+        const double dt = imu_seen_ ? std::clamp((t - last_imu_).seconds(), 0.0, 0.2) : 0.0;
+        if (!imu_seen_) {
+          RCLCPP_INFO(get_logger(), "IMU data received - slope compensation active");
+        }
+        imu_seen_ = true;
+        last_imu_ = t;
+        controller_->setImuAttitude(roll, pitch, dt);
+      });
+
     joint_msg_.name = kJointNames;
     joint_msg_.position.resize(kNumJoints);
     last_tick_ = now();
@@ -113,6 +132,12 @@ private:
     p.gait.duty = declare_parameter("gait.duty", p.gait.duty);
     p.gait.step_height = declare_parameter("gait.step_height", p.gait.step_height);
     p.gait.max_step = declare_parameter("gait.max_step", p.gait.max_step);
+
+    p.slope_compensation = declare_parameter("slope.compensation", p.slope_compensation);
+    p.slope_gain = declare_parameter("slope.gain", p.slope_gain);
+    p.slope_filter_tau = declare_parameter("slope.filter_tau", p.slope_filter_tau);
+    p.slope_max_shift = declare_parameter("slope.max_shift", p.slope_max_shift);
+    p.slope_max_deg = declare_parameter("slope.max_deg", p.slope_max_deg);
 
     p.max_velocity.vx = declare_parameter("limits.max_vx", p.max_velocity.vx);
     p.max_velocity.vy = declare_parameter("limits.max_vy", p.max_velocity.vy);
@@ -168,6 +193,8 @@ private:
   bool cmd_vel_active_{false};
   Mode last_mode_{Mode::PASSIVE};
   bool last_estop_{false};
+  bool imu_seen_{false};
+  rclcpp::Time last_imu_;
   rclcpp::Time last_tick_;
   rclcpp::Time last_cmd_vel_;
   sensor_msgs::msg::JointState joint_msg_;
@@ -178,6 +205,7 @@ private:
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr command_sub_;
   rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr pose_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr estop_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 

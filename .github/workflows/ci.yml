@@ -83,6 +83,46 @@ jobs:
           name: sim-log-${{ matrix.distro }}
           path: ros2_ws/sim.log
 
+  terrain:
+    name: terrain limits (slope / waves / rough)
+    # Positive checks at the recommended limits from docs/TERRAIN.md: every
+    # maneuver must pass on each terrain (no fall, tilt < 20 deg, a share of
+    # the commanded distance: 40 % on the slope, 25 % on stones, 15 % on waves
+    # where walking backwards only creeps).
+    runs-on: ubuntu-24.04
+    container:
+      image: osrf/ros:jazzy-simulation
+    defaults:
+      run:
+        shell: bash
+        working-directory: ros2_ws
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon build
+      - name: Slope 10 deg (climb, traverse, turn, descend)
+        timeout-minutes: 8
+        run: |
+          source install/setup.bash
+          ros2 run dog_gazebo terrain_sweep --terrain slope --levels 10 --out slope.json
+      - name: Waves 10 mm
+        timeout-minutes: 8
+        run: |
+          source install/setup.bash
+          ros2 run dog_gazebo terrain_sweep --terrain waves --levels 10 --min-ratio 0.15 --out waves.json
+      - name: Stones 10 mm
+        timeout-minutes: 8
+        run: |
+          source install/setup.bash
+          ros2 run dog_gazebo terrain_sweep --terrain rough --levels 10 --min-ratio 0.25 --out rough.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: terrain-results
+          path: ros2_ws/*.json
+
   robot-image:
     name: robot image (arm64)
     # Emulated arm64 C++ build is slow; run on main and on demand only.

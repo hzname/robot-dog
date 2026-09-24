@@ -18,7 +18,8 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
-from dog_description.urdf import build_urdf, joint_names, load_config, sim_command_topic
+from dog_description.urdf import build_urdf, joint_names, load_config, sim_command_topic, stand_angles
+from dog_gazebo import terrain
 
 NS = 'dog'
 
@@ -56,10 +57,25 @@ def _setup(context):
     robot_yaml = os.path.join(bringup, 'config', 'robot.yaml')
     teleop_yaml = os.path.join(bringup, 'config', 'teleop.yaml')
     world = cfg('world') or os.path.join(get_package_share_directory('dog_gazebo'), 'worlds', 'flat.sdf')
+    kind, level = cfg('terrain'), float(cfg('level'))
+    spawn_z, spawn_pitch = float(cfg('spawn_z')), 0.0
+    if kind != 'flat':
+        fd, world = tempfile.mkstemp(prefix=f'dog_{kind}_', suffix='.sdf')
+        with os.fdopen(fd, 'w') as f:
+            f.write(terrain.world(kind, level, int(cfg('seed'))))
+        spawn_z, spawn_pitch = terrain.spawn_pose(kind, level, spawn_z)
 
     geometry, description = load_config(robot_yaml)
-    urdf = build_urdf(geometry, description, gazebo=True, namespace=NS)
+    with open(robot_yaml) as f:
+        stand_h = yaml.safe_load(f)['/**']['ros__parameters']['stance']['stand_height']
+    # Joint controllers hold a standing pose from the first step, like a robot
+    # placed on the ground by hand, instead of dropping on straight legs.
+    initial = stand_angles(geometry, stand_h)
+    urdf = build_urdf(geometry, description, gazebo=True, namespace=NS, initial=initial)
     sim_time = {'use_sim_time': True}
+    overrides = {'slope.compensation': on('slope_compensation')}
+    if cfg('step_height'):
+        overrides['gait.step_height'] = float(cfg('step_height'))
 
     gz_args = f"-r {'-s --headless-rendering ' if on('headless') else ''}-v 2 {world}"
     actions = [
@@ -71,13 +87,15 @@ def _setup(context):
              parameters=[{'robot_description': urdf}, sim_time]),
         Node(package='ros_gz_sim', executable='create', output='screen',
              arguments=['-name', 'dog', '-topic', f'/{NS}/robot_description',
-                        '-z', cfg('spawn_z')]),
+                        # '-P=value': a separate negative value is taken for a flag
+                        '-z', f'{spawn_z:.4f}', f'-P={spawn_pitch:.5f}']),
         Node(package='ros_gz_bridge', executable='parameter_bridge', name='gz_bridge',
              parameters=[{'config_file': _bridge_config()}, sim_time]),
         Node(package='dog_gazebo', executable='joint_command_bridge', namespace=NS,
              parameters=[sim_time]),
         Node(package='dog_control', executable='locomotion_node', name='locomotion', namespace=NS,
-             parameters=[robot_yaml, sim_time], output='screen'),
+             parameters=[robot_yaml, sim_time, overrides],
+             output='screen'),
     ]
     if on('gamepad'):
         actions += [
@@ -97,6 +115,14 @@ def generate_launch_description():
         DeclareLaunchArgument('headless', default_value='false', description='server only, no GUI'),
         DeclareLaunchArgument('world', default_value='', description='SDF world (default: flat)'),
         DeclareLaunchArgument('spawn_z', default_value='0.25', description='spawn height [m]'),
+        DeclareLaunchArgument('terrain', default_value='flat',
+                              description='flat | slope (level = deg) | waves | rough (level = mm)'),
+        DeclareLaunchArgument('level', default_value='0', description='slope angle or obstacle height'),
+        DeclareLaunchArgument('seed', default_value='0', description='random layout for rough'),
+        DeclareLaunchArgument('slope_compensation', default_value='true',
+                              description='IMU-based slope compensation in the gait'),
+        DeclareLaunchArgument('step_height', default_value='',
+                              description='override gait.step_height [m] (robot.yaml by default)'),
         DeclareLaunchArgument('web', default_value='true'),
         DeclareLaunchArgument('gamepad', default_value='false'),
         OpaqueFunction(function=_setup),

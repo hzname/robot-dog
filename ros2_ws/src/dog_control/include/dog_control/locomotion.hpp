@@ -46,6 +46,14 @@ struct LocomotionParams
   double pose_rate{0.5};       // roll/pitch slew [rad/s]
   double height_rate{0.05};    // height slew [m/s]
 
+  // Slope compensation from the IMU: feet shift downhill by
+  // gain * height * tan(slope) so the centre of mass stays over the support.
+  bool slope_compensation{true};
+  double slope_gain{1.0};
+  double slope_filter_tau{0.8};  // [s] averages out the gait's own rocking
+  double slope_max_shift{0.04};  // [m]
+  double slope_max_deg{25.0};    // ignore readings beyond this (robot falling / lifted)
+
   BodyVelocity max_velocity{0.15, 0.08, 0.6};
   BodyVelocity max_accel{0.5, 0.3, 2.0};
 
@@ -65,6 +73,11 @@ public:
   /// Target twist; clamped to max_velocity and accel-limited internally.
   void setVelocity(const BodyVelocity & v);
   void setBodyPose(const BodyPose & pose);
+  /// Body attitude from the IMU [rad] (REP-103 roll / pitch vs. gravity).
+  /// Without calls the controller behaves as on flat ground.
+  void setImuAttitude(double roll, double pitch, double dt);
+  double slopePitch() const {return slope_pitch_;}
+  double slopeRoll() const {return slope_roll_;}
 
   /// Advance the controller. Returns true when joints() should be sent.
   bool update(double dt);
@@ -100,6 +113,11 @@ private:
   double trans_from_{0.0};
   double trans_to_{0.0};
   double height_{0.0};
+  double slope_pitch_{0.0};  // estimated ground slope in the body frame [rad]
+  double slope_roll_{0.0};
+  bool slope_valid_{false};
+  double shift_x_{0.0};  // applied (rate-limited) slope shift [m]
+  double shift_y_{0.0};
 
   std::array<double, kNumJoints> joints_{};
   int unreachable_{0};

@@ -58,7 +58,17 @@ def _limit(deg_range, effort, velocity):
     return f'<limit lower="{lo:.4f}" upper="{hi:.4f}" effort="{effort}" velocity="{velocity}"/>'
 
 
-def build_urdf(geometry, description=None, gazebo=False, namespace='dog'):
+def stand_angles(geometry, height):
+    """(hip, thigh, calf) [rad] with the foot straight under the thigh axis at
+    `height` below it (same IK as dog_control, knee bent backwards)."""
+    L2, L3 = geometry['thigh'], geometry['calf']
+    r = min(max(height, abs(L2 - L3) + 1e-3), L2 + L3 - 1e-3)
+    calf = -math.acos(max(-1.0, min(1.0, (r * r - L2 * L2 - L3 * L3) / (2 * L2 * L3))))
+    thigh = math.atan2(-L3 * math.sin(calf), L2 + L3 * math.cos(calf))
+    return 0.0, thigh, calf
+
+
+def build_urdf(geometry, description=None, gazebo=False, namespace='dog', initial=None):
     g = geometry
     d = dict(DEFAULT_DESCRIPTION)
     d.update(description or {})
@@ -129,7 +139,7 @@ def build_urdf(geometry, description=None, gazebo=False, namespace='dog'):
             + _inertial(0.005, (1e-6, 1e-6, 1e-6)) + '</link>')
 
     if gazebo:
-        out.append(_gazebo_extras(namespace, d['sim_p_gain'], d['servo_velocity']))
+        out.append(_gazebo_extras(namespace, d['sim_p_gain'], d['servo_velocity'], initial))
     out.append('</robot>')
     return '\n'.join(out)
 
@@ -142,9 +152,10 @@ def sim_command_topic(namespace, joint):
     return f'/{namespace}/sim/{joint}/cmd_pos'
 
 
-def _gazebo_extras(ns, p_gain, vmax):
+def _gazebo_extras(ns, p_gain, vmax, initial=None):
     parts = []
-    for joint in joint_names():
+    for k, joint in enumerate(joint_names()):
+        init = f'<initial_position>{initial[k % 3]:.4f}</initial_position>' if initial else ''
         # Velocity-command mode: the joint behaves like a hobby servo, a
         # position loop whose speed and torque are capped by the URDF limits.
         parts.append(
@@ -152,7 +163,7 @@ def _gazebo_extras(ns, p_gain, vmax):
             'name="gz::sim::systems::JointPositionController">'
             f'<joint_name>{joint}</joint_name><topic>{sim_command_topic(ns, joint)}</topic>'
             '<use_velocity_commands>true</use_velocity_commands>'
-            f'<p_gain>{p_gain}</p_gain><i_gain>0</i_gain><d_gain>0</d_gain>'
+            f'<p_gain>{p_gain}</p_gain><i_gain>0</i_gain><d_gain>0</d_gain>{init}'
             f'<cmd_max>{vmax}</cmd_max><cmd_min>{-vmax}</cmd_min></plugin></gazebo>')
     parts.append(
         '<gazebo><plugin filename="gz-sim-joint-state-publisher-system" '

@@ -52,6 +52,7 @@ ros2 launch dog_bringup robot.launch.py backend:=mock rviz:=true   # без фи
 | [docs/CONTROL.md](docs/CONTROL.md) | Раскладки геймпада и клавиатуры, веб-пульт, цепочка безопасности |
 | [docs/CALIBRATION.md](docs/CALIBRATION.md) | Калибровка сервоприводов пошагово |
 | [docs/SIMULATION.md](docs/SIMULATION.md) | Gazebo, `walk_check`, как подбиралась походка |
+| [docs/TERRAIN.md](docs/TERRAIN.md) | **Подъём, спуск, волны, камни:** пределы уклонов и неровностей по манёврам, компенсация по IMU |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Узлы, топики, режимы, походка, кинематика, тесты |
 
 ## Структура
@@ -59,12 +60,12 @@ ros2 launch dog_bringup robot.launch.py backend:=mock rviz:=true   # без фи
 ```
 ros2_ws/src/
   dog_control/      кинематика, рысь, режимы + locomotion_node        (C++)
-  dog_hardware/     драйвер PCA9685, калибровка, E-STOP, pca9685_probe (C++)
+  dog_hardware/     драйвер PCA9685, калибровка, датчик тока, IMU      (C++)
   dog_teleop/       геймпад, joy_teleop, клавиатура                   (C++)
   dog_web/          веб-пульт: HTTP + WebSocket + страница             (Python)
   dog_description/  генератор URDF из robot.yaml                      (Python)
   dog_bringup/      launch, конфиги (robot / servos / teleop), calib_pose
-  dog_gazebo/       симуляция, walk_check
+  dog_gazebo/       симуляция, walk_check, миры с рельефом, terrain_sweep
 docker/             образ робота (arm64/amd64) и образ симуляции
 legacy/v1/          предыдущая версия (не собирается)
 ```
@@ -74,8 +75,10 @@ legacy/v1/          предыдущая версия (не собирается
 | | Статус |
 |---|---|
 | Сборка без предупреждений, Jazzy и Lyrical | ✅ |
-| 71 тест (юнит + интеграционные: весь стек, веб, геймпад через FIFO) | ✅ на обеих версиях |
+| 97 тестов (юнит + интеграционные: весь стек, веб, геймпад через FIFO, IMU) | ✅ на обеих версиях |
 | Ходьба в Gazebo (`walk_check` 8/8), Harmonic и Jetty | ✅ |
+| Рельеф: уклон 10° (все манёвры), волны и камни 10 мм; пределы в TERRAIN.md | ✅ в CI |
+| Компенсация уклона по IMU (MPU6050 находится на шине сам) | ✅ в симуляции, на роботе проверить оси |
 | Клавиатурный пульт в настоящем терминале (pty) | ✅ |
 | Запуск на реальном роботе | ⏳ нужна калибровка и измерения (см. HARDWARE.md) |
 | Удержание курса по IMU (убрать увод рыси) | следующий шаг |

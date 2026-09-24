@@ -41,6 +41,15 @@
       accel_vy: 0.3
       accel_wz: 2.0         # [rad/s^2]
 
+    # IMU slope compensation: used only while imu/data is published (Gazebo,
+    # or a robot with an IMU); feet shift downhill by gain * height * tan(slope).
+    slope:
+      compensation: true
+      gain: 1.0
+      filter_tau: 0.8       # [s] averages out the gait's own rocking
+      max_shift: 0.04       # [m]
+      max_deg: 25.0         # readings beyond this are ignored (falling / lifted)
+
     # Only used by the URDF generator (visuals, inertia, simulation).
     description:
       body_length: 0.23     # trunk box [m]

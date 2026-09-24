@@ -139,6 +139,27 @@ void LocomotionController::setBodyPose(const BodyPose & pose)
     pose.height, p_.min_height - p_.stand_height, p_.max_height - p_.stand_height);
 }
 
+void LocomotionController::setImuAttitude(double roll, double pitch, double dt)
+{
+  if (!p_.slope_compensation || dt <= 0.0) {return;}
+  const bool upright = mode_ == Mode::STAND || mode_ == Mode::WALK;
+  const double lim = p_.slope_max_deg * M_PI / 180.0;
+  // The body is commanded parallel to the ground plus pose_: what remains is
+  // the ground's slope. Only trust it while standing on the legs.
+  const double gp = pitch - pose_.pitch;
+  const double gr = roll - pose_.roll;
+  if (!upright || std::abs(gp) > lim || std::abs(gr) > lim) {return;}
+  const double k = 1.0 - std::exp(-dt / std::max(p_.slope_filter_tau, 1e-3));
+  if (!slope_valid_) {
+    slope_pitch_ = gp;
+    slope_roll_ = gr;
+    slope_valid_ = true;
+  } else {
+    slope_pitch_ += (gp - slope_pitch_) * k;
+    slope_roll_ += (gr - slope_roll_) * k;
+  }
+}
+
 bool LocomotionController::update(double dt)
 {
   unreachable_ = 0;
@@ -158,6 +179,18 @@ bool LocomotionController::update(double dt)
   pose_.roll = approach(pose_.roll, pose_goal.roll, p_.pose_rate * dt);
   pose_.pitch = approach(pose_.pitch, pose_goal.pitch, p_.pose_rate * dt);
   pose_.height = approach(pose_.height, pose_goal.height, p_.height_rate * dt);
+
+  // Slope compensation: gravity projects the centre of mass downhill by
+  // height * tan(slope); move the feet the same way (body uphill of them).
+  double shift_x = 0.0, shift_y = 0.0;
+  if (p_.slope_compensation && slope_valid_ && upright) {
+    const double m = p_.slope_max_shift;
+    const double h = std::max(height_, p_.min_height);
+    shift_x = std::clamp(p_.slope_gain * h * std::tan(slope_pitch_), -m, m);
+    shift_y = std::clamp(-p_.slope_gain * h * std::tan(slope_roll_), -m, m);
+  }
+  shift_x_ = approach(shift_x_, shift_x, 0.05 * dt);  // <= 5 cm/s
+  shift_y_ = approach(shift_y_, shift_y, 0.05 * dt);
 
   switch (mode_) {
     case Mode::PASSIVE:
@@ -210,7 +243,7 @@ void LocomotionController::solve(double height, const BodyPose & pose)
   const double cp = std::cos(pose.pitch), sp = std::sin(pose.pitch);
   const auto & feet = gait_.feet();
   for (int leg = 0; leg < kNumLegs; ++leg) {
-    const Vec3 g{feet[leg].x, feet[leg].y, -height + feet[leg].z};
+    const Vec3 g{feet[leg].x + shift_x_, feet[leg].y + shift_y_, -height + feet[leg].z};
     // R^T * g
     const Vec3 b{
       cp * g.x - sp * g.z,

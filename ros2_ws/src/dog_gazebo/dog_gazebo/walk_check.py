@@ -7,6 +7,11 @@ ground-truth odometry from Gazebo. Exit code 0 = all maneuvers passed.
 
 Thresholds are deliberately loose: an open-loop trot on a 1.5 kg servo dog
 slips and drifts; this catches sign errors, falls and broken gaits.
+
+On terrain (sim.launch.py terrain:=slope|waves|rough) pass the same terrain
+so tilt and body height are judged against the ground, not the horizon:
+  ros2 run dog_gazebo walk_check --terrain slope --level 10
+Distances are measured along the slope in the robot's starting frame.
 """
 
 import argparse
@@ -15,11 +20,14 @@ import math
 import sys
 import time
 
+import numpy as np
 import rclpy
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import String
+
+from dog_gazebo import terrain
 
 
 def _rpy(q):
@@ -29,8 +37,19 @@ def _rpy(q):
     return roll, pitch, yaw
 
 
+def _rot(q):
+    x, y, z, w = q.x, q.y, q.z, q.w
+    return np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+                     [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                     [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
+
+
 class WalkCheck:
-    def __init__(self):
+    def __init__(self, kind='flat', level=0.0, min_ratio=0.4, max_tilt=20.0, seconds=5.0):
+        self.normal = np.array(terrain.normal(kind, level))
+        self.kind, self.level = kind, level
+        self.min_ratio, self.max_tilt, self.seconds = min_ratio, max_tilt, seconds
+        self.fallen = False
         self.node = rclpy.create_node('walk_check', namespace='dog')
         latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                              durability=DurabilityPolicy.TRANSIENT_LOCAL)
@@ -74,9 +93,27 @@ class WalkCheck:
                 publish()
             rclpy.spin_once(self.node, timeout_sec=0.02)
             if self.odom:
-                r, p, _ = _rpy(self.odom.pose.pose.orientation)
-                worst_tilt = max(worst_tilt, abs(r), abs(p))
-        return math.degrees(worst_tilt)
+                worst_tilt = max(worst_tilt, self.tilt())
+        if worst_tilt > 60.0:
+            self.fallen = True
+        return worst_tilt
+
+    def ground(self):
+        p = self.odom.pose.pose.position
+        h, n = terrain.surface(self.kind, self.level, p.x)
+        return h, np.array(n)
+
+    def tilt(self):
+        """Angle between the body's up axis and the local ground normal [deg]."""
+        up = _rot(self.odom.pose.pose.orientation)[:, 2]
+        _, n = self.ground()
+        return math.degrees(math.acos(max(-1.0, min(1.0, float(up @ n)))))
+
+    def height(self):
+        """Body height above the local ground surface, along its normal [m]."""
+        p = self.odom.pose.pose.position
+        h, n = self.ground()
+        return float((p.z - h) * n[2])
 
     def pose(self):
         p = self.odom.pose.pose.position
@@ -88,19 +125,25 @@ class WalkCheck:
 
     def maneuver(self, name, vx, vy, wz, seconds, expect):
         self.phase = name
-        x0, y0, _, yaw0 = self.pose()
+        if self.fallen:
+            self.check(name, False, 'skipped: robot has fallen', fallen=True)
+            return
+        p0 = self.odom.pose.pose.position
+        R0 = _rot(self.odom.pose.pose.orientation)
+        yaw0 = self.yaw_unwrapped
         t = Twist()
         t.linear.x, t.linear.y, t.angular.z = float(vx), float(vy), float(wz)
         tilt = self.spin(seconds, lambda: self.vel.publish(t))
         tilt = max(tilt, self.spin(1.5))  # coast to a stop
-        x1, y1, z1, yaw1 = self.pose()
-        c, s = math.cos(yaw0), math.sin(yaw0)
-        dx, dy = c * (x1 - x0) + s * (y1 - y0), -s * (x1 - x0) + c * (y1 - y0)
-        dyaw = yaw1 - yaw0
+        p1 = self.odom.pose.pose.position
+        d = np.array([p1.x - p0.x, p1.y - p0.y, p1.z - p0.z])
+        dx, dy = float(d @ R0[:, 0]), float(d @ R0[:, 1])  # along the body axes (on the slope)
+        dyaw = self.yaw_unwrapped - yaw0
+        z1 = self.height()
         moved = {'x': dx, 'y': dy, 'yaw': dyaw}
         axis, target = expect
         ratio = moved[axis] / target
-        ok = ratio > 0.4 and tilt < 20.0 and z1 > 0.12
+        ok = ratio > self.min_ratio and tilt < self.max_tilt and z1 > 0.12 and not self.fallen
         self.check(name, ok, 'dx=%+.2fm dy=%+.2fm dyaw=%+.0fdeg  (%d%% of command)  tilt<=%.0fdeg z=%.3f' % (
             dx, dy, math.degrees(dyaw), 100 * ratio, tilt, z1),
             cmd=[vx, vy, wz], seconds=seconds, dx=dx, dy=dy, dyaw_deg=math.degrees(dyaw),
@@ -119,21 +162,35 @@ class WalkCheck:
         self.spin(4.0, lambda: self.cmd.publish(String(data='stand'))
                   if self.state in ('passive', 'lying') else None)
         self.spin(1.0)
-        z = self.pose()[2]
-        self.check('stand', self.state == 'stand' and 0.14 < z < 0.19,
-                   'state=%s z=%.3f' % (self.state, z), z=z)
-        T = 5.0
-        self.maneuver('forward', 0.12, 0, 0, T, ('x', 0.12 * T))
-        self.maneuver('backward', -0.10, 0, 0, T, ('x', -0.10 * T))
-        self.maneuver('left', 0, 0.06, 0, T, ('y', 0.06 * T))
-        self.maneuver('right', 0, -0.06, 0, T, ('y', -0.06 * T))
-        self.maneuver('turn_ccw', 0, 0, 0.5, T, ('yaw', 0.5 * T))
-        self.maneuver('turn_cw', 0, 0, -0.5, T, ('yaw', -0.5 * T))
+        z = self.height()
+        self.check('stand', self.state == 'stand' and 0.14 < z < 0.19 and self.tilt() < self.max_tilt,
+                   'state=%s z=%.3f tilt=%.0fdeg' % (self.state, z, self.tilt()), z=z)
+        T = self.seconds
+        if self.kind == 'slope':
+            # climb onto the ramp, traverse and turn on it, then walk back down
+            self.maneuver('forward', 0.12, 0, 0, T, ('x', 0.12 * T))
+            self.maneuver('left', 0, 0.06, 0, T, ('y', 0.06 * T))
+            self.maneuver('right', 0, -0.06, 0, T, ('y', -0.06 * T))
+            self.maneuver('turn_ccw', 0, 0, 0.5, T * 0.5, ('yaw', 0.25 * T))
+            self.maneuver('turn_cw', 0, 0, -0.5, T * 0.5, ('yaw', -0.25 * T))
+            self.maneuver('backward', -0.10, 0, 0, T * 1.4, ('x', -0.14 * T))
+        else:
+            self.maneuver('forward', 0.12, 0, 0, T, ('x', 0.12 * T))
+            self.maneuver('backward', -0.10, 0, 0, T, ('x', -0.10 * T))
+            self.maneuver('left', 0, 0.06, 0, T, ('y', 0.06 * T))
+            self.maneuver('right', 0, -0.06, 0, T, ('y', -0.06 * T))
+            self.maneuver('turn_ccw', 0, 0, 0.5, T, ('yaw', 0.5 * T))
+            self.maneuver('turn_cw', 0, 0, -0.5, T, ('yaw', -0.5 * T))
         self.phase = 'lie'
         self.cmd.publish(String(data='lie'))
-        self.spin(3.0)
-        z = self.pose()[2]
-        self.check('lie', self.state == 'lying' and z < 0.12, 'state=%s z=%.3f' % (self.state, z), z=z)
+        # finishes the steps first; wall-clock wait, so allow for a slow simulation
+        end = time.time() + 10.0
+        while self.state != 'lying' and time.time() < end and not self.fallen:
+            self.spin(0.5)
+        self.spin(0.5)
+        z = self.height()
+        self.check('lie', self.state == 'lying' and z < 0.12 and not self.fallen,
+                   'state=%s z=%.3f' % (self.state, z), z=z)
         failed = [r for r in self.results if not r[1]]
         print('%d/%d passed' % (len(self.results) - len(failed), len(self.results)))
         return 1 if failed else 0
@@ -142,14 +199,20 @@ class WalkCheck:
 def main():
     ap = argparse.ArgumentParser(description='Drive the simulated dog and check the odometry.')
     ap.add_argument('--trace', help='write results + odometry trace to this JSON file')
+    ap.add_argument('--terrain', default='flat', choices=['flat', 'slope', 'waves', 'rough'])
+    ap.add_argument('--level', type=float, default=0.0, help='slope [deg] or obstacle height [mm]')
+    ap.add_argument('--min-ratio', type=float, default=0.4, help='share of the command to pass')
+    ap.add_argument('--max-tilt', type=float, default=20.0, help='body tilt vs. the ground [deg]')
+    ap.add_argument('--seconds', type=float, default=5.0, help='duration of each maneuver')
     args, ros_args = ap.parse_known_args()
     rclpy.init(args=ros_args)
-    checker = WalkCheck()
+    checker = WalkCheck(args.terrain, args.level, args.min_ratio, args.max_tilt, args.seconds)
     try:
         code = checker.run()
         if args.trace:
             with open(args.trace, 'w') as f:
-                json.dump({'results': [{'name': n, 'ok': ok, 'detail': d, **v}
+                json.dump({'terrain': args.terrain, 'level': args.level,
+                           'results': [{'name': n, 'ok': ok, 'detail': d, **v}
                                        for n, ok, d, v in checker.results],
                            'trace': checker.trace}, f)
     finally:

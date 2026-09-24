@@ -166,3 +166,49 @@ TEST(Locomotion, JointSpeedsFitTheServos)
     EXPECT_EQ(c.unreachableCount(), 0);
   }
 }
+
+TEST(Locomotion, SlopeCompensationShiftsFeetDownhill)
+{
+  LocomotionParams p;
+  LocomotionController c(p);
+  c.request("stand");
+  run(c, 2.0);
+  const Vec3 flat = footInBody(c, p, 0);
+  // Standing on a slope rising ahead: body pitched nose-up by 10 deg.
+  const double slope = -10.0 * M_PI / 180.0;
+  for (int i = 0; i < 200; ++i) {
+    c.setImuAttitude(0.0, slope, kDt);
+    c.update(kDt);
+  }
+  EXPECT_NEAR(c.slopePitch(), slope, 1e-3);
+  const double expected = p.stand_height * std::tan(slope);  // ~ -26 mm (feet move downhill)
+  EXPECT_NEAR(footInBody(c, p, 0).x - flat.x, expected, 1e-3);
+  EXPECT_NEAR(footInBody(c, p, 2).x - c.neutralFoot(2).x, expected, 1e-3);
+  // Left side uphill (positive roll): feet move to the right.
+  for (int i = 0; i < 200; ++i) {
+    c.setImuAttitude(0.08, 0.0, kDt);
+    c.update(kDt);
+  }
+  EXPECT_LT(footInBody(c, p, 0).y - c.neutralFoot(0).y, -0.005);
+}
+
+TEST(Locomotion, SlopeCompensationIgnoresFallsAndCanBeDisabled)
+{
+  LocomotionParams p;
+  LocomotionController c(p);
+  c.request("stand");
+  run(c, 2.0);
+  c.setImuAttitude(0.0, 1.2, kDt);  // 69 deg: falling or picked up
+  EXPECT_DOUBLE_EQ(c.slopePitch(), 0.0);
+  LocomotionParams off = p;
+  off.slope_compensation = false;
+  LocomotionController d(off);
+  d.request("stand");
+  run(d, 2.0);
+  const Vec3 before = footInBody(d, off, 0);
+  for (int i = 0; i < 100; ++i) {
+    d.setImuAttitude(0.0, -0.17, kDt);
+    d.update(kDt);
+  }
+  EXPECT_NEAR(footInBody(d, off, 0).x, before.x, 1e-12);
+}
