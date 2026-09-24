@@ -3,11 +3,14 @@ ground-truth odometry from Gazebo. Exit code 0 = all maneuvers passed.
 
   ros2 launch dog_gazebo sim.launch.py headless:=true web:=false &
   ros2 run dog_gazebo walk_check
+  ros2 run dog_gazebo walk_check --trace run.json   # also save the odometry trace
 
 Thresholds are deliberately loose: an open-loop trot on a 1.5 kg servo dog
 slips and drifts; this catches sign errors, falls and broken gaits.
 """
 
+import argparse
+import json
 import math
 import sys
 import time
@@ -40,6 +43,9 @@ class WalkCheck:
         self.cmd = self.node.create_publisher(String, 'command', 10)
         self.vel = self.node.create_publisher(Twist, 'cmd_vel', 10)
         self.results = []
+        self.phase = 'setup'
+        self.trace = []
+        self._t0 = time.time()
 
     def _on_state(self, msg):
         self.state = msg.data
@@ -51,6 +57,14 @@ class WalkCheck:
             d = yaw - self._last_yaw
             self.yaw_unwrapped += math.atan2(math.sin(d), math.cos(d))
         self._last_yaw = yaw
+        t = time.time() - self._t0
+        if not self.trace or t - self.trace[-1]['t'] >= 0.05:
+            p = msg.pose.pose.position
+            r, pi, _ = _rpy(msg.pose.pose.orientation)
+            self.trace.append({'t': round(t, 3), 'phase': self.phase, 'state': self.state,
+                               'x': round(p.x, 4), 'y': round(p.y, 4), 'z': round(p.z, 4),
+                               'roll': round(math.degrees(r), 2), 'pitch': round(math.degrees(pi), 2),
+                               'yaw': round(math.degrees(self.yaw_unwrapped), 2)})
 
     def spin(self, seconds, publish=None):
         end = time.time() + seconds
@@ -68,11 +82,12 @@ class WalkCheck:
         p = self.odom.pose.pose.position
         return p.x, p.y, p.z, self.yaw_unwrapped
 
-    def check(self, name, ok, detail):
-        self.results.append((name, ok, detail))
+    def check(self, name, ok, detail, **values):
+        self.results.append((name, ok, detail, values))
         print('%-6s %-12s %s' % ('PASS' if ok else 'FAIL', name, detail), flush=True)
 
     def maneuver(self, name, vx, vy, wz, seconds, expect):
+        self.phase = name
         x0, y0, _, yaw0 = self.pose()
         t = Twist()
         t.linear.x, t.linear.y, t.angular.z = float(vx), float(vy), float(wz)
@@ -87,7 +102,9 @@ class WalkCheck:
         ratio = moved[axis] / target
         ok = ratio > 0.4 and tilt < 20.0 and z1 > 0.12
         self.check(name, ok, 'dx=%+.2fm dy=%+.2fm dyaw=%+.0fdeg  (%d%% of command)  tilt<=%.0fdeg z=%.3f' % (
-            dx, dy, math.degrees(dyaw), 100 * ratio, tilt, z1))
+            dx, dy, math.degrees(dyaw), 100 * ratio, tilt, z1),
+            cmd=[vx, vy, wz], seconds=seconds, dx=dx, dy=dy, dyaw_deg=math.degrees(dyaw),
+            ratio=ratio, tilt_deg=tilt, z=z1)
 
     def run(self):
         print('waiting for simulation...', flush=True)
@@ -98,12 +115,13 @@ class WalkCheck:
             print('FAIL: no /dog/odom or /dog/state - is sim.launch.py running?')
             return 1
         self.spin(2.0)
+        self.phase = 'stand'
         self.spin(4.0, lambda: self.cmd.publish(String(data='stand'))
                   if self.state in ('passive', 'lying') else None)
         self.spin(1.0)
         z = self.pose()[2]
         self.check('stand', self.state == 'stand' and 0.14 < z < 0.19,
-                   'state=%s z=%.3f' % (self.state, z))
+                   'state=%s z=%.3f' % (self.state, z), z=z)
         T = 5.0
         self.maneuver('forward', 0.12, 0, 0, T, ('x', 0.12 * T))
         self.maneuver('backward', -0.10, 0, 0, T, ('x', -0.10 * T))
@@ -111,20 +129,29 @@ class WalkCheck:
         self.maneuver('right', 0, -0.06, 0, T, ('y', -0.06 * T))
         self.maneuver('turn_ccw', 0, 0, 0.5, T, ('yaw', 0.5 * T))
         self.maneuver('turn_cw', 0, 0, -0.5, T, ('yaw', -0.5 * T))
+        self.phase = 'lie'
         self.cmd.publish(String(data='lie'))
         self.spin(3.0)
         z = self.pose()[2]
-        self.check('lie', self.state == 'lying' and z < 0.12, 'state=%s z=%.3f' % (self.state, z))
+        self.check('lie', self.state == 'lying' and z < 0.12, 'state=%s z=%.3f' % (self.state, z), z=z)
         failed = [r for r in self.results if not r[1]]
         print('%d/%d passed' % (len(self.results) - len(failed), len(self.results)))
         return 1 if failed else 0
 
 
 def main():
-    rclpy.init()
+    ap = argparse.ArgumentParser(description='Drive the simulated dog and check the odometry.')
+    ap.add_argument('--trace', help='write results + odometry trace to this JSON file')
+    args, ros_args = ap.parse_known_args()
+    rclpy.init(args=ros_args)
     checker = WalkCheck()
     try:
         code = checker.run()
+        if args.trace:
+            with open(args.trace, 'w') as f:
+                json.dump({'results': [{'name': n, 'ok': ok, 'detail': d, **v}
+                                       for n, ok, d, v in checker.results],
+                           'trace': checker.trace}, f)
     finally:
         checker.node.destroy_node()
         rclpy.shutdown()
