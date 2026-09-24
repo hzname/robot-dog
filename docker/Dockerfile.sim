@@ -1,0 +1,23 @@
+# Robot Dog 2.0 — Gazebo simulation image for a PC (amd64).
+#
+#   docker build -f docker/Dockerfile.sim -t robot-dog-sim:2.0 .
+#   docker run --rm -it --net=host robot-dog-sim:2.0                         # headless + web :8080
+#   docker run --rm -it --net=host robot-dog-sim:2.0 ros2 run dog_gazebo walk_check   (second shell)
+#
+# jazzy-simulation ships Gazebo Harmonic + ros_gz; lyrical-simulation ships Gazebo Jetty.
+ARG ROS_DISTRO=jazzy
+FROM osrf/ros:${ROS_DISTRO}-simulation
+ARG ROS_DISTRO
+
+SHELL ["/bin/bash", "-c"]
+WORKDIR /ws
+COPY ros2_ws/src ./src
+
+RUN source /opt/ros/${ROS_DISTRO}/setup.bash \
+ && colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+ && rm -rf build log
+
+COPY docker/entrypoint.sh /entrypoint.sh
+ENV ROS_DISTRO=${ROS_DISTRO}
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["ros2", "launch", "dog_gazebo", "sim.launch.py", "headless:=true"]

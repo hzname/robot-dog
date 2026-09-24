@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+"""Hold every leg (or one leg) in a joint pose, for servo calibration.
+
+  ros2 run dog_bringup calib_pose                 # reference pose: 0 0 -90 deg
+  ros2 run dog_bringup calib_pose 15 0 -90        # hips +15 deg: every foot moves LEFT
+  ros2 run dog_bringup calib_pose 0 20 -90 --leg lf
+
+Angles are hip / thigh / calf in degrees, URDF convention (docs/CALIBRATION.md).
+Publishes /dog/joint_commands at 5 Hz until Ctrl-C. Run it with only the
+servo driver up (not locomotion), robot on a stand with legs hanging free.
+"""
+import argparse
+import math
+
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import JointState
+
+LEGS = ('lf', 'rf', 'lr', 'rr')
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('hip', type=float, nargs='?', default=0.0)
+    ap.add_argument('thigh', type=float, nargs='?', default=0.0)
+    ap.add_argument('calf', type=float, nargs='?', default=-90.0)
+    ap.add_argument('--leg', choices=LEGS, help='only this leg (others are not commanded)')
+    args, ros_args = ap.parse_known_args()
+
+    rclpy.init(args=ros_args)
+    node = Node('calib_pose', namespace='dog')
+    pub = node.create_publisher(JointState, 'joint_commands', 10)
+    msg = JointState()
+    for leg in ([args.leg] if args.leg else LEGS):
+        for joint, deg in (('hip', args.hip), ('thigh', args.thigh), ('calf', args.calf)):
+            msg.name.append(f'{leg}_{joint}_joint')
+            msg.position.append(math.radians(deg))
+    node.create_timer(0.2, lambda: pub.publish(msg))
+    node.get_logger().info('holding %s at hip %.1f thigh %.1f calf %.1f deg (Ctrl-C to stop)' % (
+        args.leg or 'all legs', args.hip, args.thigh, args.calf))
+    try:
+        rclpy.spin(node)
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
+        pass
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()

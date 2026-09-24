@@ -1,43 +1,17 @@
-```
-# Dependencies
+# colcon
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+ros2_ws/build_*/
+ros2_ws/install_*/
+
+# Python
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
+.pytest_cache/
 
-# Test coverage
-.coverage
-htmlcov/
-.coverage.*
-
-# Environment
-.env
-.env.local
-.env.*
-venv/
-.venv/
-.envrc
-
-# Logs
-*.log
-
-# OS generated files
-.DS_Store
-Thumbs.db
-
-# IDE
+# Editors / OS
 .vscode/
 .idea/
 *.swp
-*.swo
-*.tmp
-
-# Build artifacts
-build/
-dist/
-*.egg-info/
-
-# Testing
-.pytest_cache/
-.mypy_cache/
-```
+.DS_Store

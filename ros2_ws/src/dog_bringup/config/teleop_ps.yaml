@@ -1,0 +1,15 @@
+# PlayStation DualShock 4 / DualSense on the Linux hid-playstation / hid-sony
+# drivers (joydev layout). Load after teleop.yaml to override joy_teleop.
+/**/joy_teleop:
+  ros__parameters:
+    axis_vx: 1          # left stick up/down
+    axis_vy: 0          # left stick left/right
+    axis_wz: 3          # right stick left/right
+    axis_pitch: 4       # right stick up/down
+    axis_height: 7      # d-pad up/down
+    button_deadman: 4   # L1
+    button_turbo: 5     # R1
+    button_stand: 0     # Cross
+    button_lie: 1       # Circle
+    button_estop: 8     # Share / Create
+    button_release: 9   # Options

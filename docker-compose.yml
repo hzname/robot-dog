@@ -1,20 +1,32 @@
-version: '3.8'
+# Robot Dog 2.0 on the Banana Pi (Armbian, Docker).
+#
+#   docker compose up -d --build        # build on the Pi and start
+#   docker compose logs -f
+#   docker compose exec robot ros2 run dog_teleop keyboard_teleop --ros-args -r __ns:=/dog
+#
+# Web control: http://<pi-address>:8080
 services:
-  robot_dog:
-    image: ros:jazzy
+  robot:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        ROS_DISTRO: jazzy
+    image: robot-dog:2.0
     container_name: robot_dog
-    privileged: true
-    cap_add:
-      - SYS_NICE
-    devices:
-      - /dev/i2c-0:/dev/i2c-0
-    volumes:
-      - /home/sg/robot-dog/robot_dog_ws:/workspace
-      - /dev/i2c-0:/dev/i2c-0
-      - /tmp/robot_dog:/tmp/robot_dog
-    network_mode: host
-    working_dir: /workspace
-    environment:
-      - DOG_TOPIC_PREFIX=
-    command: ["bash", "-c", "source /opt/ros/jazzy/setup.bash && source /workspace/install/setup.bash && ros2 daemon stop 2>/dev/null; echo '=== SYSTEM READY ===' && echo 'Starting IMU node...' && ros2 run dog_sensors_cpp imu_node --ros-args -p simulate:=false -p driver_type:=mpu6050 -p i2c_bus:=/dev/i2c-0 & sleep 2 && echo 'Starting servo driver...' && ros2 run dog_hardware_cpp servo_driver_node --ros-args -p bus_type:=i2c -p device_port:=/dev/i2c-0 -p servo_count:=12 -p watchdog_timeout_s:=10.0 & sleep 2 && echo 'Starting gait controller...' && ros2 run dog_control_cpp gait_controller & sleep 2 && echo 'Starting health monitor...' && ros2 run dog_monitor_cpp health_monitor & sleep 1 && echo 'Starting ROS bridge...' && rm -f /tmp/robot_dog/ros_bridge.sock && mkdir -p /tmp/robot_dog && python3 -u /workspace/ros_bridge.py & echo '=== ALL SYSTEMS ONLINE ===' && tail -f /dev/null"]
     restart: unless-stopped
+    network_mode: host          # ROS 2 discovery + web page on :8080
+    devices:
+      - /dev/i2c-0:/dev/i2c-0   # PCA9685 (0x40) + MPU6050 (0x68)
+    volumes:
+      - /dev/input:/dev/input   # gamepad (/dev/input/js0), survives re-plugging
+      - ./ros2_ws/src/dog_bringup/config:/ws/install/dog_bringup/share/dog_bringup/config:ro
+    device_cgroup_rules:
+      - 'c 13:* rmw'            # input devices (js*, event*) plugged in later
+    environment:
+      - ROS_DOMAIN_ID=0
+    stop_signal: SIGINT
+    stop_grace_period: 10s
+    command: >
+      ros2 launch dog_bringup robot.launch.py
+      backend:=pca9685 gamepad:=true gamepad_profile:=xbox web:=true

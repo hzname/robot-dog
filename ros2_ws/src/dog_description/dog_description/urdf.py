@@ -1,0 +1,187 @@
+"""URDF generator for the robot dog, driven by dog_bringup/config/robot.yaml.
+
+No xacro: launch files call build_urdf() directly, so geometry lives in one
+YAML file shared with the locomotion controller.
+
+Joint convention matches dog_control/kinematics.hpp:
+  <leg>_hip_joint   axis +x, zero = leg vertical
+  <leg>_thigh_joint axis +y, zero = thigh straight down, + swings foot back
+  <leg>_calf_joint  axis +y, zero = knee straight
+"""
+
+import math
+
+import yaml
+
+LEGS = (('lf', 1, 1), ('rf', 1, -1), ('lr', -1, 1), ('rr', -1, -1))  # name, front, side
+
+DEFAULT_DESCRIPTION = {
+    'body_length': 0.23, 'body_width': 0.10, 'body_height': 0.05,
+    'body_mass': 0.80, 'hip_mass': 0.06, 'thigh_mass': 0.08, 'calf_mass': 0.03,
+    'foot_radius': 0.012, 'servo_effort': 1.1, 'servo_velocity': 6.0, 'sim_p_gain': 25.0,
+    'hip_limits_deg': [-40.0, 40.0], 'thigh_limits_deg': [-45.0, 135.0],
+    'calf_limits_deg': [-165.0, -15.0],
+}
+
+
+def load_config(path):
+    """Returns (geometry, description) dicts from a robot.yaml file."""
+    with open(path) as f:
+        data = yaml.safe_load(f)
+    params = data['/**']['ros__parameters']
+    desc = dict(DEFAULT_DESCRIPTION)
+    desc.update(params.get('description', {}))
+    return params['geometry'], desc
+
+
+def _box_inertia(m, x, y, z):
+    return (m * (y * y + z * z) / 12, m * (x * x + z * z) / 12, m * (x * x + y * y) / 12)
+
+
+def _cyl_inertia(m, r, h):
+    """Cylinder along z."""
+    ixx = m * (3 * r * r + h * h) / 12
+    return (ixx, ixx, m * r * r / 2)
+
+
+def _inertial(m, ixyz, xyz=(0, 0, 0)):
+    ixx, iyy, izz = ixyz
+    return (
+        f'<inertial><origin xyz="{xyz[0]:.4f} {xyz[1]:.4f} {xyz[2]:.4f}"/>'
+        f'<mass value="{m:.4f}"/>'
+        f'<inertia ixx="{ixx:.3e}" ixy="0" ixz="0" iyy="{iyy:.3e}" iyz="0" izz="{izz:.3e}"/>'
+        '</inertial>')
+
+
+def _limit(deg_range, effort, velocity):
+    lo, hi = (math.radians(v) for v in deg_range)
+    return f'<limit lower="{lo:.4f}" upper="{hi:.4f}" effort="{effort}" velocity="{velocity}"/>'
+
+
+def build_urdf(geometry, description=None, gazebo=False, namespace='dog'):
+    g = geometry
+    d = dict(DEFAULT_DESCRIPTION)
+    d.update(description or {})
+    L1, L2, L3 = g['hip_offset'], g['thigh'], g['calf']
+    bl, bw, bh = d['body_length'], d['body_width'], d['body_height']
+    r_leg = 0.012
+    out = ['<?xml version="1.0"?>', '<robot name="robot_dog">']
+    out.append(
+        '<material name="body"><color rgba="0.20 0.22 0.25 1"/></material>'
+        '<material name="leg"><color rgba="0.85 0.55 0.15 1"/></material>'
+        '<material name="foot"><color rgba="0.1 0.1 0.1 1"/></material>')
+
+    out.append('<link name="base_link"/>')
+    out.append(
+        '<link name="trunk">'
+        f'<visual><geometry><box size="{bl} {bw} {bh}"/></geometry><material name="body"/></visual>'
+        f'<collision><geometry><box size="{bl} {bw} {bh}"/></geometry></collision>'
+        + _inertial(d['body_mass'], _box_inertia(d['body_mass'], bl, bw, bh)) + '</link>')
+    out.append('<joint name="base_to_trunk" type="fixed"><parent link="base_link"/>'
+               '<child link="trunk"/></joint>')
+    out.append('<link name="imu_link"/>'
+               '<joint name="imu_joint" type="fixed"><parent link="trunk"/>'
+               '<child link="imu_link"/><origin xyz="0 0 0.02"/></joint>')
+
+    eff, vel = d['servo_effort'], d['servo_velocity']
+    for name, front, side in LEGS:
+        hx, hy = front * g['hip_x'], side * g['hip_y']
+        # hip: abduction joint, link spans the lateral offset
+        out.append(
+            f'<joint name="{name}_hip_joint" type="revolute"><parent link="trunk"/>'
+            f'<child link="{name}_hip"/><origin xyz="{hx} {hy} 0"/><axis xyz="1 0 0"/>'
+            + _limit(d['hip_limits_deg'], eff, vel) + '</joint>')
+        out.append(
+            f'<link name="{name}_hip"><visual><origin xyz="0 {side * L1 / 2:.4f} 0" rpy="1.5708 0 0"/>'
+            f'<geometry><cylinder radius="0.018" length="{L1}"/></geometry><material name="body"/></visual>'
+            + _inertial(d['hip_mass'], _cyl_inertia(d['hip_mass'], 0.018, L1), (0, side * L1 / 2, 0))
+            + '</link>')
+        # thigh
+        out.append(
+            f'<joint name="{name}_thigh_joint" type="revolute"><parent link="{name}_hip"/>'
+            f'<child link="{name}_thigh"/><origin xyz="0 {side * L1} 0"/><axis xyz="0 1 0"/>'
+            + _limit(d['thigh_limits_deg'], eff, vel) + '</joint>')
+        out.append(
+            f'<link name="{name}_thigh"><visual><origin xyz="0 0 {-L2 / 2}"/>'
+            f'<geometry><cylinder radius="{r_leg}" length="{L2}"/></geometry><material name="leg"/></visual>'
+            + _inertial(d['thigh_mass'], _cyl_inertia(d['thigh_mass'], r_leg, L2), (0, 0, -L2 / 2))
+            + '</link>')
+        # calf
+        out.append(
+            f'<joint name="{name}_calf_joint" type="revolute"><parent link="{name}_thigh"/>'
+            f'<child link="{name}_calf"/><origin xyz="0 0 {-L2}"/><axis xyz="0 1 0"/>'
+            + _limit(d['calf_limits_deg'], eff, vel) + '</joint>')
+        out.append(
+            f'<link name="{name}_calf"><visual><origin xyz="0 0 {-L3 / 2}"/>'
+            f'<geometry><cylinder radius="{r_leg * 0.8:.4f}" length="{L3}"/></geometry>'
+            '<material name="leg"/></visual>'
+            + _inertial(d['calf_mass'], _cyl_inertia(d['calf_mass'], r_leg * 0.8, L3), (0, 0, -L3 / 2))
+            + '</link>')
+        # foot (contact point)
+        fr = d['foot_radius']
+        out.append(
+            f'<joint name="{name}_foot_joint" type="fixed"><parent link="{name}_calf"/>'
+            f'<child link="{name}_foot"/><origin xyz="0 0 {-L3}"/></joint>')
+        out.append(
+            f'<link name="{name}_foot"><visual><geometry><sphere radius="{fr}"/></geometry>'
+            '<material name="foot"/></visual>'
+            f'<collision><geometry><sphere radius="{fr}"/></geometry></collision>'
+            + _inertial(0.005, (1e-6, 1e-6, 1e-6)) + '</link>')
+
+    if gazebo:
+        out.append(_gazebo_extras(namespace, d['sim_p_gain'], d['servo_velocity']))
+    out.append('</robot>')
+    return '\n'.join(out)
+
+
+def joint_names():
+    return [f'{leg}_{j}_joint' for leg, _, _ in LEGS for j in ('hip', 'thigh', 'calf')]
+
+
+def sim_command_topic(namespace, joint):
+    return f'/{namespace}/sim/{joint}/cmd_pos'
+
+
+def _gazebo_extras(ns, p_gain, vmax):
+    parts = []
+    for joint in joint_names():
+        # Velocity-command mode: the joint behaves like a hobby servo, a
+        # position loop whose speed and torque are capped by the URDF limits.
+        parts.append(
+            '<gazebo><plugin filename="gz-sim-joint-position-controller-system" '
+            'name="gz::sim::systems::JointPositionController">'
+            f'<joint_name>{joint}</joint_name><topic>{sim_command_topic(ns, joint)}</topic>'
+            '<use_velocity_commands>true</use_velocity_commands>'
+            f'<p_gain>{p_gain}</p_gain><i_gain>0</i_gain><d_gain>0</d_gain>'
+            f'<cmd_max>{vmax}</cmd_max><cmd_min>{-vmax}</cmd_min></plugin></gazebo>')
+    parts.append(
+        '<gazebo><plugin filename="gz-sim-joint-state-publisher-system" '
+        f'name="gz::sim::systems::JointStatePublisher"><topic>/{ns}/sim/joint_states</topic>'
+        '</plugin></gazebo>')
+    parts.append(
+        '<gazebo><plugin filename="gz-sim-odometry-publisher-system" '
+        'name="gz::sim::systems::OdometryPublisher">'
+        f'<odom_topic>/{ns}/sim/odom</odom_topic><odom_frame>odom</odom_frame>'
+        '<robot_base_frame>base_link</robot_base_frame><dimensions>3</dimensions>'
+        '<odom_publish_frequency>50</odom_publish_frequency></plugin></gazebo>')
+    parts.append(
+        '<gazebo reference="trunk"><sensor name="imu" type="imu"><always_on>1</always_on>'
+        f'<update_rate>100</update_rate><topic>/{ns}/sim/imu</topic></sensor></gazebo>')
+    for leg, _, _ in LEGS:
+        parts.append(f'<gazebo reference="{leg}_foot"><mu1>1.2</mu1><mu2>1.2</mu2></gazebo>')
+    return '\n'.join(parts)
+
+
+def main():
+    """CLI: generate_urdf <robot.yaml> [--gazebo] > robot.urdf"""
+    import argparse
+    ap = argparse.ArgumentParser(description=main.__doc__)
+    ap.add_argument('config')
+    ap.add_argument('--gazebo', action='store_true')
+    args = ap.parse_args()
+    geometry, description = load_config(args.config)
+    print(build_urdf(geometry, description, gazebo=args.gazebo))
+
+
+if __name__ == '__main__':
+    main()
