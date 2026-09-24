@@ -37,6 +37,21 @@ jobs:
           name: test-logs-${{ matrix.distro }}
           path: ros2_ws/log
 
+  autocal:
+    name: camera auto-calibration tool
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: tools/autocal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install numpy opencv-contrib-python-headless pytest
+      - run: python -m pytest -q tests
+      - run: python -m robotdog_autocal demo
+
   simulation:
     name: gazebo walk check (${{ matrix.distro }})
     runs-on: ubuntu-24.04

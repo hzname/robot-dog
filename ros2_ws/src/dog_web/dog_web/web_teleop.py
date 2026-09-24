@@ -23,7 +23,16 @@ from sensor_msgs.msg import BatteryState
 from std_msgs.msg import Bool, String
 
 from dog_web import protocol
+from dog_web.calibration import ALLOWED_MODES, CalibrationBridge
 from dog_web.wsserver import Server, WebSocketClosed
+
+
+def _is_calibration(text: str) -> bool:
+    try:
+        msg = json.loads(text)
+    except ValueError:
+        return False
+    return isinstance(msg, dict) and str(msg.get('type', '')).startswith('cal_')
 
 
 class WebTeleop(Node):
@@ -53,6 +62,8 @@ class WebTeleop(Node):
         self.mode = 'unknown'
         self.web_clients = set()
         self._aio_loop = None
+        self.allow_calibration = bool(self.declare_parameter('allow_calibration', True).value)
+        self.cal = CalibrationBridge(self) if self.allow_calibration else None
 
     # ------------------------------------------------------------ ROS side
     def _on_state(self, msg: String):
@@ -108,11 +119,18 @@ class WebTeleop(Node):
         self.get_logger().info('web client connected: %s (%d total)' % (ws.peer, len(self.web_clients)))
         watchdog = protocol.DriveWatchdog(self.drive_timeout)
         stop_task = asyncio.ensure_future(self._watch(ws, watchdog))
+        cal_task = None
         try:
             await ws.send(protocol.hello(self.limits))
             await self._broadcast_state()
             while True:
                 text = await ws.recv()
+                if _is_calibration(text):
+                    reply = await self._calibration(text)
+                    if reply.get('type') == 'cal_info' and cal_task is None:
+                        cal_task = asyncio.ensure_future(self._stream_status(ws))
+                    await ws.send(json.dumps(reply))
+                    continue
                 actions = protocol.handle_message(text, self.limits)
                 if actions.errors:
                     await ws.send(json.dumps({'type': 'error', 'message': actions.errors[0]}))
@@ -128,11 +146,42 @@ class WebTeleop(Node):
             pass
         finally:
             stop_task.cancel()
+            if cal_task:
+                cal_task.cancel()
             self.web_clients.discard(ws)
             if watchdog.moving:
                 self.send_actions(protocol.Actions(twist=(0.0, 0.0, 0.0)))
             self.get_logger().info('web client left: %s' % ws.peer)
             await self._broadcast_state()
+
+    async def _calibration(self, text):
+        """Handles one cal_* message; always returns a reply dict."""
+        if not self.cal:
+            return {'type': 'error', 'message': 'calibration is disabled (allow_calibration:=false)'}
+        try:
+            msg = json.loads(text)
+            kind = msg.get('type')
+            if kind == 'cal_hello':
+                return await self.cal.info()
+            if self.mode not in ALLOWED_MODES:
+                return {'type': 'error', 'message':
+                        f'calibration needs the robot passive (now: {self.mode}); press E-STOP, then release'}
+            if kind == 'cal_pose':
+                self.cal.pose(dict(msg.get('joints') or {}))
+                return {'type': 'cal_pose_ok'}
+            if kind == 'cal_set':
+                return await self.cal.set_params(dict(msg.get('params') or {}))
+            return {'type': 'error', 'message': f'unknown calibration message {kind!r}'}
+        except (ValueError, RuntimeError, TimeoutError) as exc:
+            return {'type': 'error', 'message': str(exc)}
+
+    async def _stream_status(self, ws):
+        while True:
+            await asyncio.sleep(0.1)
+            try:
+                await ws.send(json.dumps(self.cal.status()))
+            except WebSocketClosed:
+                return
 
     async def _watch(self, ws, watchdog):
         while True:

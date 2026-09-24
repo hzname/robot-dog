@@ -73,6 +73,19 @@ class WsClient:
             (n,) = struct.unpack('!H', self._exact(2))
         return json.loads(self._exact(n).decode())
 
+    def recv_until(self, pred, limit=200):
+        for _ in range(limit):
+            m = self.recv()
+            if pred(m):
+                return m
+        raise AssertionError('expected message not received')
+
+    def recv_type(self, kind):
+        m = self.recv_until(lambda m: m['type'] in (kind, 'error'))
+        if m['type'] == 'error':
+            raise AssertionError(m['message'])
+        return m
+
     def close(self):
         self.sock.close()
 
@@ -120,6 +133,33 @@ class TestMockBringup(unittest.TestCase):
         # Wait for the stack to come up (latched state).
         self.assertTrue(self.spin_until(lambda: self.state == 'passive', 20.0),
                         f'locomotion not ready, state={self.state}')
+
+        # --- calibration channel (robot passive): info, pose, live parameter change
+        ws = WsClient(WEB_PORT)
+        try:
+            ws.send({'type': 'cal_hello'})
+            info = ws.recv_type('cal_info')
+            self.assertEqual(len(info['joints']), 12)
+            lf = info['calibration']['lf_thigh_joint']
+            self.assertEqual(lf['channel'], 1.0)
+            self.assertEqual(lf['servo_arm_mm'], 0.0)
+            self.assertAlmostEqual(info['geometry']['thigh'], 0.105)
+            ws.send({'type': 'cal_pose', 'joints': {'lf_thigh_joint': 45.0}})
+            ws.recv_type('cal_pose_ok')
+            status = ws.recv_until(lambda m: m['type'] == 'cal_status'
+                                   and m['pulses'].get('lf_thigh_joint', 0) > 1000)
+            self.assertAlmostEqual(status['pulses']['lf_thigh_joint'], 1370.0, delta=1.0)  # offset 45
+            ws.send({'type': 'cal_set', 'params': {'lf_thigh_joint.offset_deg': 40}})
+            self.assertTrue(ws.recv_type('cal_set_result')['ok'])
+            status = ws.recv_until(lambda m: m['type'] == 'cal_status'
+                                   and abs(m['pulses']['lf_thigh_joint'] - 1370.0) > 20)
+            self.assertAlmostEqual(status['pulses']['lf_thigh_joint'], 1370.0 + 5 * 1700 / 180, delta=1.0)
+            ws.send({'type': 'cal_set', 'params': {'lf_thigh_joint.direction': 3}})
+            self.assertFalse(ws.recv_type('cal_set_result')['ok'])
+            ws.send({'type': 'cal_set', 'params': {'lf_thigh_joint.offset_deg': 45}})
+            self.assertTrue(ws.recv_type('cal_set_result')['ok'])
+        finally:
+            ws.close()
 
         # --- topics: stand up
         self.assertTrue(self.spin_until(
@@ -171,6 +211,10 @@ class TestMockBringup(unittest.TestCase):
             self.assertTrue(self.spin_until(lambda: self.state == 'passive', 3.0))
             ws.send({'type': 'command', 'name': 'stand'})
             self.assertTrue(self.spin_until(lambda: self.state == 'stand', 8.0))
+            # Calibration moves are refused while the robot stands.
+            ws.send({'type': 'cal_pose', 'joints': {'lf_thigh_joint': 45.0}})
+            msg = ws.recv_until(lambda m: m['type'] == 'error')
+            self.assertIn('passive', msg['message'])
             # Bad input is answered with an error, not a crash.
             ws.send({'type': 'drive', 'vx': 'fast'})
             msg = ws.recv()
