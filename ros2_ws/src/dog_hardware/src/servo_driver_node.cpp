@@ -5,10 +5,12 @@
 //   estop          std_msgs/Bool           true = all outputs off until released
 // Publishes:
 //   joint_states   sensor_msgs/JointState  commanded (slew-limited) positions
+//   servo_pulses   sensor_msgs/JointState  position = pulse written [us], 0 = off
 //
-// Calibration parameters (<joint>.offset_deg, .direction, .pulse_min_us, ...)
-// can be changed at runtime with `ros2 param set`; an enabled servo moves to
-// the new mapping immediately so offsets can be tuned by eye.
+// Calibration parameters (<joint>.offset_deg, .direction, .pulse_min_us, ...,
+// rod linkage <joint>.servo_arm_mm / .joint_arm_mm / .rod_mm / .axis_distance_mm,
+// coupling <joint>.coupled_to / .coupling) can be changed at runtime with
+// `ros2 param set`; an enabled servo moves to the new mapping immediately.
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -99,11 +101,28 @@ public:
       c.range_deg = declareNumber(n + ".range_deg", d.range_deg);
       c.min_deg = declareNumber(n + ".min_deg", d.min_deg);
       c.max_deg = declareNumber(n + ".max_deg", d.max_deg);
+      c.linkage.servo_arm_mm = declareNumber(n + ".servo_arm_mm", 0.0);
+      c.linkage.joint_arm_mm = declareNumber(n + ".joint_arm_mm", 0.0);
+      c.linkage.rod_mm = declareNumber(n + ".rod_mm", 0.0);
+      c.linkage.axis_distance_mm = declareNumber(n + ".axis_distance_mm", 0.0);
+      c.coupling = declareNumber(n + ".coupling", 0.0);
+      coupled_names_.push_back(declare_parameter(n + ".coupled_to", std::string("")));
       const auto err = c.validate();
       if (!err.empty()) {
         throw std::runtime_error("invalid calibration for " + n + ": " + err);
       }
       cals.push_back(c);
+    }
+    for (size_t i = 0; i < names_.size(); ++i) {
+      cals[i].coupled_to = resolveJoint(coupled_names_[i], i);
+      if (!cals[i].linkage.direct()) {
+        RCLCPP_INFO(get_logger(), "%s: rod drive, servo arm %.1f mm, joint arm %.1f mm, rod %.1f mm, axes %.1f mm",
+          names_[i].c_str(), cals[i].linkage.a(), cals[i].linkage.b(), cals[i].linkage.c(), cals[i].linkage.d());
+      }
+      if (cals[i].coupled_to >= 0) {
+        RCLCPP_INFO(get_logger(), "%s: coupled to %s x %.2f", names_[i].c_str(),
+          coupled_names_[i].c_str(), cals[i].coupling);
+      }
     }
 
     std::shared_ptr<ServoBus> bus;
@@ -123,6 +142,7 @@ public:
     driver_ = std::make_unique<ServoDriver>(bus, names_, cals, dp);
 
     state_pub_ = create_publisher<sensor_msgs::msg::JointState>("joint_states", 10);
+    pulse_pub_ = create_publisher<sensor_msgs::msg::JointState>("servo_pulses", 10);
     cmd_sub_ = create_subscription<sensor_msgs::msg::JointState>(
       "joint_commands", 10, [this](sensor_msgs::msg::JointState::ConstSharedPtr msg) {
         if (driver_->setTargets(msg->name, msg->position, steadySeconds()) > 0) {
@@ -156,6 +176,17 @@ public:
   }
 
 private:
+  /// Index of a joint name for coupling; "" -> -1. Throws on unknown names.
+  int resolveJoint(const std::string & name, size_t self) const
+  {
+    if (name.empty()) {return -1;}
+    const auto it = std::find(names_.begin(), names_.end(), name);
+    if (it == names_.end() || static_cast<size_t>(it - names_.begin()) == self) {
+      throw std::runtime_error(names_[self] + ".coupled_to: unknown joint '" + name + "'");
+    }
+    return static_cast<int>(it - names_.begin());
+  }
+
   double declareNumber(const std::string & name, double default_value)
   {
     rcl_interfaces::msg::ParameterDescriptor desc;
@@ -179,6 +210,8 @@ private:
     state_msg_.header.stamp = get_clock()->now();
     state_msg_.position = driver_->positions();
     state_pub_->publish(state_msg_);
+    state_msg_.position = driver_->pulses();
+    pulse_pub_->publish(state_msg_);
   }
 
   rcl_interfaces::msg::SetParametersResult onParams(const std::vector<rclcpp::Parameter> & params)
@@ -195,7 +228,15 @@ private:
       if (it == names_.end()) {continue;}
       const size_t i = static_cast<size_t>(it - names_.begin());
       ServoCalibration c = driver_->calibrations()[i];
-      try {
+      if (field == "coupled_to") {
+        try {
+          c.coupled_to = resolveJoint(p.as_string(), i);
+        } catch (const std::exception & e) {
+          result.successful = false;
+          result.reason = e.what();
+          return result;
+        }
+      } else try {
         const double v = asNumber(p);
         if (field == "channel" || field == "direction") {
           if (v != std::floor(v)) {
@@ -212,6 +253,11 @@ private:
         else if (field == "range_deg") {c.range_deg = v;}
         else if (field == "min_deg") {c.min_deg = v;}
         else if (field == "max_deg") {c.max_deg = v;}
+        else if (field == "servo_arm_mm") {c.linkage.servo_arm_mm = v;}
+        else if (field == "joint_arm_mm") {c.linkage.joint_arm_mm = v;}
+        else if (field == "rod_mm") {c.linkage.rod_mm = v;}
+        else if (field == "axis_distance_mm") {c.linkage.axis_distance_mm = v;}
+        else if (field == "coupling") {c.coupling = v;}
         else {continue;}
       } catch (const rclcpp::exceptions::InvalidParameterTypeException & e) {
         result.successful = false;
@@ -230,6 +276,7 @@ private:
   }
 
   std::vector<std::string> names_;
+  std::vector<std::string> coupled_names_;
   std::shared_ptr<ServoBus> bus_;
   std::unique_ptr<ServoDriver> driver_;
   double cmd_timeout_{0.5};
@@ -239,6 +286,7 @@ private:
   sensor_msgs::msg::JointState state_msg_;
 
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr state_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr pulse_pub_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr cmd_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr estop_sub_;
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_;

@@ -1,8 +1,10 @@
 // ROS-independent servo driver core: joint angle -> pulse mapping with
-// calibration, slew-rate limiting, staggered power-on and e-stop.
+// calibration, rod linkages, coupled joints, slew-rate limiting, staggered
+// power-on and e-stop.
 #pragma once
 
 #include <memory>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -11,18 +13,57 @@
 namespace dog_hardware
 {
 
+/// Rod (four-bar) drive between the servo horn and the joint.
+///
+///   servo axis S ──servo_arm── A
+///                               ╲ rod
+///   joint axis K ──joint_arm─── B
+///
+/// servo_arm_mm = 0 means the servo sits on the joint axis (direct drive) and
+/// the other fields are ignored. With a rod, joint_arm_mm = 0 defaults to
+/// servo_arm_mm and rod_mm = 0 defaults to axis_distance_mm: a parallelogram,
+/// which turns the joint 1:1. Different lengths make the transfer nonlinear.
+/// At the servo's centre pulse the servo arm is assumed perpendicular to the
+/// S-K line (the usual way such linkages are assembled).
+struct Linkage
+{
+  double servo_arm_mm{0.0};
+  double joint_arm_mm{0.0};
+  double rod_mm{0.0};
+  double axis_distance_mm{0.0};
+
+  bool direct() const {return servo_arm_mm <= 0.0;}
+  double a() const {return servo_arm_mm;}
+  double b() const {return joint_arm_mm > 0.0 ? joint_arm_mm : servo_arm_mm;}
+  double c() const {return rod_mm > 0.0 ? rod_mm : axis_distance_mm;}
+  double d() const {return axis_distance_mm;}
+
+  /// Joint rotation [deg] produced by turning the servo `servo_deg` away from
+  /// its centre. NaN if the rod cannot close the loop at that angle.
+  double jointDelta(double servo_deg) const;
+  /// Servo angles [deg] around centre over which the joint follows the
+  /// servo monotonically (stops before a dead point), within +-half.
+  std::pair<double, double> usableServoRange(double half_range_deg) const;
+  /// Validates geometry; empty string when OK. Requires at least 40 deg of
+  /// usable servo travel.
+  std::string validate(double half_range_deg) const;
+};
+
 /// Per-joint calibration. Joint angles follow the URDF convention
 /// (radians, zero = leg straight down, see dog_control/kinematics.hpp).
 struct ServoCalibration
 {
   int channel{0};           // PCA9685 output 0..15
   int direction{1};         // +1 / -1: servo rotation vs. joint rotation
-  double offset_deg{0.0};   // joint angle [deg] when the servo is at its centre pulse
+  double offset_deg{0.0};   // (coupled) joint angle [deg] at the servo's centre pulse
   double pulse_min_us{520.0};   // pulse at servo -range/2 (measured on v1 hardware)
   double pulse_max_us{2220.0};  // pulse at servo +range/2
   double range_deg{180.0};  // servo travel between pulse_min_us and pulse_max_us
   double min_deg{-180.0};   // joint limits [deg]
   double max_deg{180.0};
+  Linkage linkage;          // rod drive; servo_arm_mm = 0 -> servo on the joint axis
+  int coupled_to{-1};       // index of the parent joint, -1 = none
+  double coupling{0.0};     // servo drives (joint + coupling * parent)
 
   double centerUs() const {return 0.5 * (pulse_min_us + pulse_max_us);}
   double usPerDeg() const {return (pulse_max_us - pulse_min_us) / range_deg;}
@@ -32,9 +73,11 @@ struct ServoCalibration
 
 /// Pulse width for a joint angle. Clamps to the joint limits and to the
 /// servo's pulse range; `clamped` reports whether any clamping happened.
-double jointToPulseUs(const ServoCalibration & cal, double joint_rad, bool * clamped = nullptr);
+/// `parent_rad` is the angle of the coupled parent joint (ignored if none).
+double jointToPulseUs(const ServoCalibration & cal, double joint_rad, bool * clamped = nullptr,
+  double parent_rad = 0.0);
 /// Joint angle [rad] that a pulse width corresponds to.
-double pulseUsToJoint(const ServoCalibration & cal, double us);
+double pulseUsToJoint(const ServoCalibration & cal, double us, double parent_rad = 0.0);
 
 struct DriverParams
 {
@@ -66,6 +109,8 @@ public:
   const std::vector<std::string> & names() const {return names_;}
   const std::vector<ServoCalibration> & calibrations() const {return cals_;}
   const std::vector<double> & positions() const {return current_;}
+  /// Last pulse written per joint [us], 0 when the output is off.
+  const std::vector<double> & pulses() const {return pulses_;}
   bool enabled(size_t index) const {return state_[index] == State::ON;}
   bool anyEnabled() const;
   int clampedCount() const {return clamped_;}
@@ -73,6 +118,7 @@ public:
 private:
   enum class State { OFF, PENDING, ON };
   void write(size_t i);
+  double parentAngle(size_t i) const;
 
   std::shared_ptr<ServoBus> bus_;
   std::vector<std::string> names_;
@@ -81,6 +127,7 @@ private:
 
   std::vector<double> target_;
   std::vector<double> current_;
+  std::vector<double> pulses_;
   std::vector<State> state_;
   std::vector<double> enable_at_;
   double last_update_{-1.0};
