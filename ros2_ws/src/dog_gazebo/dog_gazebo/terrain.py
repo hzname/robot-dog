@@ -53,10 +53,11 @@ def _box(name, pose, size, color='0.55 0.55 0.55 1'):
             f'</material></visual></link></model>\n')
 
 
-def _cylinder_y(name, x, z, r, length, color='0.45 0.5 0.6 1'):
+def _cylinder(name, pose, r, length, color='0.45 0.5 0.6 1'):
+    x, y, z, roll, pitch, yaw = pose
     geo = f'<geometry><cylinder><radius>{r:.4f}</radius><length>{length:.3f}</length></cylinder></geometry>'
     return (f'    <model name="{name}"><static>true</static>'
-            f'<pose>{x:.4f} 0 {z:.4f} {math.pi / 2:.5f} 0 0</pose><link name="l">'
+            f'<pose>{x:.4f} {y:.4f} {z:.4f} {roll:.5f} {pitch:.5f} {yaw:.5f}</pose><link name="l">'
             f'<collision name="c">{geo}{SURFACE}</collision>'
             f'<visual name="v">{geo}<material><diffuse>{color}</diffuse><ambient>{color}</ambient>'
             f'</material></visual></link></model>\n')
@@ -66,63 +67,85 @@ def _ground():
     return _box('ground', (0, 0, -0.05, 0, 0, 0), (40, 40, 0.1), '0.7 0.7 0.7 1')
 
 
+def obstacles(kind, level, seed=0):
+    """Obstacles of the waves / rough worlds as plain shapes (also used to
+    draw the terrain in videos):
+      {'shape': 'cyl_y', 'x', 'z', 'r', 'length'}          cylinder along y
+      {'shape': 'cyl_x', 'x', 'y', 'z', 'r', 'length'}     cylinder along x
+      {'shape': 'box', 'x', 'y', 'z', 'size': (sx, sy, sz), 'yaw'}"""
+    out = []
+    h = level / 1000.0
+    if h <= 0:
+        return out
+    if kind == 'waves':
+        r = 0.09  # gentle curvature: arc of a 90 mm radius
+        for i in range(-12, 13):
+            x = i * 0.16
+            if abs(x) >= 0.2:
+                out.append({'shape': 'cyl_y', 'x': x, 'z': h - r, 'r': r, 'length': 4.0})
+        # short ridges across the side path, for left / right steps
+        for i in range(-10, 11):
+            y = i * 0.16
+            if abs(y) >= 0.2:
+                for xx in (-0.08, 0.08):
+                    out.append({'shape': 'cyl_x', 'x': xx, 'y': y, 'z': h - r, 'r': r, 'length': 0.32})
+    elif kind == 'rough':
+        rng = random.Random(seed)
+        while len(out) < 260:
+            x, y = rng.uniform(-1.6, 1.6), rng.uniform(-1.2, 1.2)
+            if math.hypot(x, y) < 0.2:
+                continue
+            size = rng.uniform(0.03, 0.07)
+            hh = rng.uniform(0.4 * h, h)
+            out.append({'shape': 'box', 'x': x, 'y': y, 'z': hh / 2, 'size': (size, size, hh),
+                        'yaw': rng.uniform(0, math.pi)})
+    return out
+
+
 def world(kind='flat', level=0.0, seed=0):
     """SDF text of a test world."""
-    parts = [HEADER]
-    if kind == 'flat':
-        parts.append(_ground())
-    elif kind == 'slope':
+    if kind not in ('flat', 'slope', 'waves', 'rough'):
+        raise ValueError(f'unknown terrain {kind!r} (flat, slope, waves, rough)')
+    parts = [HEADER, _ground()]
+    if kind == 'slope':
         th = math.radians(level)
-        parts.append(_ground())
         if th > 0:
             # slab whose top face starts at (RAMP_START, 0) and rises along +x
             L, T = RAMP_LENGTH, 0.1
             cx = RAMP_START + 0.5 * L * math.cos(th) + 0.5 * T * math.sin(th)
             cz = 0.5 * L * math.sin(th) - 0.5 * T * math.cos(th)
             parts.append(_box('ramp', (cx, 0, cz, 0, -th, 0), (L, 4.0, T), '0.65 0.62 0.55 1'))
-    elif kind == 'waves':
-        parts.append(_ground())
-        h = level / 1000.0
-        r = 0.09  # gentle curvature: arc of a 90 mm radius
-        k = 0
-        for i in range(-12, 13):
-            x = i * 0.16
-            if abs(x) < 0.2 or h <= 0:
-                continue
-            parts.append(_cylinder_y(f'wave{k}', x, h - r, r, 4.0))
-            k += 1
-        # waves across the side path too, for left / right steps
-        for i in range(-10, 11):
-            y = i * 0.16
-            if abs(y) < 0.2 or h <= 0:
-                continue
-            geo_len = 0.32  # short ridges between the long ones
-            for xx in (-0.08, 0.08):
-                parts.append(
-                    f'    <model name="wy{k}"><static>true</static><pose>{xx:.3f} {y:.4f} {h - r:.4f} 0 {math.pi / 2:.5f} 0'
-                    f'</pose><link name="l"><collision name="c"><geometry><cylinder><radius>{r}</radius>'
-                    f'<length>{geo_len}</length></cylinder></geometry>{SURFACE}</collision><visual name="v">'
-                    f'<geometry><cylinder><radius>{r}</radius><length>{geo_len}</length></cylinder></geometry>'
-                    f'</visual></link></model>\n')
-                k += 1
-    elif kind == 'rough':
-        parts.append(_ground())
-        rng = random.Random(seed)
-        h = level / 1000.0
-        n = 0
-        while n < 260 and h > 0:
-            x, y = rng.uniform(-1.6, 1.6), rng.uniform(-1.2, 1.2)
-            if math.hypot(x, y) < 0.2:
-                continue
-            s = rng.uniform(0.03, 0.07)
-            hh = rng.uniform(0.4 * h, h)
-            parts.append(_box(f'stone{n}', (x, y, hh / 2, 0, 0, rng.uniform(0, math.pi)), (s, s, hh),
+    for k, o in enumerate(obstacles(kind, level, seed)):
+        if o['shape'] == 'cyl_y':
+            parts.append(_cylinder(f'wave{k}', (o['x'], 0, o['z'], math.pi / 2, 0, 0), o['r'], o['length']))
+        elif o['shape'] == 'cyl_x':
+            parts.append(_cylinder(f'ridge{k}', (o['x'], o['y'], o['z'], 0, math.pi / 2, 0), o['r'], o['length']))
+        else:
+            parts.append(_box(f'stone{k}', (o['x'], o['y'], o['z'], 0, 0, o['yaw']), o['size'],
                               '0.5 0.47 0.42 1'))
-            n += 1
-    else:
-        raise ValueError(f'unknown terrain {kind!r} (flat, slope, waves, rough)')
     parts.append(FOOTER)
     return ''.join(parts)
+
+
+def height(kind, level, x, y, obs=()):
+    """Ground height at (x, y) including obstacles (for drawing)."""
+    z = surface(kind, level, x)[0]
+    for o in obs:
+        if o['shape'] == 'cyl_y':
+            d = abs(x - o['x'])
+            if d < o['r']:
+                z = max(z, o['z'] + math.sqrt(o['r'] ** 2 - d * d))
+        elif o['shape'] == 'cyl_x':
+            d = abs(y - o['y'])
+            if d < o['r'] and abs(x - o['x']) < o['length'] / 2:
+                z = max(z, o['z'] + math.sqrt(o['r'] ** 2 - d * d))
+        else:
+            c, s_ = math.cos(o['yaw']), math.sin(o['yaw'])
+            dx, dy = x - o['x'], y - o['y']
+            u, v = c * dx + s_ * dy, -s_ * dx + c * dy
+            if abs(u) < o['size'][0] / 2 and abs(v) < o['size'][1] / 2:
+                z = max(z, o['size'][2])
+    return z
 
 
 def spawn_pose(kind, level, stand_z=0.25):

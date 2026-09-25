@@ -90,10 +90,14 @@ class CalibrationBridge:
                 'power': self.power}
 
     async def _get(self, client, names):
-        if not client.wait_for_service(timeout_sec=0.0):
-            await asyncio.sleep(0.5)
-            if not client.wait_for_service(timeout_sec=0.0):
-                raise RuntimeError(f'{client.srv_name} is not available')
+        # DDS discovery of a freshly started node can take seconds on a busy
+        # machine: poll without blocking the event loop.
+        for _ in range(50):
+            if client.wait_for_service(timeout_sec=0.0):
+                break
+            await asyncio.sleep(0.1)
+        else:
+            raise RuntimeError(f'{client.srv_name} is not available')
         res = await _await_future(client.call_async(GetParameters.Request(names=list(names))), 3.0)
         return {n: _value(v) for n, v in zip(names, res.values)}
 

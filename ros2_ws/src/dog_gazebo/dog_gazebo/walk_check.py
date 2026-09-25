@@ -4,6 +4,7 @@ ground-truth odometry from Gazebo. Exit code 0 = all maneuvers passed.
   ros2 launch dog_gazebo sim.launch.py headless:=true web:=false &
   ros2 run dog_gazebo walk_check
   ros2 run dog_gazebo walk_check --trace run.json   # also save the odometry trace
+  ros2 run dog_gazebo walk_check --trace run.json --record   # + joints and IMU at 30 Hz
 
 Thresholds are deliberately loose: an open-loop trot on a 1.5 kg servo dog
 slips and drifts; this catches sign errors, falls and broken gaits.
@@ -24,7 +25,8 @@ import numpy as np
 import rclpy
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
-from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from sensor_msgs.msg import Imu, JointState
+from rclpy.qos import DurabilityPolicy, QoSProfile, qos_profile_sensor_data, ReliabilityPolicy
 from std_msgs.msg import String
 
 from dog_gazebo import terrain
@@ -45,11 +47,15 @@ def _rot(q):
 
 
 class WalkCheck:
-    def __init__(self, kind='flat', level=0.0, min_ratio=0.4, max_tilt=20.0, seconds=5.0):
+    def __init__(self, kind='flat', level=0.0, min_ratio=0.4, max_tilt=20.0, seconds=5.0,
+                 record=False):
         self.normal = np.array(terrain.normal(kind, level))
         self.kind, self.level = kind, level
         self.min_ratio, self.max_tilt, self.seconds = min_ratio, max_tilt, seconds
         self.fallen = False
+        self.record = record
+        self.joints = {}
+        self.imu = None
         self.node = rclpy.create_node('walk_check', namespace='dog')
         latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                              durability=DurabilityPolicy.TRANSIENT_LOCAL)
@@ -59,6 +65,12 @@ class WalkCheck:
         self._last_yaw = None
         self.node.create_subscription(String, 'state', self._on_state, latched)
         self.node.create_subscription(Odometry, 'odom', self._on_odom, 10)
+        if record:
+            self.node.create_subscription(
+                JointState, 'joint_states',
+                lambda m: self.joints.update(zip(m.name, m.position)), 10)
+            self.node.create_subscription(
+                Imu, 'imu/data', lambda m: setattr(self, 'imu', m), qos_profile_sensor_data)
         self.cmd = self.node.create_publisher(String, 'command', 10)
         self.vel = self.node.create_publisher(Twist, 'cmd_vel', 10)
         self.results = []
@@ -77,13 +89,21 @@ class WalkCheck:
             self.yaw_unwrapped += math.atan2(math.sin(d), math.cos(d))
         self._last_yaw = yaw
         t = time.time() - self._t0
-        if not self.trace or t - self.trace[-1]['t'] >= 0.05:
+        if not self.trace or t - self.trace[-1]['t'] >= (1 / 30 if self.record else 0.05):
             p = msg.pose.pose.position
             r, pi, _ = _rpy(msg.pose.pose.orientation)
             self.trace.append({'t': round(t, 3), 'phase': self.phase, 'state': self.state,
                                'x': round(p.x, 4), 'y': round(p.y, 4), 'z': round(p.z, 4),
                                'roll': round(math.degrees(r), 2), 'pitch': round(math.degrees(pi), 2),
                                'yaw': round(math.degrees(self.yaw_unwrapped), 2)})
+            if self.record:
+                q = msg.pose.pose.orientation
+                e = self.trace[-1]
+                e['q'] = [round(v, 5) for v in (q.x, q.y, q.z, q.w)]
+                e['j'] = {k: round(v, 4) for k, v in self.joints.items()}
+                if self.imu is not None:
+                    ir, ip, _ = _rpy(self.imu.orientation)
+                    e['imu'] = [round(math.degrees(ir), 2), round(math.degrees(ip), 2)]
 
     def spin(self, seconds, publish=None):
         end = time.time() + seconds
@@ -204,9 +224,12 @@ def main():
     ap.add_argument('--min-ratio', type=float, default=0.4, help='share of the command to pass')
     ap.add_argument('--max-tilt', type=float, default=20.0, help='body tilt vs. the ground [deg]')
     ap.add_argument('--seconds', type=float, default=5.0, help='duration of each maneuver')
+    ap.add_argument('--record', action='store_true',
+                    help='with --trace: also record joints and IMU at 30 Hz')
     args, ros_args = ap.parse_known_args()
     rclpy.init(args=ros_args)
-    checker = WalkCheck(args.terrain, args.level, args.min_ratio, args.max_tilt, args.seconds)
+    checker = WalkCheck(args.terrain, args.level, args.min_ratio, args.max_tilt, args.seconds,
+                        args.record)
     try:
         code = checker.run()
         if args.trace:

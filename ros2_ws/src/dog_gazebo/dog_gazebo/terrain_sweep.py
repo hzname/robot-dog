@@ -17,9 +17,9 @@ import tempfile
 import time
 
 
-def run_level(kind, level, seed, domain, extra, launch_args=()):
+def run_level(kind, level, seed, domain, extra, launch_args=(), keep=None):
     env = dict(os.environ, ROS_DOMAIN_ID=str(domain), GZ_PARTITION=f'sweep{domain}')
-    trace = tempfile.mktemp(suffix='.json')
+    trace = keep or tempfile.mktemp(suffix='.json')
     launch = subprocess.Popen(
         ['ros2', 'launch', 'dog_gazebo', 'sim.launch.py', 'headless:=true', 'web:=false',
          f'terrain:={kind}', f'level:={level}', f'seed:={seed}', *launch_args],
@@ -27,12 +27,13 @@ def run_level(kind, level, seed, domain, extra, launch_args=()):
     try:
         check = subprocess.run(
             ['ros2', 'run', 'dog_gazebo', 'walk_check', '--terrain', kind, '--level', str(level),
-             '--trace', trace] + extra,
+             '--trace', trace] + (['--record'] if keep else []) + extra,
             env=env, capture_output=True, text=True, timeout=240)
         print(check.stdout, flush=True)
         with open(trace) as f:
             data = json.load(f)
         data.pop('trace', None)
+        data['launch_args'] = list(launch_args)
         return data
     except (subprocess.TimeoutExpired, OSError, ValueError) as exc:
         return {'terrain': kind, 'level': level, 'error': str(exc), 'results': []}
@@ -55,12 +56,18 @@ def main():
     ap.add_argument('--out', required=True)
     ap.add_argument('--launch-arg', action='append', default=[], metavar='NAME:=VALUE',
                     help='extra sim.launch.py argument, e.g. slope_compensation:=false')
+    ap.add_argument('--record-dir', help='keep full recordings (joints, IMU; 30 Hz) here, '
+                    'one <terrain>_<level>.json per level, for tools/sim_video')
     args, extra = ap.parse_known_args()
     rows = []
     for k, level in enumerate(args.levels):
         print(f'=== {args.terrain} {level:g}', flush=True)
+        keep = None
+        if args.record_dir:
+            os.makedirs(args.record_dir, exist_ok=True)
+            keep = os.path.join(args.record_dir, f'{args.terrain}_{level:g}.json')
         rows.append(run_level(args.terrain, level, args.seed, args.domain + k % 5, extra,
-                              args.launch_arg))
+                              args.launch_arg, keep))
         with open(args.out, 'w') as f:
             json.dump(rows, f, indent=1)
     ok = all(r.get('results') and all(x['ok'] for x in r['results']) for r in rows)
