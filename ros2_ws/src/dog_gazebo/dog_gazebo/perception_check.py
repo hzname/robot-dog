@@ -64,7 +64,10 @@ SENSOR_PARAMS = {
     'tof': True, 'tof_names': list(TOF), 'tof_x': [0.115, 0.115, 0.115, -0.115],
     'tof_y': [0.045, -0.045, 0.0, 0.0], 'tof_z': [-0.012, -0.012, 0.0, -0.012],
     'tof_pitch_deg': [40.0, 40.0, 20.0, 40.0], 'tof_yaw_deg': [23.0, -23.0, 0.0, 180.0],
+    'gs2': True, 'gs2_x': 0.115, 'gs2_y': 0.0, 'gs2_z': -0.012, 'gs2_pitch_deg': 40.0,
 }
+GS2_LINE_X = 0.294  # where the GS2 line lies on a flat floor (body frame)
+FAMILIES = ('lidar', 'tof', 'gs2')
 CORRIDOR_Y = {'left': 0.12, 'centre': 0.0, 'right': -0.12}
 
 
@@ -80,6 +83,9 @@ def hazard_places(hazards, trace):
         p = np.array([e['x'], e['y'], e['z']])
         if h['source'] == 'lidar':
             b = np.array([h['x'], CORRIDOR_Y[h['corridor']], 0.0])
+        elif h['source'] == 'gs2':
+            b = np.array([h['x'] if h.get('x') is not None else GS2_LINE_X,
+                          h['y'] if h.get('y') is not None else CORRIDOR_Y[h['corridor']], 0.0])
         else:
             m = mounts[h['source']]
             rng = h.get('expected') or 0.25
@@ -112,7 +118,10 @@ def score_detection(kind, level, hazards, trace):
             if abs(lateral) > 0.25:
                 det[name] = {'not_in_path': True, 'lateral_m': round(lateral, 2)}
                 continue
-        for fam in ('lidar', 'tof'):
+        for fam in FAMILIES:
+            if fam == 'gs2' and edge > reach - 0.3 + GS2_LINE_X - FRONT_FOOT + 0.02:
+                det[name][fam] = {'not_reached': True}  # the line (0.14 m ahead of the feet) never got there
+                continue
             best = None
             for h, (wx, wy, foot_x) in zip(walk, places):
                 if not h['source'].startswith(fam) or h['kind'] != kind_f:
@@ -125,7 +134,9 @@ def score_detection(kind, level, hazards, trace):
                 if ahead < -0.05:
                     continue
                 if best is None or h['t_rx'] < best[0]:
-                    best = (h['t_rx'], ahead, wx - edge, h['source'] if fam == 'tof' else h['corridor'])
+                    by = h['source'] if fam == 'tof' else \
+                        f"{h['corridor']}/{h.get('how')}" if fam == 'gs2' else h['corridor']
+                    best = (h['t_rx'], ahead, wx - edge, by)
             det[name][fam] = None if best is None else {
                 'ahead_m': round(best[1], 3), 'where_err_mm': round(1e3 * best[2]), 'by': best[3]}
     return det
@@ -153,7 +164,7 @@ class PerceptionCheck:
         n.create_subscription(Float32MultiArray, 'perception/tof', self.on_tof, 100)
         n.create_subscription(Float64MultiArray, 'perception/stats', lambda m: setattr(self, 'stats', list(m.data)), 1)
         n.create_subscription(Float32MultiArray, 'perception/map', lambda m: setattr(self, 'map', list(m.data)), 1)
-        for name in ('lidar_left', 'lidar_right'):
+        for name in ('lidar_left', 'lidar_right', 'gs2'):
             n.create_subscription(LaserScan, f'{name}/scan', lambda m, s=name: self.on_scan(s, m),
                                   qos_profile_sensor_data)
         self.cmd = n.create_publisher(String, 'command', 10)
@@ -214,7 +225,7 @@ class PerceptionCheck:
             h['t_rx'] = self.now()
             h['robot'] = [round(float(p[0]), 4), round(float(p[1]), 4)]
             h['phase'] = self.phase
-            if 'x' in h:  # lidar: nearest point of the hazard, projected into the world
+            if h.get('x') is not None:  # lidar / GS2: nearest point of the hazard, projected into the world
                 w = p + R @ np.array([h['x'], 0.0, 0.0])
                 h['world_x'] = round(float(w[0]), 4)
             self.hazards.append(h)
@@ -299,7 +310,7 @@ class PerceptionCheck:
                 return abs(x - terrain.RAMP_START) < 0.35 or abs(h['robot'][0] + 0.4 - terrain.RAMP_START) < 0.4
             return self.kind in ('waves', 'rough')  # bumps everywhere: all reports are real
         fa = {}
-        for src in ('lidar', 'tof'):
+        for src in FAMILIES:
             hs = [h for h in self.hazards if h['phase'] == 'walk' and h['source'].startswith(src)]
             fa[src] = {'reports': len(hs), 'unexplained': sum(not explained(h) for h in hs),
                        'unexplained_per_m': round(sum(not explained(h) for h in hs) / max(self.walked, 0.1), 2)}
@@ -348,6 +359,11 @@ class PerceptionCheck:
                                    'tof': c['tof_ms_per_msg'], 'lidar': c['lidar_ms_per_scan']}
                 # rclpy's own cost per message (deserialisation, executor): the
                 # process time not spent inside our callbacks
+                if len(d) >= 17:
+                    c['rates_per_s']['gs2'] = round(d[14] / wall, 1)
+                    c['ms_per_msg']['gs2'] = round(d[16] / max(d[14], 1), 4)
+                    c['gs2_points_per_s'] = round(d[15] / wall, 0)
+                    c['gs2_pct_of_core'] = round(100 * d[16] / 1e3 / wall, 2)
                 c['rclpy_ms_per_msg'] = round(1e3 * (d[0] - d[7] / 1e3) / max(d[6], 1), 4)
         return out
 

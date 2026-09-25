@@ -4,6 +4,7 @@ VL53L1X ToF sensors.
 Subscribes (relative, /dog namespace):
   lidar_left/scan, lidar_right/scan  sensor_msgs/LaserScan
   tof/<name>                         sensor_msgs/Range
+  gs2/scan                           sensor_msgs/LaserScan (YDLIDAR GS2 line laser)
   joint_states, imu/data, state, odom
 Publishes:
   perception/ground_lidar  geometry_msgs/Vector3Stamped  x roll, y pitch [rad],
@@ -17,7 +18,8 @@ Publishes:
   perception/stats         std_msgs/Float64MultiArray  [process CPU s, lidar cycles,
                            lidar points, lidar ms total, ToF messages, ToF ms total,
                            messages received (all topics), their callback ms total,
-                           then count / callback ms for joint_states, imu, odom]
+                           then count / callback ms for joint_states, imu, odom,
+                           then GS2 scans, GS2 points, GS2 ms total]
 
 Every reading is compared with the ground plane at the reading's own time
 stamp: the body pitches by several degrees at ~2 Hz in the trot, and 50 ms
@@ -56,6 +58,7 @@ SENSOR_DEFAULTS = {
     'tof': True, 'tof_names': ['fl', 'fr', 'fc', 'rc'], 'tof_x': [0.115, 0.115, 0.115, -0.115],
     'tof_y': [0.045, -0.045, 0.0, 0.0], 'tof_z': [-0.012, -0.012, 0.0, -0.012],
     'tof_pitch_deg': [40.0, 40.0, 20.0, 40.0], 'tof_yaw_deg': [23.0, -23.0, 0.0, 180.0],
+    'gs2': False, 'gs2_x': 0.115, 'gs2_y': 0.0, 'gs2_z': -0.012, 'gs2_pitch_deg': 40.0,
 }
 GEOMETRY_DEFAULTS = {'hip_offset': 0.055, 'thigh': 0.105, 'calf': 0.105, 'hip_x': 0.09, 'hip_y': 0.06}
 
@@ -91,11 +94,19 @@ class PerceptionNode(Node):
         self.odom = None
         self.scans = {}
         self.map = core.ElevationMap(self.map_size, self.map_res)
-        self.stats = np.zeros(14)
+        self.stats = np.zeros(17)
         self.tof = {n: core.TofDetector(self.mounts[f'tof_{n}'], tof_thr[k], confirm=self.tof_confirm,
                                         offset=tof_offsets[k], baseline_n=50 if self.tof_autocal else 0)
                     for k, n in enumerate(s['tof_names'] if s['tof'] else [])}
         self.tof_index = {n: k for k, n in enumerate(self.tof)}
+        # GS2: a hazard must be seen in gs2_confirm scans in a row (28 Hz)
+        self.gs2_thr = self.declare_parameter('perception.gs2_threshold', 0.012).value
+        self.gs2_confirm = self.declare_parameter('perception.gs2_confirm', 3).value
+        self.gs2_seen = {}
+        # GS2 reference: the legs. The line is only 0.14 m ahead of the front
+        # feet, so 1 deg of leg-plane error is 2.5 mm there; the lidar plane
+        # ('auto') already leans towards the floor beyond a step and hid steps.
+        self.gs2_reference = self.declare_parameter('perception.gs2_reference', 'feet').value
 
         latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                              durability=DurabilityPolicy.TRANSIENT_LOCAL)
@@ -107,6 +118,8 @@ class PerceptionNode(Node):
             for name in ('lidar_left', 'lidar_right'):
                 self.create_subscription(LaserScan, f'{name}/scan',
                                          lambda m, n=name: self.on_scan(n, m), qos_profile_sensor_data)
+        if s['gs2']:
+            self.create_subscription(LaserScan, 'gs2/scan', self.on_gs2, qos_profile_sensor_data)
         for n in self.tof:
             self.create_subscription(Range, f'tof/{n}', lambda m, n=n: self.on_tof(n, m),
                                      qos_profile_sensor_data)
@@ -221,6 +234,35 @@ class PerceptionNode(Node):
             self.map.recenter([p.position.x, p.position.y])
             self.map.insert(world)
         self.stats[1:4] += (1, len(pts), 1e3 * (time.perf_counter() - t0))
+        self._count(t0)
+
+    # ------------------------------------------------------------ GS2
+    def on_gs2(self, msg):
+        t0 = time.perf_counter()
+        pts = core.scan_to_body(self.mounts['gs2'], msg.ranges, msg.angle_min, msg.angle_increment,
+                                msg.range_min, msg.range_max)
+        stamp = msg.header.stamp
+        if self.upright():
+            ref = self.feet.current(self.R_at(stamp)) if self.gs2_reference == 'feet' else self.ground(stamp)
+            # the floor line should be in range: the centre ray is 0.23 m long
+            # on a flat floor, the range ends at 0.3 m (a floor ~43 mm lower)
+            hz = core.gs2_hazards(pts, ref, ref is not None, thr_local=self.gs2_thr, thr_abs=self.thr)
+            seen = {}
+            out = []
+            for c, k, x, y, h, how in hz:
+                key = (c, k, how)
+                seen[key] = self.gs2_seen.get(key, 0) + 1
+                if seen[key] >= self.gs2_confirm:
+                    out.append({'source': 'gs2', 'corridor': c, 'kind': k, 'how': how, 'x': _num(x),
+                                'y': _num(y), 'h': _num(h)})
+            self.gs2_seen = seen
+            if out:
+                self.publish_hazards(out)
+            if self.odom is not None and len(pts):
+                p = self.odom.pose.pose
+                R = core.quat_to_rot(p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w)
+                self.map.insert(pts @ R.T + np.array([p.position.x, p.position.y, p.position.z]))
+        self.stats[14:17] += (1, len(pts), 1e3 * (time.perf_counter() - t0))
         self._count(t0)
 
     # ------------------------------------------------------------ ToF

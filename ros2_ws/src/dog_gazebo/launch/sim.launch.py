@@ -42,7 +42,7 @@ def _bridge_config(sensors=None):
     ]
     for frame, kind, _, _ in sensor_frames(sensors):
         # lidars straight to their ROS topic, ToF cones to tof_bridge
-        ros = f'/{NS}/{frame}/scan' if kind == 'lidar' else sim_sensor_topic(NS, frame)
+        ros = f'/{NS}/{frame}/scan' if kind in ('lidar', 'gs2') else sim_sensor_topic(NS, frame)
         entries.append({'ros_topic_name': ros, 'gz_topic_name': sim_sensor_topic(NS, frame),
                         'ros_type_name': 'sensor_msgs/msg/LaserScan', 'gz_type_name': 'gz.msgs.LaserScan',
                         'direction': 'GZ_TO_ROS'})

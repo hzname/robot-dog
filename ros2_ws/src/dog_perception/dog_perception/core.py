@@ -61,6 +61,9 @@ def mounts_from_params(s):
         for name, side in (('lidar_left', 1), ('lidar_right', -1)):
             out[name] = SensorMount(name, (s['x_lidar_x'], side * s['x_lidar_y'], s['x_lidar_z']),
                                     (0.0, tilt, -side * yaw))
+    if s.get('gs2'):
+        out['gs2'] = SensorMount('gs2', (s['gs2_x'], s['gs2_y'], s['gs2_z']),
+                                 (0.0, math.radians(s['gs2_pitch_deg']), 0.0))
     if s.get('tof'):
         for k, n in enumerate(s['tof_names']):
             out[f'tof_{n}'] = SensorMount(
@@ -237,6 +240,51 @@ def lidar_hazards(points, plane, x_range=(0.25, 1.0), thr=0.015, min_points=3):
             if k.sum() >= min_points:
                 i = np.argmin(points[k, 0])
                 out.append((name, kind, float(points[k][i, 0]), float(np.median(res[k]))))
+    return out
+
+
+def gs2_hazards(points, plane, expected_centre, thr_local=0.012, thr_abs=0.015, min_points=3):
+    """Hazards on the GS2 line (body-frame points of one scan):
+    [(corridor, kind, x, y, height, how)].
+
+    how 'line'  - a stone / pit shorter than the line: the points leave a
+                  straight-line fit of the profile itself. Needs no ground
+                  reference, so body pitch errors do not matter.
+    how 'plane' - the whole corridor is above / below the reference plane
+                  (a step across the path; the line fit would follow it).
+    how 'gap'   - the centre of the fan sees no floor although it should
+                  (hole or step down deeper than the 0.3 m range allows).
+    """
+    out = []
+    y0c, y1c = CORRIDORS['centre']
+    if expected_centre and np.count_nonzero((points[:, 1] > y0c) & (points[:, 1] < y1c)) < min_points:
+        out.append(('centre', 'down', math.nan, 0.0, math.nan, 'gap'))
+    if len(points) < 10:
+        return out
+    y, z = points[:, 1], points[:, 2]
+    # robust line z(y): start from the median level (most of the line is floor)
+    r = z - np.median(z)
+    for _ in range(4):
+        keep = np.abs(r) < max(0.006, 3.0 * 1.4826 * float(np.median(np.abs(r))))
+        if keep.sum() < 8:
+            break
+        k, b = np.polyfit(y[keep], z[keep], 1)
+        r = z - (k * y + b)
+    res_plane = points @ plane[0] - plane[1] if plane is not None else None
+    for name, (y0, y1) in CORRIDORS.items():
+        m = (y > y0) & (y < y1)
+        if m.sum() < min_points:
+            continue
+        for kind, sel in (('up', r > thr_local), ('down', r < -thr_local)):
+            s = m & sel
+            if s.sum() >= min_points:
+                i = np.argmin(points[s, 0])
+                out.append((name, kind, float(points[s][i, 0]), float(points[s][i, 1]), float(np.median(r[s])), 'line'))
+        if res_plane is not None:
+            med = float(np.median(res_plane[m]))
+            if abs(med) > thr_abs:
+                out.append((name, 'up' if med > 0 else 'down', float(np.median(points[m, 0])), (y0 + y1) / 2, med,
+                            'plane'))
     return out
 
 

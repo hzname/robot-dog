@@ -84,11 +84,12 @@ def test_perception_sensors_in_urdf():
     geometry, description = load_config(cfg)
     s = description['sensors']
     frames = {f[0]: f for f in sensor_frames(s)}
-    assert {'lidar_left', 'lidar_right', 'tof_fl', 'tof_fr', 'tof_fc', 'tof_rc'} <= set(frames)
+    assert {'lidar_left', 'lidar_right', 'tof_fl', 'tof_fr', 'tof_fc', 'tof_rc', 'gs2'} <= set(frames)
+    assert abs(frames['gs2'][3][1] - math.radians(40)) < 1e-9
     # crossed: the left lidar dips towards the right and vice versa
     assert frames['lidar_left'][3][2] < 0 < frames['lidar_right'][3][2]
     assert abs(frames['tof_fl'][3][1] - math.radians(40)) < 1e-9
     root = ET.fromstring(build_urdf(geometry, description, gazebo=True))
-    assert len(root.findall(".//sensor[@type='gpu_lidar']")) == 6
+    assert len(root.findall(".//sensor[@type='gpu_lidar']")) == 7
     plain = ET.fromstring(build_urdf(geometry, description))
     assert not plain.findall('.//sensor') and plain.find("link[@name='lidar_left']") is not None

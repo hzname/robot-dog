@@ -104,7 +104,7 @@ td.r- { color: var(--ink-2); }
 <body><main>
 <header>
   <div class="eyebrow">RobotDog 2.0 · Gazebo Harmonic · dog_perception · 25.09.2026</div>
-  <h1>Лидары «крестом» и VL53L1X: симуляция</h1>
+  <h1>Лидары «крестом», VL53L1X и GS2: симуляция</h1>
   <p>Два однолучевых лидара наклонены вниз-вбок крест-накрест (α = 30°, β = 40°), четыре VL53L1X смотрят вниз-вперёд и назад. Все прогоны сделаны в физической симуляции с тем же кодом управления, что и на роботе. Точки лидаров и лучи ToF в роликах — это то, что датчики реально измерили в симуляции.</p>
 </header>
 <div class="stats">
@@ -203,23 +203,64 @@ td.r- { color: var(--ink-2); }
 </figure><div class="panel"><h3>Карта высот (3 × 3 м, ячейка 2 см)</h3><div class="tbl-wrap"><table><thead><tr><th>Поверхность</th><th class="num">Ошибка ячеек</th><th class="num">Ячеек точнее 10 мм</th></tr></thead><tbody><tr><td>Ровный пол</td><td class="num r-ok">7 мм</td><td class="num r-ok">89–91 %</td></tr><tr><td>Уклон 10°</td><td class="num r-ok">8 мм</td><td class="num r-ok">85 %</td></tr><tr><td>Ступеньки</td><td class="num r-ok">8 мм</td><td class="num r-ok">84–87 %</td></tr><tr><td>Камни 20 мм</td><td class="num r-warn">10 мм</td><td class="num r-warn">77–81 %</td></tr><tr><td>Волны 20 мм</td><td class="num r-warn">12 мм</td><td class="num r-warn">70 %</td></tr></tbody></table></div></div></div>
 </section>
 
+<section><div class="sec-head"><div class="eyebrow">YDLIDAR GS2: линейный лазер + 2 камеры, веер 100°, 25–300 мм, 28 Гц</div>
+  <h2><span class="num-badge">4</span>GS2 на передней грани</h2>
+  <p>GS2 стоит в центре передней грани (x = 0.115 м, 0.15 м над полом), наклонён на 40° вниз. Его веер режет пол поперечной линией в 0.29 м от центра корпуса — это 0.14 м перед передними стопами — шириной ±0.19 м, то есть через обе линии стоп. В роликах это фиолетовая линия. Препятствие ищется двумя способами: <b>«линия»</b> — точки выходят из прямой, проведённой по самому профилю (опора не нужна, наклон корпуса не мешает); <b>«плоскость»</b> — весь коридор выше или ниже плоскости ног (так видна ступенька во всю ширину). Опора для GS2 — ноги: до линии всего 0.14 м, и 1° ошибки даёт там 2.5 мм.</p></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>GS2 · ступеньки 20 мм</h3></figcaption>
+  <div class="player"><video data-key="steps20_gs2" src="videos/perception_steps20_gs2.mp4" controls playsinline muted preload="none" poster="posters/perception_steps20_gs2.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>камень, левая линия · лидары</span><b>0.48 м</b></li><li class="chip ok"><span>камень, левая линия · ToF</span><b>0.12 м</b></li><li class="chip ok"><span>камень, левая линия · GS2</span><b>0.07 м</b></li><li class="chip ok"><span>камень, правая линия · лидары</span><b>0.54 м</b></li><li class="chip ok"><span>камень, правая линия · ToF</span><b>0.15 м</b></li><li class="chip ok"><span>камень, правая линия · GS2</span><b>0.28 м</b></li><li class="chip ok"><span>ступенька ↓ · лидары</span><b>0.65 м</b></li><li class="chip ok"><span>ступенька ↓ · ToF</span><b>0.17 м</b></li><li class="chip ok"><span>ступенька ↓ · GS2</span><b>0.15 м</b></li><li class="chip ok"><span>ступенька ↑ · лидары</span><b>0.52 м</b></li><li class="chip ok"><span>ступенька ↑ · ToF</span><b>0.39 м</b></li><li class="chip ok"><span>ступенька ↑ · GS2</span><b>0.10 м</b></li><li class="chip ok"><span>ложные · лидары</span><b>0/м</b></li><li class="chip ok"><span>ложные · ToF</span><b>0/м</b></li><li class="chip ok"><span>ложные · GS2</span><b>0/м</b></li><li class="chip skip"><span>пол по лидарам</span><b>±0.65°, ±5.8 мм</b></li></ul>
+</figure><figure class="vid">
+  <figcaption><h3>GS2 · ступеньки 30 мм</h3></figcaption>
+  <div class="player"><video data-key="steps30_gs2" src="videos/perception_steps30_gs2.mp4" controls playsinline muted preload="none" poster="posters/perception_steps30_gs2.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>камень, левая линия · лидары</span><b>0.50 м</b></li><li class="chip bad"><span>камень, левая линия · ToF</span><b>нет</b></li><li class="chip ok"><span>камень, левая линия · GS2</span><b>0.12 м</b></li><li class="chip ok"><span>камень, правая линия · лидары</span><b>0.58 м</b></li><li class="chip ok"><span>камень, правая линия · ToF</span><b>0.35 м</b></li><li class="chip ok"><span>камень, правая линия · GS2</span><b>0.13 м</b></li><li class="chip ok"><span>ступенька ↓ · лидары</span><b>0.75 м</b></li><li class="chip ok"><span>ступенька ↓ · ToF</span><b>0.75 м</b></li><li class="chip ok"><span>ступенька ↓ · GS2</span><b>0.14 м</b></li><li class="chip ok"><span>ступенька ↑ · лидары</span><b>0.57 м</b></li><li class="chip ok"><span>ступенька ↑ · ToF</span><b>0.34 м</b></li><li class="chip skip"><span>ступенька ↑ · GS2</span><b>не дошёл</b></li><li class="chip ok"><span>ложные · лидары</span><b>0/м</b></li><li class="chip ok"><span>ложные · ToF</span><b>0/м</b></li><li class="chip ok"><span>ложные · GS2</span><b>0/м</b></li><li class="chip skip"><span>пол по лидарам</span><b>±0.9°, ±6.3 мм</b></li></ul>
+</figure></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>GS2 · ступеньки 20 мм · всё на опоре по ногам</h3></figcaption>
+  <div class="player"><video data-key="steps20_gs2_feet" src="videos/perception_steps20_gs2_feet.mp4" controls playsinline muted preload="none" poster="posters/perception_steps20_gs2_feet.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>камень, левая линия · лидары</span><b>0.49 м</b></li><li class="chip ok"><span>камень, левая линия · ToF</span><b>0.09 м</b></li><li class="chip ok"><span>камень, левая линия · GS2</span><b>0.11 м</b></li><li class="chip skip"><span>камень, правая линия</span><b>не на пути</b></li><li class="chip ok"><span>ступенька ↓ · лидары</span><b>0.59 м</b></li><li class="chip ok"><span>ступенька ↓ · ToF</span><b>0.43 м</b></li><li class="chip ok"><span>ступенька ↓ · GS2</span><b>0.14 м</b></li><li class="chip ok"><span>ступенька ↑ · лидары</span><b>0.57 м</b></li><li class="chip ok"><span>ступенька ↑ · ToF</span><b>0.61 м</b></li><li class="chip ok"><span>ступенька ↑ · GS2</span><b>0.12 м</b></li><li class="chip ok"><span>ложные · лидары</span><b>0/м</b></li><li class="chip ok"><span>ложные · ToF</span><b>0/м</b></li><li class="chip ok"><span>ложные · GS2</span><b>0/м</b></li><li class="chip skip"><span>пол по лидарам</span><b>±0.6°, ±5.1 мм</b></li></ul>
+</figure><figure class="vid">
+  <figcaption><h3>GS2 · ровный пол</h3></figcaption>
+  <div class="player"><video data-key="flat_gs2" src="videos/perception_flat_gs2.mp4" controls playsinline muted preload="none" poster="posters/perception_flat_gs2.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>ложные · лидары</span><b>0/м</b></li><li class="chip ok"><span>ложные · ToF</span><b>0/м</b></li><li class="chip bad"><span>ложные · GS2</span><b>5.31/м</b></li><li class="chip skip"><span>пол по лидарам</span><b>±0.05°, ±3.9 мм</b></li></ul>
+</figure></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>GS2 · уклон 10°</h3></figcaption>
+  <div class="player"><video data-key="slope10_gs2" src="videos/perception_slope10_gs2.mp4" controls playsinline muted preload="none" poster="posters/perception_slope10_gs2.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>ложные · лидары</span><b>0/м</b></li><li class="chip bad"><span>ложные · ToF</span><b>11.14/м</b></li><li class="chip skip"><span>ложные · GS2</span><b>0.93/м</b></li><li class="chip skip"><span>пол по лидарам</span><b>±0.09°, ±4.4 мм</b></li></ul>
+</figure><figure class="vid">
+  <figcaption><h3>GS2 · камни 20 мм</h3></figcaption>
+  <div class="player"><video data-key="rough20_gs2" src="videos/perception_rough20_gs2.mp4" controls playsinline muted preload="none" poster="posters/perception_rough20_gs2.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>ложные · лидары</span><b>0/м</b></li><li class="chip ok"><span>ложные · ToF</span><b>0/м</b></li><li class="chip ok"><span>ложные · GS2</span><b>0/м</b></li><li class="chip skip"><span>пол по лидарам</span><b>±0.14°, ±6.4 мм</b></li></ul>
+</figure></div>
+  <div class="panel"><h3>GS2 против лидаров и ToF</h3><div class="tbl-wrap"><table><thead><tr><th>Препятствие / режим</th><th class="num">GS2: запас до стопы</th><th class="num">GS2: способ</th><th class="num">Лидары: запас</th><th class="num">ToF: запас</th></tr></thead><tbody><tr><td>Камень 20 мм на линии стопы</td><td class="num r-warn">0.07–0.13 м</td><td class="num r-">линия / плоскость</td><td class="num r-ok">0.48–0.58 м</td><td class="num r-warn">0.09–0.35 м, 1 пропуск</td></tr><tr><td>Ступенька вниз 20–30 мм</td><td class="num r-warn">0.14–0.15 м</td><td class="num r-">линия</td><td class="num r-ok">0.59–0.75 м</td><td class="num r-ok">0.17–0.75 м</td></tr><tr><td>Ступенька вверх 20 мм</td><td class="num r-warn">0.10–0.12 м</td><td class="num r-">плоскость</td><td class="num r-ok">0.52–0.57 м</td><td class="num r-ok">0.39–0.61 м</td></tr><tr><td>Ложные, ровный пол (2 прогона)</td><td class="num r-warn">0 и 5.3 /м</td><td class="num r-">только «плоскость»</td><td class="num r-ok">0</td><td class="num r-ok">0</td></tr><tr><td>Ложные, уклон 10°</td><td class="num r-ok">0.9 /м</td><td class="num r-"></td><td class="num r-ok">0</td><td class="num r-bad">11 /м</td></tr><tr><td>Ложные, всё на опоре по ногам</td><td class="num r-ok">0</td><td class="num r-"></td><td class="num r-bad">107 за прогон</td><td class="num r-bad">62 за прогон</td></tr></tbody></table></div>
+    <p class="note">В прогоне 30 мм робот остановился у ступеньки вверх раньше, чем до неё дошла линия GS2 — «не дошёл». Ложные на ровном полу — один эпизод 0.2 с способом «плоскость», когда плоскость ног ошиблась на 17 мм; способ «линия» не дал ни одного ложного во всех прогонах. Поэтому на роботе сообщение «линия» — стоп или перешагнуть, «плоскость» — только сбавить ход.</p></div>
+  <div class="panel"><h3>Вывод по GS2</h3><ul class="list">
+    <li><b>Заменить лидары «крестом» не может:</b> видит на 0.07–0.15 м вперёд стопы (около шага), лидары — на 0.4–0.75 м. Для остановки перед ступенькой на 0.12 м/с этого хватает (~1 с), для выбора пути — нет.</li>
+    <li><b>Хорошо заменяет передние ToF (FL, FR, FC).</b> Одним датчиком закрывает всю ширину, а не три точки, и способом «линия» не зависит от опорной плоскости: на опоре только по ногам (как без лидаров) у GS2 0 ложных при пороге 12 мм, а ToF в том же режиме требовали 30 мм и пропускали камни.</li>
+    <li><b>Вычисления:</b> 1.1–1.3 мс на скан в Python, ≈ 2500 точек/с, около 3 % ядра ПК при 25 Гц; на Banana Pi это ~0.1–0.2 ядра на Python и доли процента на C++.</li>
+    <li><b>Рекомендация:</b> лидары «крестом» + GS2 спереди + один VL53L1X сзади (RC) для движения назад.</li>
+  </ul></div>
+</section>
+
 <section><div class="sec-head"><div class="eyebrow">все прогоны</div>
-  <h2><span class="num-badge">4</span>Точность плоскости пола</h2></div>
+  <h2><span class="num-badge">5</span>Точность плоскости пола</h2></div>
   <div class="panel"><div class="tbl-wrap"><table><thead><tr><th>Поверхность</th><th class="num">Лидары: высота</th><th class="num">Лидары: наклон</th><th class="num">Ноги: высота</th><th class="num">Ноги: наклон</th></tr></thead><tbody><tr><td>Ровный пол</td><td class="num r-ok">4 мм</td><td class="num r-ok">0.05°</td><td class="num r-ok">2 мм</td><td class="num r-warn">0.7–1.2°</td></tr><tr><td>Уклон 10°</td><td class="num r-ok">4 мм</td><td class="num r-ok">0.07°</td><td class="num r-ok">3 мм</td><td class="num r-warn">0.6–1.0°</td></tr><tr><td>Камни 20 мм</td><td class="num r-ok">6 мм</td><td class="num r-ok">0.15°</td><td class="num r-warn">3–9 мм</td><td class="num r-bad">1.2–3.7°</td></tr><tr><td>Волны 20 мм</td><td class="num r-warn">15 мм (гребни)</td><td class="num r-ok">0.23°</td><td class="num r-warn">11 мм</td><td class="num r-bad">4.3°</td></tr><tr><td>Ступеньки</td><td class="num r-ok">5–6 мм</td><td class="num r-warn">0.6–0.9°</td><td class="num r-ok">2–5 мм</td><td class="num r-bad">1.2–2.9°</td></tr></tbody></table></div><p class="note">Лидары дают наклон пола в 10–20 раз точнее ног, ноги — высоту. Поэтому опорная плоскость объединённая: наклон по лидарам, высота сверяется по ногам (±15 мм), иначе берутся ноги.</p></div>
 </section>
 
 <section><div class="sec-head"><div class="eyebrow">замер в симуляции, пересчёт на частоты робота</div>
-  <h2><span class="num-badge">5</span>Вычислительная нагрузка</h2>
+  <h2><span class="num-badge">6</span>Вычислительная нагрузка</h2>
   <p>Сами алгоритмы дешёвые: 1.5 мс на скан, 0.2 мс на замер ToF, около 8 % ядра ПК. Основную цену в Python даёт приём сообщений, 0.37 мс на каждое. Частоты робота: суставы 50 Гц, IMU 100 Гц, одометрия 50 Гц, ToF 4 × 50 Гц, лидары 2 × 10 Гц.</p></div>
   <div class="panel"><div class="tbl-wrap"><table><thead><tr><th>Вариант узла</th><th class="num">ПК (Xeon 2.1 ГГц)</th><th class="num">Banana Pi, оценка (A53 1.5 ГГц)</th></tr></thead><tbody><tr><td>Python, как сейчас</td><td class="num r-">24 % ядра</td><td class="num r-bad">1–1.5 ядра из 4</td></tr><tr><td>Python, 4 ToF одним сообщением</td><td class="num r-">19 % ядра</td><td class="num r-warn">0.75–1.1 ядра</td></tr><tr><td>C++ (оценка)</td><td class="num r-">2–3 % ядра</td><td class="num r-ok">0.1–0.2 ядра</td></tr></tbody></table></div><p class="note">Пересчёт на A53 — оценка (одно ядро A53 в 4–6 раз медленнее ядра ПК); на самой плате не мерилось. Вывод: схема Banana Pi посильна, если узел на C++ или ToF собраны в одно сообщение. Тяжёлое — не эта обработка, а 3D-карта большой площади и планирование шагов; их лучше считать на ноутбуке.</p></div>
 </section>
 
-<section><div class="sec-head"><div class="eyebrow">по ходу симуляции</div><h2><span class="num-badge">6</span>Что нашли и исправили</h2></div>
+<section><div class="sec-head"><div class="eyebrow">по ходу симуляции</div><h2><span class="num-badge">7</span>Что нашли и исправили</h2></div>
   <div class="panel"><ul class="list">
     <li><b>Сканы двух лидаров снимаются в разные моменты</b> (до 0.1 с), а корпус на рыси кивает около 10°/с. Без доворота по IMU плоскость ошибалась на 1°, с ним — 0.05°. На настоящем лидаре так же придётся доворачивать каждую точку оборота.</li>
     <li><b>Автокалибровка ToF при старте</b> запоминала пандус перед роботом как поправку (FC 130 мм), и весь путь становился «ямой». Теперь поправки снимаются один раз на ровном полу и хранятся в robot.yaml.</li>
     <li><b>Многопоточная линейная алгебра numpy</b> занимала все ядра ожиданием. Теперь ограничена одним потоком: на Banana Pi это отняло бы ядра у походки.</li>
     <li><b>Каждый замер сравнивается с положением корпуса в свой момент</b> (история IMU), а не с последним известным.</li>
+    <li><b>GS2 на объединённой опоре не видел ступеньку:</b> плоскость лидаров к моменту подхода уже захватывала пол за ступенькой. Для GS2 опора — только ноги (линия в 0.14 м от стоп), после этого ступеньки 20 мм найдены обе.</li>
   </ul></div>
   <div class="panel"><h3>Ограничения модели</h3><ul class="list">
     <li>Лидар в Gazebo снимает оборот мгновенно, реальный — за 100 мс.</li>

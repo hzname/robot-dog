@@ -48,6 +48,9 @@ def sensor_frames(sensors):
             # the left lidar dips towards the right (-yaw) and vice versa
             out.append((name, 'lidar', (s['x_lidar_x'], side * s['x_lidar_y'], s['x_lidar_z']),
                         (0.0, tilt, -side * yaw)))
+    if s.get('gs2'):
+        out.append(('gs2', 'gs2', (s['gs2_x'], s['gs2_y'], s['gs2_z']),
+                    (0.0, math.radians(s['gs2_pitch_deg']), 0.0)))
     if s.get('tof'):
         for k, name in enumerate(s['tof_names']):
             out.append((f'tof_{name}', 'tof', (s['tof_x'][k], s['tof_y'][k], s['tof_z'][k]),
@@ -116,6 +119,8 @@ def build_urdf(geometry, description=None, gazebo=False, namespace='dog', initia
     for frame, kind, xyz, rpy in sensor_frames(d.get('sensors')):
         vis = ('<visual><geometry><cylinder radius="0.019" length="0.03"/></geometry>'
                '<material name="foot"/></visual>') if kind == 'lidar' else \
+            ('<visual><geometry><box size="0.011 0.026 0.024"/></geometry>'
+             '<material name="foot"/></visual>') if kind == 'gs2' else \
             ('<visual><geometry><box size="0.006 0.018 0.012"/></geometry>'
              '<material name="foot"/></visual>')
         out.append(f'<link name="{frame}">{vis}</link>'
@@ -225,7 +230,13 @@ def _gazebo_sensors(ns, sensors):
     s = sensors or {}
     parts = []
     for frame, kind, _, _ in sensor_frames(s):
-        if kind == 'lidar':
+        if kind == 'gs2':  # a fan of rays in the sensor's x-y plane (tilted down with it)
+            half = math.radians(s['gs2_fov_deg']) / 2
+            n, rate, noise = int(s['gs2_samples']), s['gs2_rate'], s['gs2_noise']
+            scan = (f'<horizontal><samples>{n}</samples><min_angle>{-half:.4f}</min_angle>'
+                    f'<max_angle>{half:.4f}</max_angle></horizontal>')
+            rng = f'<min>{s["gs2_range_min"]}</min><max>{s["gs2_range_max"]}</max><resolution>0.001</resolution>'
+        elif kind == 'lidar':
             n, rate, noise = int(s['x_lidar_samples']), s['x_lidar_rate'], s['x_lidar_noise']
             scan = (f'<horizontal><samples>{n}</samples><min_angle>{-math.pi:.5f}</min_angle>'
                     f'<max_angle>{math.pi * (1 - 2.0 / n):.5f}</max_angle></horizontal>')

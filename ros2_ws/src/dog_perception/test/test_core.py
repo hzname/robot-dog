@@ -10,6 +10,7 @@ SENSORS = {
     'tof': True, 'tof_names': ['fl', 'fr', 'fc', 'rc'], 'tof_x': [0.115, 0.115, 0.115, -0.115],
     'tof_y': [0.045, -0.045, 0.0, 0.0], 'tof_z': [-0.012, -0.012, 0.0, -0.012],
     'tof_pitch_deg': [40.0, 40.0, 20.0, 40.0], 'tof_yaw_deg': [23.0, -23.0, 0.0, 180.0],
+    'gs2': True, 'gs2_x': 0.115, 'gs2_y': 0.0, 'gs2_z': -0.012, 'gs2_pitch_deg': 40.0,
 }
 GEOM = {'hip_offset': 0.055, 'thigh': 0.105, 'calf': 0.105, 'hip_x': 0.09, 'hip_y': 0.06}
 H = 0.162  # body centre above the floor
@@ -123,3 +124,40 @@ def test_tof_detector_calibrates_and_debounces():
     assert det.check(exp - 0.03, FLOOR)[0] == 'up'     # second: stone
     assert det.check(math.inf, FLOOR)[0] is None
     assert det.check(math.inf, FLOOR)[0] == 'down'     # no floor: edge or hole
+
+
+def _gs2_scan(mount, floor_z, rmax=0.30, n=160, fov=100.0):
+    """Ideal GS2 scan of a floor given as z(x, y) (ray march)."""
+    a = np.linspace(-math.radians(fov / 2), math.radians(fov / 2), n)
+    rng = []
+    for x in a:
+        u = mount.R @ np.array([math.cos(x), math.sin(x), 0.0])
+        r = math.inf
+        for t in np.arange(0.02, rmax, 0.0005):
+            q = mount.p + t * u
+            if q[2] <= floor_z(q[0], q[1]):
+                r = t
+                break
+        rng.append(r)
+    return core.scan_to_body(mount, rng, a[0], a[1] - a[0], 0.025, rmax)
+
+
+def test_gs2_line_and_hazards():
+    m = core.mounts_from_params(SENSORS)['gs2']
+    flat = _gs2_scan(m, lambda x, y: -H)
+    # the line lies across the floor 0.29 m ahead, both foot lines covered
+    assert np.allclose(flat[:, 2], -H, atol=1e-3)
+    assert abs(np.median(flat[:, 0]) - 0.294) < 0.01
+    assert flat[:, 1].min() < -0.17 and flat[:, 1].max() > 0.17
+    assert core.gs2_hazards(flat, FLOOR, True) == []
+    # a 20 mm stone on the left foot line: seen by the line fit, reference-free
+    stone = _gs2_scan(m, lambda x, y: -H + (0.02 if 0.09 < y < 0.15 and x < 0.35 else 0.0))
+    hz = core.gs2_hazards(stone, None, False)
+    assert [(c, k, how) for c, k, _, _, _, how in hz] == [('left', 'up', 'line')]
+    # a 20 mm step up across the path: only the reference plane sees it
+    step = _gs2_scan(m, lambda x, y: -H + (0.02 if x > 0.25 else 0.0))
+    kinds = {(c, k, how) for c, k, _, _, _, how in core.gs2_hazards(step, FLOOR, True)}
+    assert kinds == {(c, 'up', 'plane') for c in core.CORRIDORS}
+    # a 50 mm step down: the centre of the line is out of range
+    down = _gs2_scan(m, lambda x, y: -H - (0.05 if x > 0.25 else 0.0))
+    assert ('centre', 'down') in {(c, k) for c, k, *_ in core.gs2_hazards(down, FLOOR, True)}
