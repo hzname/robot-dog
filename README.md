@@ -54,6 +54,7 @@ ros2 launch dog_bringup robot.launch.py backend:=mock rviz:=true   # без фи
 | [docs/SIMULATION.md](docs/SIMULATION.md) | Gazebo, `walk_check`, как подбиралась походка |
 | [docs/TERRAIN.md](docs/TERRAIN.md) | **Подъём, спуск, волны, камни:** пределы уклонов и неровностей по манёврам, компенсация по IMU |
 | [docs/HEAD.md](docs/HEAD.md) | Варианты «головы»: камеры, лидар, датчики обрыва; нужен ли второй IMU и хватит ли двух серв |
+| [docs/COMPUTE.md](docs/COMPUTE.md) | Хватит ли одной платы: замер загрузки, что вынести на микроконтроллер, ноутбук или более мощную плату |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Узлы, топики, режимы, походка, кинематика, тесты |
 
 ## Структура
