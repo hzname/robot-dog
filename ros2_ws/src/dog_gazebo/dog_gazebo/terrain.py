@@ -47,6 +47,7 @@ FOOTER = '''  </world>
 RAMP_START = 0.25  # [m] start of the ramp in the slope world
 RAMP_LENGTH = 3.0
 STEP_DOWN_X, STEP_UP_X = 2.2, 3.0  # steps world
+WALL_X = 1.2  # wall world: near face of a block across the path
 STONES = ((0.80, 0.13), (1.40, -0.13))  # steps world: (x of the near edge, y) of 20 mm stones
 SURFACE = '<surface><friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction></surface>'
 
@@ -102,6 +103,8 @@ def obstacles(kind, level, seed=0):
         for x, y in STONES:
             out.append({'shape': 'box', 'x': x + 0.03, 'y': y, 'z': h + 0.01, 'size': (0.06, 0.14, 0.02),
                         'yaw': 0.0})
+    elif kind == 'wall':  # a block too tall to step over (level = height in mm)
+        out.append({'shape': 'box', 'x': WALL_X + 0.05, 'y': 0.0, 'z': h / 2, 'size': (0.10, 0.80, h), 'yaw': 0.0})
     elif kind == 'rough':
         rng = random.Random(seed)
         while len(out) < 260:
@@ -117,8 +120,8 @@ def obstacles(kind, level, seed=0):
 
 def world(kind='flat', level=0.0, seed=0):
     """SDF text of a test world."""
-    if kind not in ('flat', 'slope', 'waves', 'rough', 'steps'):
-        raise ValueError(f'unknown terrain {kind!r} (flat, slope, waves, rough, steps)')
+    if kind not in ('flat', 'slope', 'waves', 'rough', 'steps', 'wall'):
+        raise ValueError(f'unknown terrain {kind!r} (flat, slope, waves, rough, steps, wall)')
     parts = [HEADER, _ground()]
     if kind == 'slope':
         th = math.radians(level)

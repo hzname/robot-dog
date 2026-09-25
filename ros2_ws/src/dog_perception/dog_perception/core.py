@@ -7,10 +7,38 @@ pointing up (away from the ground), so c = -(height of the origin above it).
 """
 
 import math
+import os
 
 import numpy as np
 
 LEGS = (('lf', 1, 1), ('rf', 1, -1), ('lr', -1, 1), ('rr', -1, -1))
+
+
+# --------------------------------------------------------------- config
+def robot_config(path=None):
+    """(sensors, geometry, stance) sections of robot.yaml: the given file, the
+    installed dog_bringup one, or the one in this source tree. Offline tools
+    and the simulation checks must use the same sensor mounts as the robot."""
+    import yaml
+    if path is None:
+        try:
+            from ament_index_python.packages import get_package_share_directory
+            path = os.path.join(get_package_share_directory('dog_bringup'), 'config', 'robot.yaml')
+        except Exception:  # no ROS: the source tree
+            path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'dog_bringup', 'config',
+                                'robot.yaml')
+    with open(path) as f:
+        p = yaml.safe_load(f)['/**']['ros__parameters']
+    return p.get('sensors', {}), p['geometry'], p.get('stance', {})
+
+
+def gs2_line_x(sensors, stand_height):
+    """Body x where the GS2 centre ray meets a flat floor in the stand pose."""
+    m = mounts_from_params(sensors).get('gs2')
+    if m is None:
+        return math.nan
+    t = ray_to_plane(m.p, m.beam, (np.array([0.0, 0.0, 1.0]), -stand_height))
+    return float(m.p[0] + t * m.beam[0]) if math.isfinite(t) else math.nan
 
 
 # --------------------------------------------------------------- rotations
@@ -122,9 +150,10 @@ def robust_plane(points, iterations=3, keep=0.02):
 
 
 # --------------------------------------------------------------- legs
-def feet_body(geometry, q, foot_radius=0.012):
+def feet_body(geometry, q, foot_radius=0.0):
     """Contact points of the four feet in the body frame [(4, 3)] from the joint
-    angles q = {joint: rad} (same kinematics as dog_control)."""
+    angles q = {joint: rad} (same kinematics as dog_control). calf runs to the
+    contact point (robot.yaml, URDF), so there is nothing to subtract."""
     L1, L2, L3 = geometry['hip_offset'], geometry['thigh'], geometry['calf']
     out = []
     for leg, fr, sd in LEGS:
@@ -224,23 +253,51 @@ def _shifted(a, shift, fill):
 CORRIDORS = {'left': (0.06, 0.18), 'centre': (-0.06, 0.06), 'right': (-0.18, -0.06)}
 
 
-def lidar_hazards(points, plane, x_range=(0.25, 1.0), thr=0.015, min_points=3):
+def lidar_hazards(points, plane, x_range=(0.25, 1.0), thr=0.015, min_points=3, bin_=0.03, bin_points=3):
     """Hazards in the foot corridors ahead from lidar points (body frame) and
-    the ground plane under the feet: [(corridor, kind, x_nearest, height)].
+    the ground plane under the feet: [(corridor, kind, x_nearest, height, jump)].
     kind 'up' = above the plane (stone, step up, ramp start), 'down' = below
-    (hole, step down)."""
+    (hole, step down). height is the median over the corridor; jump the
+    largest rise ('up', > 0) or drop ('down', < 0) of the profile within two
+    bins along x (3-6 cm): a wall or a step shows its full height there, a
+    ramp only its slope (10 deg: ~10 mm). It does not depend on the plane.
+    Bins with fewer than bin_points points are skipped: with ~20 points per
+    corridor and 10 mm lidar noise, single-point bins made 15-30 mm 'jumps'
+    on a flat floor (simulation, 600 scans).
+    """
     out = []
     n, c = plane
     res = points @ n - c
     ahead = (points[:, 0] > x_range[0]) & (points[:, 0] < x_range[1])
     for name, (y0, y1) in CORRIDORS.items():
         m = ahead & (points[:, 1] > y0) & (points[:, 1] < y1)
+        up_j = down_j = None
         for kind, sel in (('up', res > thr), ('down', res < -thr)):
             k = m & sel
             if k.sum() >= min_points:
+                if up_j is None:
+                    up_j, down_j = _profile_jumps(points[m, 0], res[m], bin_, bin_points)
                 i = np.argmin(points[k, 0])
-                out.append((name, kind, float(points[k][i, 0]), float(np.median(res[k]))))
+                out.append((name, kind, float(points[k][i, 0]), float(np.median(res[k])),
+                            up_j if kind == 'up' else -down_j))
     return out
+
+
+def _profile_jumps(x, h, bin_, bin_points=1):
+    """Largest rise and largest drop of the binned median profile h(x) over
+    one or two bins."""
+    b = np.floor(x / bin_).astype(int)
+    keys, cnt = np.unique(b, return_counts=True)
+    keys = keys[cnt >= bin_points]
+    med = np.array([np.median(h[b == k]) for k in keys])
+    up = down = 0.0
+    for gap in (1, 2):
+        if len(keys) > gap:
+            ok = keys[gap:] - keys[:-gap] <= 2
+            d = (med[gap:] - med[:-gap])[ok]
+            if len(d):
+                up, down = max(up, float(d.max())), max(down, float(-d.min()))
+    return up, down
 
 
 def gs2_hazards(points, plane, expected_centre, thr_local=0.012, thr_abs=0.015, min_points=3):
@@ -286,6 +343,130 @@ def gs2_hazards(points, plane, expected_centre, thr_local=0.012, thr_abs=0.015, 
                 out.append((name, 'up' if med > 0 else 'down', float(np.median(points[m, 0])), (y0 + y1) / 2, med,
                             'plane'))
     return out
+
+
+class HazardGuard:
+    """Turns hazard reports into what the gait should do: a forward speed
+    limit and a swing height per leg.
+
+    Reports are kept on a 5 cm grid in the odom frame. A cell counts how
+    often it was reported as
+      'stop' - an edge too tall to step over (> climb_max) or a drop deeper
+               than descend_max (lidars: they see both from above, well ahead);
+      'step' - can be walked over. Also 'no floor' from GS2 / ToF unless
+               deep_stop: both lose the floor whenever the body pitches nose
+               up (15-20 deg on a stone or a ramp start in simulation), and
+               stopping on that froze the robot in 2 of 6 runs;
+    and the highest lift (how high the feet must clear it; 0 = unknown or a
+    drop). A cell is confirmed with `confirm` reports in it and its 8
+    neighbours ('stop': stop_confirm stop reports) - one stray report does
+    nothing. A confirmed stop stays a stop while the cell is still reported
+    at all: right in front of a wall the lidars no longer see its edge and
+    call it 'step'; a list of reports let those push the stop out of memory
+    and the robot walked into the wall (simulation). A cell is forgotten
+    `memory` s after its last report or when it is well behind the robot.
+
+    Each tick the cells are seen from the current pose; only those in the
+    path (|lateral| < half_width) count, `d` is how far ahead of the body
+    centre they are:
+      stop cell, d < stop_dist      -> max_vx 0 (front feet ~0.2 m before it)
+      a leg has a cell with lift    -> near_vx, that leg swings lift + margin
+      any other cell, d > -pass     -> slow_vx
+    A leg lifts higher only while a cell with lift lies on its own foot line
+    (|lateral - foot y| < leg_width), from leg_behind behind its foot to
+    leg_ahead in front of it: front legs first, rear legs when they get there,
+    and a stone on the left line never lifts the right legs. The swing stays
+    low (max_step 30 mm): a higher swing rocks this trot on its diagonal pair
+    (35-50 mm tipped it over on waves, stones and a ramp in simulation).
+    Unknown heights (ToF, GS2 'plane': a step and a ramp look the same) only
+    slow down. Turning away takes the cells out of the path, so the operator
+    can steer around a stop. Only forward motion is limited.
+    """
+
+    CELL = 0.05
+
+    def __init__(self, slow_vx=0.08, near_vx=0.05, stop_dist=0.30, pass_dist=0.20, half_width=0.20,
+                 climb_max=0.04, descend_max=0.06, step_margin=0.01, max_step=0.03, memory=15.0,
+                 feet=((0.09, 0.115), (0.09, -0.115), (-0.09, 0.115), (-0.09, -0.115)),
+                 leg_width=0.08, leg_ahead=0.15, leg_behind=0.06, confirm=2, stop_confirm=3, deep_stop=False):
+        self.slow_vx, self.near_vx = slow_vx, near_vx
+        self.stop_dist, self.pass_dist = stop_dist, pass_dist
+        self.half_width = half_width
+        self.climb_max, self.descend_max = climb_max, descend_max
+        self.step_margin, self.max_step = step_margin, max_step
+        self.memory = memory
+        self.feet, self.leg_width, self.leg_ahead, self.leg_behind = feet, leg_width, leg_ahead, leg_behind
+        self.confirm, self.stop_confirm = confirm, stop_confirm
+        self.deep_stop = deep_stop
+        self.cells = {}  # (i, j) -> [sum x, sum y, n, n_stop, t_last, lift]
+
+    def verdict(self, kind, edge, deep=False):
+        """'stop' or 'step' for a hazard of this kind and edge height [m]
+        (NaN = unknown). edge must be a jump over a few cm, not a height over
+        the reference plane: a ramp is high above the plane but has no edge."""
+        if deep:  # no floor seen: GS2 gap, ToF without a return
+            return 'stop' if self.deep_stop else 'step'
+        if not math.isfinite(edge):
+            return 'step'
+        if kind == 'up':
+            return 'stop' if edge > self.climb_max else 'step'
+        return 'stop' if -edge > self.descend_max else 'step'
+
+    def add(self, t, xy, verdict, lift=0.0):
+        """lift: height the feet must clear [m]; 0 or NaN = only slow down."""
+        key = (math.floor(xy[0] / self.CELL), math.floor(xy[1] / self.CELL))
+        c = self.cells.setdefault(key, [0.0, 0.0, 0, 0, t, 0.0])
+        c[0] += xy[0]
+        c[1] += xy[1]
+        c[2] += 1
+        c[3] += verdict == 'stop'
+        c[4] = t
+        if math.isfinite(lift) and lift > c[5]:
+            c[5] = lift
+
+    def command(self, t, xy, yaw):
+        """(max_vx or inf, [swing height per leg LF, RF, LR, RR or NaN], state,
+        nearest d) for the pose (x, y, yaw)."""
+        none = [math.nan] * len(self.feet)
+        cs, sn = math.cos(yaw), math.sin(yaw)
+        live = {}
+        for key, c in self.cells.items():
+            if t - c[4] >= self.memory:
+                continue
+            dx, dy = c[0] / c[2] - xy[0], c[1] / c[2] - xy[1]
+            d, lat = cs * dx + sn * dy, -sn * dx + cs * dy
+            if d < -self.pass_dist - 0.2 and abs(lat) < 0.6:  # well behind
+                continue
+            live[key] = (c, d, lat)
+        self.cells = {k: v[0] for k, v in live.items()}
+        dmin, dstop, steps = math.inf, math.inf, list(none)
+        for (i, j), (c, d, lat) in live.items():
+            if not (abs(lat) < self.half_width and d > -self.pass_dist):
+                continue
+            n = n_stop = 0
+            for di in (-1, 0, 1):
+                for dj in (-1, 0, 1):
+                    nb = live.get((i + di, j + dj))
+                    if nb:
+                        n += nb[0][2]
+                        n_stop += nb[0][3]
+            if n < self.confirm:
+                continue
+            dmin = min(dmin, d)
+            if n_stop >= self.stop_confirm and c[3] > 0 and d > -0.1:
+                dstop = min(dstop, d)
+            if c[5] > 0:
+                for k, (fx, fy) in enumerate(self.feet):
+                    if abs(lat - fy) < self.leg_width and fx - self.leg_behind < d < fx + self.leg_ahead:
+                        h = min(self.max_step, c[5] + self.step_margin)
+                        steps[k] = h if math.isnan(steps[k]) else max(steps[k], h)
+        if not math.isfinite(dmin):
+            return math.inf, none, 'clear', math.nan
+        if dstop < self.stop_dist:
+            return 0.0, none, 'stop', dstop
+        if any(math.isfinite(h) for h in steps):
+            return self.near_vx, steps, 'step_over', dmin
+        return self.slow_vx, steps, 'caution', dmin
 
 
 class TofDetector:

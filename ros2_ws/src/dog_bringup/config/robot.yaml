@@ -69,7 +69,7 @@
       x_lidar: true
       x_lidar_x: 0.10         # [m] from the body centre
       x_lidar_y: 0.04         # [m] right one at -y
-      x_lidar_z: 0.05         # [m] beam above the body centre
+      x_lidar_z: 0.062        # [m] beam above the body centre (0.21 m above the floor in the stand pose)
       x_lidar_tilt_deg: 30.0
       x_lidar_yaw_deg: 40.0
       x_lidar_rate: 10.0      # [Hz]
@@ -80,7 +80,7 @@
       tof_names: [fl, fr, fc, rc]
       tof_x: [0.115, 0.115, 0.115, -0.115]
       tof_y: [0.045, -0.045, 0.0, 0.0]
-      tof_z: [-0.012, -0.012, 0.0, -0.012]
+      tof_z: [0.0, 0.0, 0.012, 0.0]   # 150 mm above the floor in the stand pose (FC 162), as HEAD.md designs
       tof_pitch_deg: [40.0, 40.0, 20.0, 40.0]
       tof_yaw_deg: [23.0, -23.0, 0.0, 180.0]
       tof_rate: 50.0          # [Hz]
@@ -93,7 +93,7 @@
       gs2: true
       gs2_x: 0.115
       gs2_y: 0.0
-      gs2_z: -0.012
+      gs2_z: 0.0                # 150 mm above the floor in the stand pose
       gs2_pitch_deg: 40.0
       gs2_fov_deg: 100.0
       gs2_samples: 160
@@ -112,7 +112,23 @@
       tof_autocal: false       # never calibrate at every start (a ramp in view becomes an offset)
       gs2_threshold: 0.012     # [m] GS2: off the straight-line fit of its own profile (stones, pits)
       gs2_confirm: 3           # scans in a row (0.1 s at 28 Hz)
+      gs2_plane_threshold: 0.02  # [m] whole line off the leg plane (15 mm: false reports on a flat floor)
       gs2_reference: feet      # GS2 steps relative to the legs (line is 0.14 m ahead of the feet)
+      # reaction to hazards (perception -> locomotion 'guard' topic)
+      guard: true
+      guard_slow_vx: 0.08      # [m/s] a confirmed hazard in the path
+      guard_near_vx: 0.05      # [m/s] while a leg steps over something
+      guard_stop_dist: 0.30    # [m] stop this far (body centre) before a stop hazard
+      guard_pass_dist: 0.20    # [m] a hazard counts until this far behind the body centre
+      guard_climb_max: 0.04    # [m] taller edges: stop
+      guard_descend_max: 0.06  # [m] deeper drops: stop
+      guard_max_step: 0.03     # [m] highest swing: 35-50 mm rocks this trot over (TERRAIN.md, PERCEPTION.md)
+      guard_step_margin: 0.01  # [m] swing clears the obstacle by this
+      guard_lift_min: 0.018    # [m] lidar edges below this may be noise: no higher swing
+      guard_deep_stop: false   # stop on 'no floor' from GS2 / ToF (false: they lose the floor when the body pitches)
+      guard_confirm: 2         # reports within 10 cm before a hazard counts
+      guard_stop_confirm: 3    # ... before it stops the robot
+      debug_topics: false      # perception/tof: every ToF reading (simulation checks / videos)
       map_size: 3.0            # [m] elevation map window around the robot
       map_resolution: 0.02     # [m]
 

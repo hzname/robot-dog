@@ -26,22 +26,29 @@
                               robot_state_publisher ─▶ /tf    └───────────────────────────────┘
 
  Необязательные датчики (узел сам ищет чип на I2C и завершается, если его нет):
-   imu_node (MPU6050) ── imu/data ──▶ locomotion (компенсация уклона)
+   imu_node (MPU6050) ── imu/data ──▶ locomotion (компенсация уклона, удержание курса)
    power_monitor (INA226/219) ── power, estop, command
+
+ Восприятие рельефа (perception:=true; на роботе нужны драйверы датчиков):
+   lidar_left/right/scan, gs2/scan, tof/<n>, imu/data, joint_states, odom
+        ▼
+   perception_node (C++) ── perception/hazards, ground_*, map ──▶ веб-пульт, запись
+        └── guard [max_vx, шаг ЛП, ПП, ЛЗ, ПЗ] ──▶ locomotion: медленнее, выше шаг, стоп
+   odom: на роботе — locomotion (счисление по походке и курсу IMU), в симуляции — Gazebo
 ```
 
 ## Пакеты (`ros2_ws/src`)
 
 | Пакет | Язык | Что внутри |
 |---|---|---|
-| `dog_control` | C++ | `kinematics`, `gait` (рысь), `locomotion` (режимы) — библиотека без зависимости от ROS; нода `locomotion_node` |
+| `dog_control` | C++ | `kinematics`, `gait` (рысь, высота шага по ногам), `locomotion` (режимы, ограничения guard), `DeadReckoning` (одометрия счислением) — библиотека без зависимости от ROS; нода `locomotion_node` |
 | `dog_hardware` | C++ | PCA9685 через Linux i2c-dev и mock-шина; ядро драйвера (калибровка, ограничение скорости, поочерёдное включение ног, E-STOP); нода `servo_driver_node`; `power_monitor_node` (INA226/INA219), `imu_node` (MPU6050, фильтр ориентации); утилита `pca9685_probe` |
 | `dog_teleop` | C++ | `gamepad_node` (Linux joystick API), `joy_teleop_node`, `keyboard_teleop`; логика раскладок без зависимости от ROS |
 | `dog_web` | Python | `web_teleop`: HTTP и WebSocket на стандартной библиотеке, страница с виртуальными стиками, клавиатурой и Gamepad API |
 | `dog_description` | Python | генератор URDF из `robot.yaml` (xacro не нужен) |
 | `dog_bringup` | launch | `robot.launch.py`, конфиги (`robot.yaml`, `servos.yaml`, `teleop*.yaml`), `calib_pose` |
-| `dog_perception` | Python | `perception_node`: лидары «крестом» и VL53L1X — плоскость пола, карта высот, препятствия в коридорах стоп ([PERCEPTION.md](PERCEPTION.md)) |
-| `dog_gazebo` | Python | `sim.launch.py`, миры (ровный, уклон, волны, камни), мост команд в Gazebo, `walk_check`, `terrain_sweep` |
+| `dog_perception` | C++ (+ Python) | `perception_node` (C++): лидары «крестом», GS2 и VL53L1X — плоскость пола, карта высот, препятствия в коридорах стоп, реакция на них (guard) ([PERCEPTION.md](PERCEPTION.md)); тот же алгоритм на numpy (`dog_perception.core`) для проверок и видео |
+| `dog_gazebo` | Python | `sim.launch.py`, миры (ровный, уклон, волны, камни, ступеньки, стенка), мост команд в Gazebo, `walk_check`, `terrain_sweep`, `perception_check` |
 
 Внешние зависимости — только `ros-base`: rclcpp, rclpy, стандартные сообщения, robot_state_publisher, launch. Для симуляции нужен ещё ros_gz.
 

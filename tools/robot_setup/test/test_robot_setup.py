@@ -87,3 +87,28 @@ def test_stand_angles_match_the_controller():
     assert abs(L * math.cos(math.radians(q1)) + L * math.cos(math.radians(q1 + q2)) - 150) < 1e-6
     assert abs(L * math.sin(math.radians(q1)) + L * math.sin(math.radians(q1 + q2))) < 1e-6
     assert -95 < q2 < -85
+
+
+def test_sensor_fields_lists_and_flags(cfg):
+    v = rs.load(cfg)
+    assert v['tof_fc_pitch_deg'] == 20 and v['gs2'] == 1 and v['tof_offset_fr'] == 0
+    v['tof_fc_pitch_deg'], v['tof_offset_fr'], v['gs2'], v['guard_max_step'] = 25, 4, 0, 25
+    assert not [m for m in rs.validate(v)[0] if m[0] == 'error']
+    rs.save(cfg, v)
+    text = open(os.path.join(cfg, 'robot.yaml')).read()
+    r = yaml.safe_load(text)['/**']['ros__parameters']
+    assert r['sensors']['tof_pitch_deg'] == [40.0, 40.0, 25.0, 40.0]
+    assert r['perception']['tof_offsets'] == [0.0, 0.004, 0.0, 0.0]
+    assert r['sensors']['gs2'] is False and r['perception']['guard_max_step'] == 0.025
+    assert '# VL53L1X ToF sensors' in text  # comments kept
+    assert rs.load(cfg)['gs2'] == 0
+
+
+def test_sensor_geometry_is_checked(cfg):
+    v = rs.load(cfg)
+    msgs = [t for lv, t in rs.validate(v)[0] if lv == 'info']
+    assert any(t.startswith('линия GS2') for t in msgs) and any(t.startswith('лидары: крест') for t in msgs)
+    v['gs2_pitch_deg'] = 10  # nearly flat: the line is beyond the 0.3 m range
+    assert any(lv == 'error' and 'GS2' in t for lv, t in rs.validate(v)[0])
+    v['gs2_pitch_deg'], v['tof_fl_pitch_deg'] = 40, 2
+    assert any(lv == 'error' and 'ToF FL' in t for lv, t in rs.validate(v)[0])

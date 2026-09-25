@@ -16,6 +16,7 @@ import pytest
 import rclpy
 from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from sensor_msgs.msg import Imu, JointState
@@ -137,6 +138,15 @@ class TestMockBringup(unittest.TestCase):
         self.assertTrue(self.spin_until(lambda: len(got) > 5, 15.0), 'no /dog/imu/data')
         self.assertAlmostEqual(got[-1].orientation.w, 1.0, places=3)
         self.assertAlmostEqual(got[-1].linear_acceleration.z, 9.80665, places=2)
+        self.node.destroy_subscription(sub)
+
+    def test_odom_dead_reckoning(self):
+        # the real robot has no odometry sensor: locomotion integrates the walk
+        got = []
+        sub = self.node.create_subscription(Odometry, 'odom', got.append, 10)
+        self.assertTrue(self.spin_until(lambda: len(got) > 5, 20.0), 'no /dog/odom')
+        self.assertEqual(got[-1].header.frame_id, 'odom')
+        self.assertAlmostEqual(got[-1].pose.pose.position.z, 0.15, places=3)
         self.node.destroy_subscription(sub)
 
     def test_topics_then_web(self):

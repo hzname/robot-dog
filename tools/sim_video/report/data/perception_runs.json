@@ -1,0 +1,198 @@
+[
+ {
+  "dir": "pc3",
+  "name": "flat_t15",
+  "world": "flat",
+  "tof_threshold": "0.015,0.015,0.05,0.015",
+  "setup": "лидары X + ToF, порог 15 мм"
+ },
+ {
+  "dir": "pc2",
+  "name": "flat_auto",
+  "world": "flat",
+  "tof_threshold": "0.02,0.02,0.05,0.02",
+  "setup": "лидары X + ToF, порог 20 мм"
+ },
+ {
+  "dir": "pc2",
+  "name": "flat_feet",
+  "world": "flat",
+  "tof_threshold": "0.03,0.03,0.08,0.03",
+  "setup": "только ToF и ноги (без опоры на лидары), порог 30 мм"
+ },
+ {
+  "dir": "pc3",
+  "name": "slope10_t15",
+  "world": "slope",
+  "tof_threshold": "0.015,0.015,0.05,0.015",
+  "setup": "лидары X + ToF, порог 15 мм"
+ },
+ {
+  "dir": "pc2",
+  "name": "slope10_auto",
+  "world": "slope",
+  "tof_threshold": "0.02,0.02,0.05,0.02",
+  "setup": "лидары X + ToF, порог 20 мм"
+ },
+ {
+  "dir": "pc2",
+  "name": "waves20_auto",
+  "world": "waves",
+  "tof_threshold": "0.02,0.02,0.05,0.02",
+  "setup": "лидары X + ToF, порог 20 мм"
+ },
+ {
+  "dir": "pc3",
+  "name": "rough20_t15",
+  "world": "rough",
+  "tof_threshold": "0.015,0.015,0.05,0.015",
+  "setup": "лидары X + ToF, порог 15 мм"
+ },
+ {
+  "dir": "pc2",
+  "name": "rough20_auto",
+  "world": "rough",
+  "tof_threshold": "0.02,0.02,0.05,0.02",
+  "setup": "лидары X + ToF, порог 20 мм"
+ },
+ {
+  "dir": "pc3",
+  "name": "steps20_t15b",
+  "world": "steps20",
+  "tof_threshold": "0.015,0.015,0.05,0.015",
+  "setup": "лидары X + ToF, порог 15 мм"
+ },
+ {
+  "dir": "pc3",
+  "name": "steps20_t15",
+  "world": "steps20",
+  "tof_threshold": "0.015,0.015,0.05,0.015",
+  "setup": "лидары X + ToF, порог 15 мм · робот споткнулся о камень"
+ },
+ {
+  "dir": "pc2",
+  "name": "steps20_auto",
+  "world": "steps20",
+  "tof_threshold": "0.02,0.02,0.05,0.02",
+  "setup": "лидары X + ToF, порог 20 мм"
+ },
+ {
+  "dir": "pc3",
+  "name": "steps30_t15",
+  "world": "steps30",
+  "tof_threshold": "0.015,0.015,0.05,0.015",
+  "setup": "лидары X + ToF, порог 15 мм"
+ },
+ {
+  "dir": "pc2",
+  "name": "steps30_auto",
+  "world": "steps30",
+  "tof_threshold": "0.02,0.02,0.05,0.02",
+  "setup": "лидары X + ToF, порог 20 мм"
+ },
+ {
+  "dir": "pc2",
+  "name": "steps30_feet",
+  "world": "steps30",
+  "tof_threshold": "0.03,0.03,0.08,0.03",
+  "setup": "только ToF и ноги (без опоры на лидары), порог 30 мм"
+ },
+ {
+  "dir": "pc5",
+  "name": "steps20_gs2",
+  "world": "steps20",
+  "tof_threshold": "0.015,0.015,0.05,0.015",
+  "setup": "GS2 (опора — ноги) + лидары X + ToF, порог 15 мм"
+ },
+ {
+  "dir": "pc5",
+  "name": "steps30_gs2",
+  "world": "steps30",
+  "tof_threshold": "0.015,0.015,0.05,0.015",
+  "setup": "GS2 (опора — ноги) + лидары X + ToF, порог 15 мм"
+ },
+ {
+  "dir": "pc5",
+  "name": "flat_gs2",
+  "world": "flat",
+  "tof_threshold": "0.015,0.015,0.05,0.015",
+  "setup": "GS2 (опора — ноги) + лидары X + ToF, порог 15 мм"
+ },
+ {
+  "dir": "pc5",
+  "name": "slope10_gs2",
+  "world": "slope",
+  "tof_threshold": "0.015,0.015,0.05,0.015",
+  "setup": "GS2 (опора — ноги) + лидары X + ToF, порог 15 мм"
+ },
+ {
+  "dir": "pc5",
+  "name": "rough20_gs2",
+  "world": "rough",
+  "tof_threshold": "0.015,0.015,0.05,0.015",
+  "setup": "GS2 (опора — ноги) + лидары X + ToF, порог 15 мм"
+ },
+ {
+  "dir": "pc4",
+  "name": "steps20_gs2_feet",
+  "world": "steps20",
+  "tof_threshold": "0.015,0.015,0.05,0.015",
+  "setup": "всё на опоре по ногам (как без лидаров), порог 15 мм"
+ },
+ {
+  "dir": "fin2",
+  "name": "flat_guard",
+  "world": "flat",
+  "tof_threshold": "0.015,0.015,0.05,0.015",
+  "setup": "C++ узел, лидары X + GS2 + ToF, реакция вкл."
+ },
+ {
+  "dir": "fin2",
+  "name": "wall80_guard",
+  "world": "wall80",
+  "tof_threshold": "0.015,0.015,0.05,0.015",
+  "setup": "C++ узел, лидары X + GS2 + ToF, реакция вкл."
+ },
+ {
+  "dir": "fin",
+  "name": "wall80_noguard",
+  "world": "wall80",
+  "tof_threshold": "0.015,0.015,0.05,0.015",
+  "setup": "C++ узел, лидары X + GS2 + ToF, реакция выкл."
+ },
+ {
+  "dir": "fin2",
+  "name": "steps20_guard",
+  "world": "steps20",
+  "tof_threshold": "0.015,0.015,0.05,0.015",
+  "setup": "C++ узел, лидары X + GS2 + ToF, реакция вкл."
+ },
+ {
+  "dir": "fin",
+  "name": "steps20_noguard",
+  "world": "steps20",
+  "tof_threshold": "0.015,0.015,0.05,0.015",
+  "setup": "C++ узел, лидары X + GS2 + ToF, реакция выкл."
+ },
+ {
+  "dir": "fin2",
+  "name": "steps30_guard",
+  "world": "steps30",
+  "tof_threshold": "0.015,0.015,0.05,0.015",
+  "setup": "C++ узел, лидары X + GS2 + ToF, реакция вкл."
+ },
+ {
+  "dir": "fin2",
+  "name": "slope10_guard",
+  "world": "slope",
+  "tof_threshold": "0.015,0.015,0.05,0.015",
+  "setup": "C++ узел, лидары X + GS2 + ToF, реакция вкл."
+ },
+ {
+  "dir": "fin2",
+  "name": "rough20_guard",
+  "world": "rough",
+  "tof_threshold": "0.015,0.015,0.05,0.015",
+  "setup": "C++ узел, лидары X + GS2 + ToF, реакция вкл."
+ }
+]

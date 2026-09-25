@@ -31,6 +31,7 @@ CONFIG = os.path.join(REPO, 'ros2_ws', 'src', 'dog_bringup', 'config')
 IMG = os.path.join(REPO, 'docs', 'img')
 LEGS = ('lf', 'rf', 'lr', 'rr')
 KINDS = ('hip', 'thigh', 'calf')
+TOF = ('fl', 'fr', 'fc', 'rc')  # order of sensors.tof_names
 
 # ------------------------------------------------------------------ the form
 # (id, label, unit, section, key, scale file->form, min, max, help)
@@ -86,8 +87,49 @@ GROUPS = [
                                       ('axis_distance_mm', 'ось сервы ↔ ось сустава'))
     ] + [('calf_coupled', 'Тяга колена опирается на корпус (серва колена в блоке бедра)', '', None, None, 1, 0, 1,
           'тогда серва задаёт сумму «колено + бедро»: coupled_to = <нога>_thigh_joint')]),
+    ('sensors', 'Датчики (docs/HEAD.md): положение от центра корпуса', ['measure_body_top.svg'], [
+        ('x_lidar', 'Лидары «крестом» стоят (1 — да, 0 — нет)', '', 'sensors', 'x_lidar', 1, 0, 1, ''),
+        ('x_lidar_x', 'Лидары: x — вперёд от центра', 'мм', 'sensors', 'x_lidar_x', 1000, -200, 300, ''),
+        ('x_lidar_y', 'Лидары: y — влево (правый зеркально)', 'мм', 'sensors', 'x_lidar_y', 1000, 0, 150, ''),
+        ('x_lidar_z', 'Лидары: z — луч над центром корпуса', 'мм', 'sensors', 'x_lidar_z', 1000, -100, 200, ''),
+        ('x_lidar_tilt_deg', 'Лидары: плоскость наклонена вниз, α', '°', 'sensors', 'x_lidar_tilt_deg', 1, 0, 60,
+         '30° по умолчанию; см. HEAD.md'),
+        ('x_lidar_yaw_deg', 'Лидары: направление наклона, β', '°', 'sensors', 'x_lidar_yaw_deg', 1, 0, 90,
+         'правый наклонён влево, левый — вправо'),
+        ('gs2', 'GS2 стоит (1 — да, 0 — нет)', '', 'sensors', 'gs2', 1, 0, 1, ''),
+        ('gs2_x', 'GS2: x — вперёд от центра', 'мм', 'sensors', 'gs2_x', 1000, -200, 300, 'окно лазера'),
+        ('gs2_y', 'GS2: y — влево', 'мм', 'sensors', 'gs2_y', 1000, -150, 150, ''),
+        ('gs2_z', 'GS2: z — над центром корпуса (ниже — минус)', 'мм', 'sensors', 'gs2_z', 1000, -150, 150, ''),
+        ('gs2_pitch_deg', 'GS2: наклон вниз', '°', 'sensors', 'gs2_pitch_deg', 1, 0, 80, 'линия должна лечь '
+         'на пол перед передними стопами, но ближе 0.3 м от датчика'),
+        ('tof', 'VL53L1X стоят (1 — да, 0 — нет)', '', 'sensors', 'tof', 1, 0, 1, 'четыре: FL, FR, FC, RC'),
+    ] + [
+        (f'tof_{n}_{a}', f'ToF {n.upper()}: {lab}', u, 'sensors', f'tof_{a}[{k}]', sc, lo, hi, '')
+        for k, n in enumerate(TOF)
+        for a, lab, u, sc, lo, hi in (('x', 'x', 'мм', 1000, -300, 300), ('y', 'y', 'мм', 1000, -150, 150),
+                                      ('z', 'z', 'мм', 1000, -150, 150), ('pitch_deg', 'наклон вниз', '°', 1, 0, 89),
+                                      ('yaw_deg', 'поворот влево', '°', 1, -180, 180))
+    ]),
+    ('perception', 'Восприятие и реакция на препятствия (docs/PERCEPTION.md)', [], [
+        ('threshold', 'Порог лидаров: выше / ниже пола', 'мм', 'perception', 'threshold', 1000, 5, 60, ''),
+    ] + [
+        (f'tof_offset_{n}', f'Поправка ToF {n.upper()} (замер на ровном полу)', 'мм', 'perception',
+         f'tof_offsets[{k}]', 1000, -60, 60, 'измерено минус ожидалось; DEPLOYMENT.md, этап 14')
+        for k, n in enumerate(TOF)
+    ] + [
+        ('guard', 'Реакция на препятствия включена (1/0)', '', 'perception', 'guard', 1, 0, 1,
+         'замедление, высокий шаг, остановка'),
+        ('guard_stop_dist', 'Остановка: центр корпуса не ближе', 'мм', 'perception', 'guard_stop_dist', 1000, 150, 1000,
+         '300 мм = стопы примерно в 0.2 м от препятствия'),
+        ('guard_climb_max', 'Перешагивать уступы до', 'мм', 'perception', 'guard_climb_max', 1000, 0, 80,
+         'выше — остановка'),
+        ('guard_max_step', 'Самый высокий шаг', 'мм', 'perception', 'guard_max_step', 1000, 10, 50,
+         'выше 30 мм рысь раскачивается и робот опрокидывается (TERRAIN.md)'),
+    ]),
 ]
 FIELDS = {f[0]: f for g in GROUPS for f in g[3]}
+BOOL = {'x_lidar', 'gs2', 'tof', 'guard'}
+LIST_RE = re.compile(r'^(\w+)\[(\d+)\]$')
 
 
 # ------------------------------------------------------------------ files
@@ -103,8 +145,10 @@ def load(config_dir):
     v = {}
     for fid, f in FIELDS.items():
         if f[3]:
-            val = r.get(f[3], {}).get(f[4])
-            if val is not None:
+            val = _get(r.get(f[3], {}), f[4])
+            if isinstance(val, bool):
+                v[fid] = int(val)
+            elif val is not None:
                 v[fid] = round(val * f[5], 3)
     lf = {k: s[f'lf_{k}_joint'] for k in KINDS}
     rf_hip = s['rf_hip_joint']
@@ -117,8 +161,20 @@ def load(config_dir):
         for f in ('servo_arm_mm', 'joint_arm_mm', 'rod_mm', 'axis_distance_mm'):
             v[f'{k}_{f}'] = float(lf[k].get(f, 0.0) or 0.0)
     v['calf_coupled'] = 1 if lf['calf'].get('coupled_to') else 0
+    names = r.get('sensors', {}).get('tof_names')
+    if names is not None and list(names) != list(TOF):
+        raise SystemExit(f'sensors.tof_names = {names}: форма рассчитана на {list(TOF)}')
     v['total_mass'] = 0
     return v
+
+
+def _get(section, key):
+    """section[key], or one element for keys like 'tof_x[2]'."""
+    m = LIST_RE.match(key)
+    if not m:
+        return section.get(key)
+    lst = section.get(m.group(1))
+    return lst[int(m.group(2))] if isinstance(lst, list) and int(m.group(2)) < len(lst) else None
 
 
 def fmt(x):
@@ -270,7 +326,82 @@ def validate(v):
             out.append(('info', f'{k}: рычаг сустава короче рычага сервы — ход сустава больше хода сервы'))
     if int(g['calf_coupled']) and g['calf_servo_arm_mm'] <= 0:
         out.append(('warn', 'колено «от корпуса» обычно бывает только с тягой (servo_arm_mm > 0)'))
+    sensor_checks(g, out, info)
     return out, info
+
+
+def _rot(roll, pitch, yaw):
+    """URDF rpy -> 3x3 (as dog_description / dog_perception)."""
+    cr, sr, cp, sp, cy, sy = (f(math.radians(a)) for a in (roll, pitch, yaw) for f in (math.cos, math.sin))
+    return [[cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+            [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+            [-sp, cp * sr, cp * cr]]
+
+
+def _floor_hit(p, R, a, floor_z):
+    """Where the ray at angle a in the sensor's x-y plane meets the floor z = floor_z: (range, x, y) or None."""
+    u = [R[i][0] * math.cos(a) + R[i][1] * math.sin(a) for i in range(3)]
+    if u[2] >= -1e-6:
+        return None
+    t = (floor_z - p[2]) / u[2]
+    return (t, p[0] + t * u[0], p[1] + t * u[1]) if t > 0 else None
+
+
+def sensor_checks(g, out, info):
+    """Where the sensors meet the floor in the stand pose (all in mm, body frame)."""
+    floor = -g['stand_height']
+    foot_x, foot_y = g['hip_x'], g['hip_y'] + g['hip_offset']
+    if int(g['gs2']):
+        p, R = (g['gs2_x'], g['gs2_y'], g['gs2_z']), _rot(0, g['gs2_pitch_deg'], 0)
+        hit = _floor_hit(p, R, 0.0, floor)
+        if hit is None or hit[0] > 300:
+            out.append(('error', 'GS2 не достаёт до пола в стойке (дальность 300 мм): увеличьте наклон вниз'))
+        else:
+            r, x, _ = hit
+            half = math.acos(min(1.0, r / 300.0))
+            w = r * math.tan(min(half, math.radians(50)))
+            info['gs2_line_x_mm'] = round(x)
+            out.append(('info', f'линия GS2: {x:.0f} мм от центра, {x - foot_x:.0f} мм перед стопами, '
+                                f'ширина ±{w:.0f} мм, центральный луч {r:.0f} мм'))
+            if r > 255:
+                out.append(('warn', f'GS2: центральный луч {r:.0f} мм — при кивке корпуса пол уйдёт за 300 мм'))
+            if x - foot_x < 40:
+                out.append(('warn', 'GS2: линия ближе 40 мм к передним стопам — не успеет затормозить'))
+            if w < foot_y + 30:
+                out.append(('warn', f'GS2: линия ±{w:.0f} мм не накрывает линии стоп (±{foot_y:.0f} мм)'))
+    if int(g['tof']):
+        for n in TOF:
+            p = (g[f'tof_{n}_x'], g[f'tof_{n}_y'], g[f'tof_{n}_z'])
+            R = _rot(0, g[f'tof_{n}_pitch_deg'], g[f'tof_{n}_yaw_deg'])
+            hit = _floor_hit(p, R, 0.0, floor)
+            if hit is None or hit[0] > 1000:
+                out.append(('error', f'ToF {n.upper()}: луч не попадает на пол ближе 1 м'))
+                continue
+            r, x, y = hit
+            out.append(('info', f'ToF {n.upper()}: пятно на полу x {x:.0f}, y {y:+.0f} мм, дальность {r:.0f} мм'))
+            if n in ('fl', 'fr') and abs(abs(y) - foot_y) > 40:
+                out.append(('warn', f'ToF {n.upper()}: пятно в {abs(abs(y) - foot_y):.0f} мм от линии стопы'))
+            if n != 'rc' and x < foot_x + 30:
+                out.append(('warn', f'ToF {n.upper()}: пятно не впереди передних стоп'))
+    if int(g['x_lidar']):
+        crosses = []
+        for side in (1, -1):
+            p = (g['x_lidar_x'], side * g['x_lidar_y'], g['x_lidar_z'])
+            R = _rot(0, g['x_lidar_tilt_deg'], -side * g['x_lidar_yaw_deg'])
+            best = None
+            for k in range(3600):
+                hit = _floor_hit(p, R, math.radians(k / 10.0), floor)
+                if hit and hit[1] > 0 and abs(hit[2]) < 3 and (best is None or hit[1] < best):
+                    best = hit[1]
+            crosses.append(best)
+        if None in crosses:
+            out.append(('error', 'лидары: плоскость не пересекает пол впереди на оси — увеличьте наклон α'))
+        else:
+            x = max(crosses)
+            info['x_lidar_cross_mm'] = round(x)
+            out.append(('info', f'лидары: крест на полу в {x:.0f} мм от центра ({x - foot_x:.0f} мм перед стопами)'))
+            if x > 1200:
+                out.append(('warn', 'лидары: крест дальше 1.2 м — узел берёт плоскость пола только до 1.2 м'))
 
 
 # ------------------------------------------------------------------ save
@@ -278,10 +409,25 @@ def render(config_dir, v):
     """New text of robot.yaml and servos.yaml."""
     robot_p, servos_p = paths(config_dir)
     rl = open(robot_p).readlines()
+    cur = yaml.safe_load(''.join(rl))['/**']['ros__parameters']
+    lists = {}  # (section, key) -> list of values, for keys like 'tof_x[2]'
     for fid, f in FIELDS.items():
-        if f[3]:
-            val = float(v[fid]) / f[5]
-            set_nested(rl, f[3], f[4], str(int(val)) if fid == 'knee_direction' else fmt(val))
+        if not f[3]:
+            continue
+        if fid in BOOL:
+            set_nested(rl, f[3], f[4], 'true' if int(float(v[fid])) else 'false')
+            continue
+        val = float(v[fid]) / f[5]
+        m = LIST_RE.match(f[4])
+        if m:
+            key = (f[3], m.group(1))
+            if key not in lists:
+                lists[key] = list(cur[f[3]][m.group(1)])
+            lists[key][int(m.group(2))] = val
+            continue
+        set_nested(rl, f[3], f[4], str(int(val)) if fid == 'knee_direction' else fmt(val))
+    for (section, key), vals in lists.items():
+        set_nested(rl, section, key, '[' + ', '.join(fmt(float(x)) for x in vals) + ']')
     hmax = max(float(v['hip_out']), float(v['hip_in']))
     set_nested(rl, 'description', 'hip_limits_deg', f'[{-hmax:.1f}, {hmax:.1f}]')
     set_nested(rl, 'description', 'thigh_limits_deg', f'[{float(v["thigh_min"]):.1f}, {float(v["thigh_max"]):.1f}]')

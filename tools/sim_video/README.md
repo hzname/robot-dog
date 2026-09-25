@@ -39,3 +39,40 @@ python3 tools/sim_video/calib_video.py calibration.mp4
 - робот на подставке и положение камеры;
 - точки «импульс → угол» текущего сустава и подобранная модель;
 - ошибка нуля всех 12 суставов до и после.
+
+## Датчики и реакция на препятствия
+
+```bash
+ros2 launch dog_gazebo sim.launch.py headless:=true web:=false perception:=true terrain:=steps level:=20 &
+ros2 run dog_gazebo perception_check --terrain steps --level 20 --seconds 45 --trace steps20.json
+python3 tools/sim_video/perception_video.py steps20.json steps20.mp4 --title "Ступеньки 20 мм"
+```
+
+В кадре точки лидаров, лучи ToF, линия GS2, состояние реакции (guard) и высота шага каждой ноги.
+
+## HTML-отчёты (`report/`)
+
+Сборщики лежат в [report/](report): `build_report.py` делает `report/index.html`, `build_perception_report.py` — `report/perception.html`. Им нужны только маленькие файлы из `report/data/` и ролики, которые уже лежат в `report/videos/`. Сырые записи прогонов (мегабайты на прогон) в git не хранятся.
+
+```bash
+pip install opencv-python-headless imageio-ffmpeg
+python3 tools/sim_video/report/build_report.py --out report
+python3 tools/sim_video/report/build_perception_report.py --out report
+```
+
+После новых прогонов:
+1. `collect.py` обновляет данные из сырых записей:
+   ```bash
+   python3 tools/sim_video/report/collect.py perception --root <папка с записями>   # список прогонов: data/perception_runs.json
+   python3 tools/sim_video/report/collect.py walk <корень> rec/on_flat_1/flat_0.json ...
+   python3 tools/sim_video/report/collect.py tests --jazzy <build Jazzy> --lyrical <build Lyrical>
+   ```
+2. Свежие ролики передаются через `--raw <папка>`: сборщик пережимает их в 960×540 H.264 и кладёт в `report/videos/` вместе с обложкой.
+
+| Файл | Что внутри |
+|---|---|
+| `data/walk.json` | итоги `walk_check` / `terrain_sweep` по каждому прогону ходьбы |
+| `data/tests.json` | тест-кейсы по пакетам на Jazzy и Lyrical |
+| `data/perception_runs.json` | прогоны `perception_check`: папка, имя, мир, настройка |
+| `data/perception.json` | их оценки (`scores` из записи, обнаружение пересчитано текущими правилами) |
+| `template.html` | страница основного отчёта и общий стиль |

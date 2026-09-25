@@ -31,7 +31,7 @@ ros2 run dog_gazebo walk_check
 Утилита ставит робота, гоняет его вперёд, назад, влево, вправо и поворачивает в обе стороны, затем кладёт. Перемещение берётся из истинной одометрии Gazebo. Тест считается пройденным, если робот прошёл больше 40 % от команды, наклон корпуса меньше 20° и он не упал. Пример (Jazzy, Gazebo Harmonic):
 
 ```
-PASS   stand        state=stand z=0.162
+PASS   stand        state=stand z=0.153
 PASS   forward      dx=+0.65m dy=+0.01m dyaw=+4deg  (108% of command)  tilt<=6deg
 PASS   backward     dx=-0.38m dy=+0.01m dyaw=+14deg  (75% of command)  tilt<=8deg
 PASS   left         dx=+0.03m dy=+0.25m dyaw=+18deg  (81% of command)  tilt<=7deg

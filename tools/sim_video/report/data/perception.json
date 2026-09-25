@@ -1,0 +1,2615 @@
+{
+ "flat_t15": {
+  "terrain": "flat",
+  "level": 0.0,
+  "walked_m": 1.267,
+  "ground_lidar": {
+   "n": 212,
+   "height_rms_mm": 3.8,
+   "height_bias_mm": -3.8,
+   "roll_rms_deg": 0.05,
+   "pitch_rms_deg": 0.05
+  },
+  "ground_feet": {
+   "n": 212,
+   "height_rms_mm": 2.1,
+   "height_bias_mm": -1.7,
+   "roll_rms_deg": 0.5,
+   "pitch_rms_deg": 0.9
+  },
+  "reports": {
+   "lidar": {
+    "reports": 0,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 0,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  },
+  "map": {
+   "cells": 9974,
+   "area_m2": 3.99,
+   "rms_mm": 7.2,
+   "within_10mm": 0.891
+  },
+  "cpu": {
+   "process_pct_of_core": 72.7,
+   "messages_per_s": 1163.4,
+   "callbacks_pct_of_core": 32.1,
+   "lidar_cycles_per_s": 17.8,
+   "lidar_points_per_s": 3254.0,
+   "lidar_ms_per_scan": 1.649,
+   "lidar_pct_of_core": 2.93,
+   "tof_msgs_per_s": 177.8,
+   "tof_ms_per_msg": 0.2131,
+   "tof_pct_of_core": 3.79,
+   "rates_per_s": {
+    "joint_states": 834.5,
+    "imu": 88.9,
+    "odom": 44.4,
+    "tof": 177.8,
+    "lidar": 17.8
+   },
+   "ms_per_msg": {
+    "joint_states": 0.299,
+    "imu": 0.0133,
+    "odom": 0.0044,
+    "tof": 0.2131,
+    "lidar": 1.649
+   },
+   "rclpy_ms_per_msg": 0.349
+  }
+ },
+ "flat_auto": {
+  "terrain": "flat",
+  "level": 0.0,
+  "walked_m": 1.33,
+  "ground_lidar": {
+   "n": 216,
+   "height_rms_mm": 4.0,
+   "height_bias_mm": -3.9,
+   "roll_rms_deg": 0.06,
+   "pitch_rms_deg": 0.06
+  },
+  "ground_feet": {
+   "n": 216,
+   "height_rms_mm": 2.2,
+   "height_bias_mm": -1.7,
+   "roll_rms_deg": 0.43,
+   "pitch_rms_deg": 1.16
+  },
+  "reports": {
+   "lidar": {
+    "reports": 0,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 0,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  },
+  "map": {
+   "cells": 10549,
+   "area_m2": 4.22,
+   "rms_mm": 6.9,
+   "within_10mm": 0.901
+  },
+  "cpu": {
+   "process_pct_of_core": 73.9,
+   "messages_per_s": 1188.4,
+   "callbacks_pct_of_core": 29.9,
+   "lidar_cycles_per_s": 17.8,
+   "lidar_points_per_s": 3254.0,
+   "lidar_ms_per_scan": 1.503,
+   "lidar_pct_of_core": 2.67,
+   "tof_msgs_per_s": 177.8,
+   "tof_ms_per_msg": 0.202,
+   "tof_pct_of_core": 3.59,
+   "rates_per_s": {
+    "joint_states": 859.4,
+    "imu": 88.9,
+    "odom": 44.5,
+    "tof": 177.8,
+    "lidar": 17.8
+   },
+   "ms_per_msg": {
+    "joint_states": 0.2699,
+    "imu": 0.0135,
+    "odom": 0.0076,
+    "tof": 0.202,
+    "lidar": 1.503
+   },
+   "rclpy_ms_per_msg": 0.3704
+  }
+ },
+ "flat_feet": {
+  "terrain": "flat",
+  "level": 0.0,
+  "walked_m": 1.311,
+  "ground_lidar": {
+   "n": 218,
+   "height_rms_mm": 4.0,
+   "height_bias_mm": -3.8,
+   "roll_rms_deg": 0.05,
+   "pitch_rms_deg": 0.05
+  },
+  "ground_feet": {
+   "n": 218,
+   "height_rms_mm": 2.2,
+   "height_bias_mm": -1.7,
+   "roll_rms_deg": 0.55,
+   "pitch_rms_deg": 1.0
+  },
+  "reports": {
+   "lidar": {
+    "reports": 97,
+    "unexplained": 97,
+    "unexplained_per_m": 73.98
+   },
+   "tof": {
+    "reports": 5,
+    "unexplained": 5,
+    "unexplained_per_m": 3.81
+   }
+  },
+  "map": {
+   "cells": 9994,
+   "area_m2": 4.0,
+   "rms_mm": 6.7,
+   "within_10mm": 0.907
+  },
+  "cpu": {
+   "process_pct_of_core": 74.3,
+   "messages_per_s": 1196.9,
+   "callbacks_pct_of_core": 28.6,
+   "lidar_cycles_per_s": 17.8,
+   "lidar_points_per_s": 3253.0,
+   "lidar_ms_per_scan": 1.411,
+   "lidar_pct_of_core": 2.51,
+   "tof_msgs_per_s": 177.8,
+   "tof_ms_per_msg": 0.1743,
+   "tof_pct_of_core": 3.1,
+   "rates_per_s": {
+    "joint_states": 868.1,
+    "imu": 88.9,
+    "odom": 44.4,
+    "tof": 177.8,
+    "lidar": 17.8
+   },
+   "ms_per_msg": {
+    "joint_states": 0.2607,
+    "imu": 0.012,
+    "odom": 0.0027,
+    "tof": 0.1743,
+    "lidar": 1.411
+   },
+   "rclpy_ms_per_msg": 0.3822
+  }
+ },
+ "slope10_t15": {
+  "terrain": "slope",
+  "level": 10.0,
+  "walked_m": 1.302,
+  "ground_lidar": {
+   "n": 164,
+   "height_rms_mm": 4.1,
+   "height_bias_mm": -4.0,
+   "roll_rms_deg": 0.07,
+   "pitch_rms_deg": 0.07
+  },
+  "ground_feet": {
+   "n": 164,
+   "height_rms_mm": 2.9,
+   "height_bias_mm": -2.0,
+   "roll_rms_deg": 0.75,
+   "pitch_rms_deg": 1.0
+  },
+  "reports": {
+   "lidar": {
+    "reports": 41,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 170,
+    "unexplained": 8,
+    "unexplained_per_m": 6.14
+   }
+  },
+  "map": {
+   "cells": 11671,
+   "area_m2": 4.67,
+   "rms_mm": 7.8,
+   "within_10mm": 0.855
+  },
+  "cpu": {
+   "process_pct_of_core": 75.6,
+   "messages_per_s": 1212.5,
+   "callbacks_pct_of_core": 30.5,
+   "lidar_cycles_per_s": 18.1,
+   "lidar_points_per_s": 3469.0,
+   "lidar_ms_per_scan": 1.475,
+   "lidar_pct_of_core": 2.66,
+   "tof_msgs_per_s": 180.6,
+   "tof_ms_per_msg": 0.1953,
+   "tof_pct_of_core": 3.53,
+   "rates_per_s": {
+    "joint_states": 878.5,
+    "imu": 90.2,
+    "odom": 45.1,
+    "tof": 180.6,
+    "lidar": 18.1
+   },
+   "ms_per_msg": {
+    "joint_states": 0.2723,
+    "imu": 0.0166,
+    "odom": 0.0032,
+    "tof": 0.1953,
+    "lidar": 1.475
+   },
+   "rclpy_ms_per_msg": 0.3717
+  }
+ },
+ "slope10_auto": {
+  "terrain": "slope",
+  "level": 10.0,
+  "walked_m": 1.234,
+  "ground_lidar": {
+   "n": 142,
+   "height_rms_mm": 4.1,
+   "height_bias_mm": -4.0,
+   "roll_rms_deg": 0.06,
+   "pitch_rms_deg": 0.07
+  },
+  "ground_feet": {
+   "n": 142,
+   "height_rms_mm": 2.7,
+   "height_bias_mm": -2.1,
+   "roll_rms_deg": 0.49,
+   "pitch_rms_deg": 0.63
+  },
+  "reports": {
+   "lidar": {
+    "reports": 87,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 224,
+    "unexplained": 5,
+    "unexplained_per_m": 4.05
+   }
+  },
+  "map": {
+   "cells": 11275,
+   "area_m2": 4.51,
+   "rms_mm": 8.3,
+   "within_10mm": 0.846
+  },
+  "cpu": {
+   "process_pct_of_core": 73.4,
+   "messages_per_s": 1204.3,
+   "callbacks_pct_of_core": 31.0,
+   "lidar_cycles_per_s": 18.1,
+   "lidar_points_per_s": 3474.0,
+   "lidar_ms_per_scan": 1.555,
+   "lidar_pct_of_core": 2.81,
+   "tof_msgs_per_s": 180.6,
+   "tof_ms_per_msg": 0.2029,
+   "tof_pct_of_core": 3.67,
+   "rates_per_s": {
+    "joint_states": 870.1,
+    "imu": 90.3,
+    "odom": 45.2,
+    "tof": 180.6,
+    "lidar": 18.1
+   },
+   "ms_per_msg": {
+    "joint_states": 0.2767,
+    "imu": 0.0168,
+    "odom": 0.0059,
+    "tof": 0.2029,
+    "lidar": 1.555
+   },
+   "rclpy_ms_per_msg": 0.3519
+  }
+ },
+ "waves20_auto": {
+  "terrain": "waves",
+  "level": 20.0,
+  "walked_m": 0.589,
+  "ground_lidar": {
+   "n": 181,
+   "height_rms_mm": 15.0,
+   "height_bias_mm": -14.7,
+   "roll_rms_deg": 0.23,
+   "pitch_rms_deg": 0.23
+  },
+  "ground_feet": {
+   "n": 181,
+   "height_rms_mm": 10.7,
+   "height_bias_mm": -9.0,
+   "roll_rms_deg": 2.76,
+   "pitch_rms_deg": 4.26
+  },
+  "reports": {
+   "lidar": {
+    "reports": 321,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 495,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  },
+  "map": {
+   "cells": 8556,
+   "area_m2": 3.42,
+   "rms_mm": 12.4,
+   "within_10mm": 0.705
+  },
+  "cpu": {
+   "process_pct_of_core": 67.1,
+   "messages_per_s": 996.9,
+   "callbacks_pct_of_core": 27.6,
+   "lidar_cycles_per_s": 14.8,
+   "lidar_points_per_s": 2703.0,
+   "lidar_ms_per_scan": 1.684,
+   "lidar_pct_of_core": 2.49,
+   "tof_msgs_per_s": 148.1,
+   "tof_ms_per_msg": 0.2539,
+   "tof_pct_of_core": 3.76,
+   "rates_per_s": {
+    "joint_states": 722.7,
+    "imu": 74.1,
+    "odom": 37.1,
+    "tof": 148.1,
+    "lidar": 14.8
+   },
+   "ms_per_msg": {
+    "joint_states": 0.2901,
+    "imu": 0.0161,
+    "odom": 0.0037,
+    "tof": 0.2539,
+    "lidar": 1.684
+   },
+   "rclpy_ms_per_msg": 0.3965
+  }
+ },
+ "rough20_t15": {
+  "terrain": "rough",
+  "level": 20.0,
+  "walked_m": 0.807,
+  "ground_lidar": {
+   "n": 142,
+   "height_rms_mm": 6.4,
+   "height_bias_mm": -6.2,
+   "roll_rms_deg": 0.12,
+   "pitch_rms_deg": 0.15
+  },
+  "ground_feet": {
+   "n": 142,
+   "height_rms_mm": 4.0,
+   "height_bias_mm": -2.7,
+   "roll_rms_deg": 1.02,
+   "pitch_rms_deg": 2.17
+  },
+  "reports": {
+   "lidar": {
+    "reports": 129,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 34,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  },
+  "map": {
+   "cells": 7414,
+   "area_m2": 2.97,
+   "rms_mm": 9.6,
+   "within_10mm": 0.81
+  },
+  "cpu": {
+   "process_pct_of_core": 65.3,
+   "messages_per_s": 811.0,
+   "callbacks_pct_of_core": 21.2,
+   "lidar_cycles_per_s": 11.8,
+   "lidar_points_per_s": 2169.0,
+   "lidar_ms_per_scan": 1.616,
+   "lidar_pct_of_core": 1.91,
+   "tof_msgs_per_s": 118.5,
+   "tof_ms_per_msg": 0.2144,
+   "tof_pct_of_core": 2.54,
+   "rates_per_s": {
+    "joint_states": 591.8,
+    "imu": 59.2,
+    "odom": 29.6,
+    "tof": 118.5,
+    "lidar": 11.8
+   },
+   "ms_per_msg": {
+    "joint_states": 0.2791,
+    "imu": 0.0108,
+    "odom": 0.0031,
+    "tof": 0.2144,
+    "lidar": 1.616
+   },
+   "rclpy_ms_per_msg": 0.5428
+  }
+ },
+ "rough20_auto": {
+  "terrain": "rough",
+  "level": 20.0,
+  "walked_m": 0.851,
+  "ground_lidar": {
+   "n": 134,
+   "height_rms_mm": 6.5,
+   "height_bias_mm": -6.1,
+   "roll_rms_deg": 0.14,
+   "pitch_rms_deg": 0.14
+  },
+  "ground_feet": {
+   "n": 134,
+   "height_rms_mm": 8.5,
+   "height_bias_mm": -6.0,
+   "roll_rms_deg": 1.29,
+   "pitch_rms_deg": 3.74
+  },
+  "reports": {
+   "lidar": {
+    "reports": 26,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 21,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  },
+  "map": {
+   "cells": 7587,
+   "area_m2": 3.03,
+   "rms_mm": 10.1,
+   "within_10mm": 0.771
+  },
+  "cpu": {
+   "process_pct_of_core": 69.0,
+   "messages_per_s": 810.6,
+   "callbacks_pct_of_core": 25.0,
+   "lidar_cycles_per_s": 11.9,
+   "lidar_points_per_s": 2167.0,
+   "lidar_ms_per_scan": 1.788,
+   "lidar_pct_of_core": 2.12,
+   "tof_msgs_per_s": 118.5,
+   "tof_ms_per_msg": 0.2677,
+   "tof_pct_of_core": 3.17,
+   "rates_per_s": {
+    "joint_states": 591.4,
+    "imu": 59.3,
+    "odom": 29.6,
+    "tof": 118.5,
+    "lidar": 11.9
+   },
+   "ms_per_msg": {
+    "joint_states": 0.3269,
+    "imu": 0.0141,
+    "odom": 0.0029,
+    "tof": 0.2677,
+    "lidar": 1.788
+   },
+   "rclpy_ms_per_msg": 0.5437
+  }
+ },
+ "steps20_t15b": {
+  "terrain": "steps",
+  "level": 20.0,
+  "walked_m": 2.997,
+  "ground_lidar": {
+   "n": 332,
+   "height_rms_mm": 5.4,
+   "height_bias_mm": -4.8,
+   "roll_rms_deg": 0.14,
+   "pitch_rms_deg": 0.65
+  },
+  "ground_feet": {
+   "n": 332,
+   "height_rms_mm": 5.4,
+   "height_bias_mm": -2.9,
+   "roll_rms_deg": 0.97,
+   "pitch_rms_deg": 2.85
+  },
+  "detection": {
+   "stone_left": {
+    "lidar": {
+     "ahead_m": 0.527,
+     "where_err_mm": -10,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.096,
+     "where_err_mm": 45,
+     "by": "tof_fl"
+    },
+    "gs2": null
+   },
+   "stone_right": {
+    "lidar": {
+     "ahead_m": 0.359,
+     "where_err_mm": -22,
+     "by": "right"
+    },
+    "tof": {
+     "ahead_m": 0.282,
+     "where_err_mm": -96,
+     "by": "tof_fr"
+    },
+    "gs2": null
+   },
+   "step_down": {
+    "lidar": {
+     "ahead_m": 0.557,
+     "where_err_mm": 72,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.492,
+     "where_err_mm": 87,
+     "by": "tof_fc"
+    },
+    "gs2": null
+   },
+   "step_up": {
+    "lidar": {
+     "ahead_m": 0.552,
+     "where_err_mm": 4,
+     "by": "right"
+    },
+    "tof": {
+     "ahead_m": 0.354,
+     "where_err_mm": 86,
+     "by": "tof_fc"
+    },
+    "gs2": null
+   }
+  },
+  "reports": {
+   "lidar": {
+    "reports": 176,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 493,
+    "unexplained": 22,
+    "unexplained_per_m": 7.34
+   }
+  },
+  "map": {
+   "cells": 13770,
+   "area_m2": 5.51,
+   "rms_mm": 7.9,
+   "within_10mm": 0.849
+  },
+  "cpu": {
+   "process_pct_of_core": 73.6,
+   "messages_per_s": 1137.9,
+   "callbacks_pct_of_core": 30.1,
+   "lidar_cycles_per_s": 17.1,
+   "lidar_points_per_s": 3128.0,
+   "lidar_ms_per_scan": 1.631,
+   "lidar_pct_of_core": 2.8,
+   "tof_msgs_per_s": 171.4,
+   "tof_ms_per_msg": 0.1978,
+   "tof_pct_of_core": 3.39,
+   "rates_per_s": {
+    "joint_states": 820.8,
+    "imu": 85.7,
+    "odom": 42.8,
+    "tof": 171.4,
+    "lidar": 17.1
+   },
+   "ms_per_msg": {
+    "joint_states": 0.2865,
+    "imu": 0.0139,
+    "odom": 0.0038,
+    "tof": 0.1978,
+    "lidar": 1.631
+   },
+   "rclpy_ms_per_msg": 0.3825
+  }
+ },
+ "steps20_t15": {
+  "terrain": "steps",
+  "level": 20.0,
+  "walked_m": 0.864,
+  "ground_lidar": {
+   "n": 258,
+   "height_rms_mm": 27.6,
+   "height_bias_mm": -7.1,
+   "roll_rms_deg": 18.79,
+   "pitch_rms_deg": 14.09
+  },
+  "ground_feet": {
+   "n": 528,
+   "height_rms_mm": 93.7,
+   "height_bias_mm": 65.5,
+   "roll_rms_deg": 129.0,
+   "pitch_rms_deg": 7.82
+  },
+  "detection": {
+   "stone_left": {
+    "lidar": {
+     "ahead_m": 0.54,
+     "where_err_mm": -7,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.103,
+     "where_err_mm": 24,
+     "by": "tof_fl"
+    },
+    "gs2": null
+   },
+   "stone_right": {
+    "lidar": {
+     "ahead_m": 0.602,
+     "where_err_mm": 0,
+     "by": "right"
+    },
+    "tof": {
+     "ahead_m": 0.295,
+     "where_err_mm": 92,
+     "by": "tof_fc"
+    },
+    "gs2": null
+   },
+   "step_down": {
+    "not_reached": true
+   },
+   "step_up": {
+    "not_reached": true
+   }
+  },
+  "reports": {
+   "lidar": {
+    "reports": 138,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 2769,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  },
+  "map": {
+   "cells": 10523,
+   "area_m2": 4.21,
+   "rms_mm": 10.0,
+   "within_10mm": 0.815
+  },
+  "cpu": {
+   "process_pct_of_core": 74.2,
+   "messages_per_s": 1147.7,
+   "callbacks_pct_of_core": 29.5,
+   "lidar_cycles_per_s": 17.1,
+   "lidar_points_per_s": 1622.0,
+   "lidar_ms_per_scan": 1.14,
+   "lidar_pct_of_core": 1.95,
+   "tof_msgs_per_s": 171.4,
+   "tof_ms_per_msg": 0.245,
+   "tof_pct_of_core": 4.2,
+   "rates_per_s": {
+    "joint_states": 830.6,
+    "imu": 85.7,
+    "odom": 42.8,
+    "tof": 171.4,
+    "lidar": 17.1
+   },
+   "ms_per_msg": {
+    "joint_states": 0.2765,
+    "imu": 0.0148,
+    "odom": 0.0045,
+    "tof": 0.245,
+    "lidar": 1.14
+   },
+   "rclpy_ms_per_msg": 0.3889
+  }
+ },
+ "steps20_auto": {
+  "terrain": "steps",
+  "level": 20.0,
+  "walked_m": 3.056,
+  "ground_lidar": {
+   "n": 330,
+   "height_rms_mm": 5.0,
+   "height_bias_mm": -4.7,
+   "roll_rms_deg": 0.09,
+   "pitch_rms_deg": 0.65
+  },
+  "ground_feet": {
+   "n": 330,
+   "height_rms_mm": 2.3,
+   "height_bias_mm": -1.6,
+   "roll_rms_deg": 0.54,
+   "pitch_rms_deg": 1.16
+  },
+  "detection": {
+   "stone_left": {
+    "lidar": {
+     "ahead_m": 0.44,
+     "where_err_mm": -12,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.098,
+     "where_err_mm": 22,
+     "by": "tof_fl"
+    },
+    "gs2": null
+   },
+   "stone_right": {
+    "not_in_path": true,
+    "lateral_m": -0.4
+   },
+   "step_down": {
+    "lidar": null,
+    "tof": null,
+    "gs2": null
+   },
+   "step_up": {
+    "lidar": {
+     "ahead_m": 0.77,
+     "where_err_mm": 0,
+     "by": "right"
+    },
+    "tof": {
+     "ahead_m": 0.335,
+     "where_err_mm": 68,
+     "by": "tof_fc"
+    },
+    "gs2": null
+   }
+  },
+  "reports": {
+   "lidar": {
+    "reports": 104,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 225,
+    "unexplained": 2,
+    "unexplained_per_m": 0.65
+   }
+  },
+  "map": {
+   "cells": 14071,
+   "area_m2": 5.63,
+   "rms_mm": 7.5,
+   "within_10mm": 0.869
+  },
+  "cpu": {
+   "process_pct_of_core": 74.8,
+   "messages_per_s": 1199.5,
+   "callbacks_pct_of_core": 29.4,
+   "lidar_cycles_per_s": 17.8,
+   "lidar_points_per_s": 3245.0,
+   "lidar_ms_per_scan": 1.479,
+   "lidar_pct_of_core": 2.63,
+   "tof_msgs_per_s": 177.8,
+   "tof_ms_per_msg": 0.1828,
+   "tof_pct_of_core": 3.25,
+   "rates_per_s": {
+    "joint_states": 870.7,
+    "imu": 88.9,
+    "odom": 44.4,
+    "tof": 177.8,
+    "lidar": 17.8
+   },
+   "ms_per_msg": {
+    "joint_states": 0.2661,
+    "imu": 0.0129,
+    "odom": 0.0033,
+    "tof": 0.1828,
+    "lidar": 1.479
+   },
+   "rclpy_ms_per_msg": 0.3784
+  }
+ },
+ "steps30_t15": {
+  "terrain": "steps",
+  "level": 30.0,
+  "walked_m": 2.818,
+  "ground_lidar": {
+   "n": 332,
+   "height_rms_mm": 5.9,
+   "height_bias_mm": -5.3,
+   "roll_rms_deg": 0.17,
+   "pitch_rms_deg": 0.94
+  },
+  "ground_feet": {
+   "n": 332,
+   "height_rms_mm": 4.1,
+   "height_bias_mm": -2.5,
+   "roll_rms_deg": 0.89,
+   "pitch_rms_deg": 2.37
+  },
+  "detection": {
+   "stone_left": {
+    "lidar": {
+     "ahead_m": 0.554,
+     "where_err_mm": -18,
+     "by": "left"
+    },
+    "tof": null,
+    "gs2": null
+   },
+   "stone_right": {
+    "lidar": {
+     "ahead_m": 0.481,
+     "where_err_mm": -32,
+     "by": "centre"
+    },
+    "tof": {
+     "ahead_m": 0.128,
+     "where_err_mm": 21,
+     "by": "tof_fl"
+    },
+    "gs2": null
+   },
+   "step_down": {
+    "lidar": {
+     "ahead_m": 0.733,
+     "where_err_mm": 74,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.775,
+     "where_err_mm": 120,
+     "by": "tof_fc"
+    },
+    "gs2": null
+   },
+   "step_up": {
+    "lidar": {
+     "ahead_m": 0.569,
+     "where_err_mm": -20,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.558,
+     "where_err_mm": 105,
+     "by": "tof_fc"
+    },
+    "gs2": null
+   }
+  },
+  "reports": {
+   "lidar": {
+    "reports": 712,
+    "unexplained": 3,
+    "unexplained_per_m": 1.06
+   },
+   "tof": {
+    "reports": 1040,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  },
+  "map": {
+   "cells": 13498,
+   "area_m2": 5.4,
+   "rms_mm": 8.5,
+   "within_10mm": 0.852
+  },
+  "cpu": {
+   "process_pct_of_core": 73.4,
+   "messages_per_s": 1149.5,
+   "callbacks_pct_of_core": 30.5,
+   "lidar_cycles_per_s": 17.1,
+   "lidar_points_per_s": 3127.0,
+   "lidar_ms_per_scan": 1.71,
+   "lidar_pct_of_core": 2.93,
+   "tof_msgs_per_s": 171.4,
+   "tof_ms_per_msg": 0.21,
+   "tof_pct_of_core": 3.6,
+   "rates_per_s": {
+    "joint_states": 832.4,
+    "imu": 85.7,
+    "odom": 42.8,
+    "tof": 171.4,
+    "lidar": 17.1
+   },
+   "ms_per_msg": {
+    "joint_states": 0.2836,
+    "imu": 0.015,
+    "odom": 0.0029,
+    "tof": 0.21,
+    "lidar": 1.71
+   },
+   "rclpy_ms_per_msg": 0.373
+  }
+ },
+ "steps30_auto": {
+  "terrain": "steps",
+  "level": 30.0,
+  "walked_m": 2.993,
+  "ground_lidar": {
+   "n": 348,
+   "height_rms_mm": 5.4,
+   "height_bias_mm": -4.9,
+   "roll_rms_deg": 0.11,
+   "pitch_rms_deg": 0.89
+  },
+  "ground_feet": {
+   "n": 348,
+   "height_rms_mm": 3.7,
+   "height_bias_mm": -2.3,
+   "roll_rms_deg": 1.15,
+   "pitch_rms_deg": 1.88
+  },
+  "detection": {
+   "stone_left": {
+    "lidar": {
+     "ahead_m": 0.464,
+     "where_err_mm": -5,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.129,
+     "where_err_mm": 50,
+     "by": "tof_fl"
+    },
+    "gs2": null
+   },
+   "stone_right": {
+    "not_in_path": true,
+    "lateral_m": -0.31
+   },
+   "step_down": {
+    "lidar": {
+     "ahead_m": 0.574,
+     "where_err_mm": 89,
+     "by": "right"
+    },
+    "tof": {
+     "ahead_m": 0.373,
+     "where_err_mm": 28,
+     "by": "tof_fc"
+    },
+    "gs2": null
+   },
+   "step_up": {
+    "lidar": {
+     "ahead_m": 0.573,
+     "where_err_mm": 141,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.576,
+     "where_err_mm": 85,
+     "by": "tof_fc"
+    },
+    "gs2": null
+   }
+  },
+  "reports": {
+   "lidar": {
+    "reports": 520,
+    "unexplained": 3,
+    "unexplained_per_m": 1.0
+   },
+   "tof": {
+    "reports": 708,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  },
+  "map": {
+   "cells": 13784,
+   "area_m2": 5.51,
+   "rms_mm": 8.3,
+   "within_10mm": 0.838
+  },
+  "cpu": {
+   "process_pct_of_core": 76.4,
+   "messages_per_s": 1195.9,
+   "callbacks_pct_of_core": 30.6,
+   "lidar_cycles_per_s": 17.8,
+   "lidar_points_per_s": 3241.0,
+   "lidar_ms_per_scan": 1.639,
+   "lidar_pct_of_core": 2.91,
+   "tof_msgs_per_s": 177.8,
+   "tof_ms_per_msg": 0.2015,
+   "tof_pct_of_core": 3.58,
+   "rates_per_s": {
+    "joint_states": 867.1,
+    "imu": 88.9,
+    "odom": 44.4,
+    "tof": 177.8,
+    "lidar": 17.8
+   },
+   "ms_per_msg": {
+    "joint_states": 0.2732,
+    "imu": 0.0145,
+    "odom": 0.0036,
+    "tof": 0.2015,
+    "lidar": 1.639
+   },
+   "rclpy_ms_per_msg": 0.3832
+  }
+ },
+ "steps30_feet": {
+  "terrain": "steps",
+  "level": 30.0,
+  "walked_m": 2.813,
+  "ground_lidar": {
+   "n": 374,
+   "height_rms_mm": 5.0,
+   "height_bias_mm": -4.6,
+   "roll_rms_deg": 0.11,
+   "pitch_rms_deg": 0.76
+  },
+  "ground_feet": {
+   "n": 374,
+   "height_rms_mm": 3.2,
+   "height_bias_mm": -2.0,
+   "roll_rms_deg": 1.01,
+   "pitch_rms_deg": 1.7
+  },
+  "detection": {
+   "stone_left": {
+    "lidar": {
+     "ahead_m": 0.469,
+     "where_err_mm": 5,
+     "by": "left"
+    },
+    "tof": null,
+    "gs2": null
+   },
+   "stone_right": {
+    "not_in_path": true,
+    "lateral_m": -0.43
+   },
+   "step_down": {
+    "lidar": {
+     "ahead_m": 0.506,
+     "where_err_mm": 94,
+     "by": "right"
+    },
+    "tof": {
+     "ahead_m": 0.575,
+     "where_err_mm": -94,
+     "by": "tof_fc"
+    },
+    "gs2": null
+   },
+   "step_up": {
+    "lidar": {
+     "ahead_m": 0.478,
+     "where_err_mm": -12,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.601,
+     "where_err_mm": -139,
+     "by": "tof_fc"
+    },
+    "gs2": null
+   }
+  },
+  "reports": {
+   "lidar": {
+    "reports": 862,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 914,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  },
+  "map": {
+   "cells": 13009,
+   "area_m2": 5.2,
+   "rms_mm": 7.9,
+   "within_10mm": 0.863
+  },
+  "cpu": {
+   "process_pct_of_core": 76.2,
+   "messages_per_s": 1204.7,
+   "callbacks_pct_of_core": 29.0,
+   "lidar_cycles_per_s": 17.8,
+   "lidar_points_per_s": 3242.0,
+   "lidar_ms_per_scan": 1.523,
+   "lidar_pct_of_core": 2.71,
+   "tof_msgs_per_s": 177.8,
+   "tof_ms_per_msg": 0.1846,
+   "tof_pct_of_core": 3.28,
+   "rates_per_s": {
+    "joint_states": 875.9,
+    "imu": 88.9,
+    "odom": 44.4,
+    "tof": 177.8,
+    "lidar": 17.8
+   },
+   "ms_per_msg": {
+    "joint_states": 0.2579,
+    "imu": 0.0136,
+    "odom": 0.0032,
+    "tof": 0.1846,
+    "lidar": 1.523
+   },
+   "rclpy_ms_per_msg": 0.392
+  }
+ },
+ "steps20_gs2": {
+  "terrain": "steps",
+  "level": 20.0,
+  "walked_m": 2.723,
+  "ground_lidar": {
+   "n": 358,
+   "height_rms_mm": 5.8,
+   "height_bias_mm": -5.3,
+   "roll_rms_deg": 0.15,
+   "pitch_rms_deg": 0.65
+  },
+  "ground_feet": {
+   "n": 358,
+   "height_rms_mm": 4.7,
+   "height_bias_mm": -3.0,
+   "roll_rms_deg": 1.05,
+   "pitch_rms_deg": 2.74
+  },
+  "detection": {
+   "stone_left": {
+    "lidar": {
+     "ahead_m": 0.48,
+     "where_err_mm": 7,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.115,
+     "where_err_mm": 25,
+     "by": "tof_fl"
+    },
+    "gs2": {
+     "ahead_m": 0.072,
+     "where_err_mm": 57,
+     "by": "left/plane"
+    }
+   },
+   "stone_right": {
+    "lidar": {
+     "ahead_m": 0.543,
+     "where_err_mm": -17,
+     "by": "right"
+    },
+    "tof": {
+     "ahead_m": 0.147,
+     "where_err_mm": 25,
+     "by": "tof_fr"
+    },
+    "gs2": {
+     "ahead_m": 0.277,
+     "where_err_mm": -150,
+     "by": "centre/plane"
+    }
+   },
+   "step_down": {
+    "lidar": {
+     "ahead_m": 0.653,
+     "where_err_mm": 149,
+     "by": "centre"
+    },
+    "tof": {
+     "ahead_m": 0.17,
+     "where_err_mm": 52,
+     "by": "tof_fl"
+    },
+    "gs2": {
+     "ahead_m": 0.147,
+     "where_err_mm": 39,
+     "by": "left/line"
+    }
+   },
+   "step_up": {
+    "lidar": {
+     "ahead_m": 0.515,
+     "where_err_mm": -17,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.394,
+     "where_err_mm": 68,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "ahead_m": 0.103,
+     "where_err_mm": 33,
+     "by": "left/plane"
+    }
+   }
+  },
+  "reports": {
+   "lidar": {
+    "reports": 294,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 478,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "gs2": {
+    "reports": 194,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  },
+  "map": {
+   "cells": 12757,
+   "area_m2": 5.1,
+   "rms_mm": 7.4,
+   "within_10mm": 0.885
+  },
+  "cpu": {
+   "process_pct_of_core": 73.2,
+   "messages_per_s": 1130.4,
+   "callbacks_pct_of_core": 31.1,
+   "lidar_cycles_per_s": 16.5,
+   "lidar_points_per_s": 3014.0,
+   "lidar_ms_per_scan": 1.546,
+   "lidar_pct_of_core": 2.55,
+   "tof_msgs_per_s": 165.1,
+   "tof_ms_per_msg": 0.1993,
+   "tof_pct_of_core": 3.29,
+   "rates_per_s": {
+    "joint_states": 801.4,
+    "imu": 82.5,
+    "odom": 41.3,
+    "tof": 165.1,
+    "lidar": 16.5,
+    "gs2": 23.6
+   },
+   "ms_per_msg": {
+    "joint_states": 0.2759,
+    "imu": 0.0146,
+    "odom": 0.0049,
+    "tof": 0.1993,
+    "lidar": 1.546,
+    "gs2": 1.1656
+   },
+   "gs2_points_per_s": 2645.0,
+   "gs2_pct_of_core": 2.75,
+   "rclpy_ms_per_msg": 0.372
+  }
+ },
+ "steps30_gs2": {
+  "terrain": "steps",
+  "level": 30.0,
+  "walked_m": 2.605,
+  "ground_lidar": {
+   "n": 380,
+   "height_rms_mm": 6.3,
+   "height_bias_mm": -5.7,
+   "roll_rms_deg": 0.18,
+   "pitch_rms_deg": 0.9
+  },
+  "ground_feet": {
+   "n": 380,
+   "height_rms_mm": 3.5,
+   "height_bias_mm": -2.1,
+   "roll_rms_deg": 0.92,
+   "pitch_rms_deg": 1.85
+  },
+  "detection": {
+   "stone_left": {
+    "lidar": {
+     "ahead_m": 0.502,
+     "where_err_mm": -18,
+     "by": "left"
+    },
+    "tof": null,
+    "gs2": {
+     "ahead_m": 0.123,
+     "where_err_mm": 6,
+     "by": "left/line"
+    }
+   },
+   "stone_right": {
+    "lidar": {
+     "ahead_m": 0.576,
+     "where_err_mm": -36,
+     "by": "centre"
+    },
+    "tof": {
+     "ahead_m": 0.35,
+     "where_err_mm": 57,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "ahead_m": 0.128,
+     "where_err_mm": 21,
+     "by": "left/plane"
+    }
+   },
+   "step_down": {
+    "lidar": {
+     "ahead_m": 0.752,
+     "where_err_mm": 53,
+     "by": "centre"
+    },
+    "tof": {
+     "ahead_m": 0.754,
+     "where_err_mm": 145,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "ahead_m": 0.137,
+     "where_err_mm": 53,
+     "by": "right/line"
+    }
+   },
+   "step_up": {
+    "lidar": {
+     "ahead_m": 0.569,
+     "where_err_mm": -8,
+     "by": "right"
+    },
+    "tof": {
+     "ahead_m": 0.344,
+     "where_err_mm": 60,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "not_reached": true
+    }
+   }
+  },
+  "reports": {
+   "lidar": {
+    "reports": 544,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 618,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "gs2": {
+    "reports": 259,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  },
+  "map": {
+   "cells": 12892,
+   "area_m2": 5.16,
+   "rms_mm": 7.5,
+   "within_10mm": 0.877
+  },
+  "cpu": {
+   "process_pct_of_core": 72.2,
+   "messages_per_s": 1127.7,
+   "callbacks_pct_of_core": 30.7,
+   "lidar_cycles_per_s": 16.5,
+   "lidar_points_per_s": 3011.0,
+   "lidar_ms_per_scan": 1.554,
+   "lidar_pct_of_core": 2.56,
+   "tof_msgs_per_s": 165.1,
+   "tof_ms_per_msg": 0.1919,
+   "tof_pct_of_core": 3.17,
+   "rates_per_s": {
+    "joint_states": 798.8,
+    "imu": 82.5,
+    "odom": 41.2,
+    "tof": 165.1,
+    "lidar": 16.5,
+    "gs2": 23.6
+   },
+   "ms_per_msg": {
+    "joint_states": 0.2743,
+    "imu": 0.0135,
+    "odom": 0.0042,
+    "tof": 0.1919,
+    "lidar": 1.554,
+    "gs2": 1.1338
+   },
+   "gs2_points_per_s": 2584.0,
+   "gs2_pct_of_core": 2.67,
+   "rclpy_ms_per_msg": 0.3679
+  }
+ },
+ "flat_gs2": {
+  "terrain": "flat",
+  "level": 0.0,
+  "walked_m": 1.13,
+  "ground_lidar": {
+   "n": 202,
+   "height_rms_mm": 3.9,
+   "height_bias_mm": -3.9,
+   "roll_rms_deg": 0.05,
+   "pitch_rms_deg": 0.05
+  },
+  "ground_feet": {
+   "n": 202,
+   "height_rms_mm": 2.0,
+   "height_bias_mm": -1.7,
+   "roll_rms_deg": 0.52,
+   "pitch_rms_deg": 0.78
+  },
+  "reports": {
+   "lidar": {
+    "reports": 0,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 0,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "gs2": {
+    "reports": 6,
+    "unexplained": 6,
+    "unexplained_per_m": 5.31
+   }
+  },
+  "map": {
+   "cells": 9520,
+   "area_m2": 3.81,
+   "rms_mm": 7.0,
+   "within_10mm": 0.903
+  },
+  "cpu": {
+   "process_pct_of_core": 77.5,
+   "messages_per_s": 1223.3,
+   "callbacks_pct_of_core": 31.8,
+   "lidar_cycles_per_s": 17.8,
+   "lidar_points_per_s": 3256.0,
+   "lidar_ms_per_scan": 1.3,
+   "lidar_pct_of_core": 2.31,
+   "tof_msgs_per_s": 177.8,
+   "tof_ms_per_msg": 0.183,
+   "tof_pct_of_core": 3.25,
+   "rates_per_s": {
+    "joint_states": 869.0,
+    "imu": 88.9,
+    "odom": 44.5,
+    "tof": 177.8,
+    "lidar": 17.8,
+    "gs2": 25.4
+   },
+   "ms_per_msg": {
+    "joint_states": 0.2645,
+    "imu": 0.0145,
+    "odom": 0.0046,
+    "tof": 0.183,
+    "lidar": 1.3,
+    "gs2": 1.1162
+   },
+   "gs2_points_per_s": 2990.0,
+   "gs2_pct_of_core": 2.84,
+   "rclpy_ms_per_msg": 0.3735
+  }
+ },
+ "slope10_gs2": {
+  "terrain": "slope",
+  "level": 10.0,
+  "walked_m": 1.078,
+  "ground_lidar": {
+   "n": 118,
+   "height_rms_mm": 4.4,
+   "height_bias_mm": -4.2,
+   "roll_rms_deg": 0.08,
+   "pitch_rms_deg": 0.09
+  },
+  "ground_feet": {
+   "n": 118,
+   "height_rms_mm": 3.2,
+   "height_bias_mm": -2.4,
+   "roll_rms_deg": 0.81,
+   "pitch_rms_deg": 0.89
+  },
+  "reports": {
+   "lidar": {
+    "reports": 54,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 224,
+    "unexplained": 12,
+    "unexplained_per_m": 11.14
+   },
+   "gs2": {
+    "reports": 100,
+    "unexplained": 1,
+    "unexplained_per_m": 0.93
+   }
+  },
+  "map": {
+   "cells": 10725,
+   "area_m2": 4.29,
+   "rms_mm": 8.2,
+   "within_10mm": 0.835
+  },
+  "cpu": {
+   "process_pct_of_core": 74.2,
+   "messages_per_s": 1149.3,
+   "callbacks_pct_of_core": 30.2,
+   "lidar_cycles_per_s": 16.8,
+   "lidar_points_per_s": 3221.0,
+   "lidar_ms_per_scan": 1.365,
+   "lidar_pct_of_core": 2.29,
+   "tof_msgs_per_s": 167.7,
+   "tof_ms_per_msg": 0.1907,
+   "tof_pct_of_core": 3.2,
+   "rates_per_s": {
+    "joint_states": 815.0,
+    "imu": 83.9,
+    "odom": 41.9,
+    "tof": 167.7,
+    "lidar": 16.8,
+    "gs2": 24.0
+   },
+   "ms_per_msg": {
+    "joint_states": 0.2657,
+    "imu": 0.0121,
+    "odom": 0.0028,
+    "tof": 0.1907,
+    "lidar": 1.365,
+    "gs2": 1.1282
+   },
+   "gs2_points_per_s": 2856.0,
+   "gs2_pct_of_core": 2.71,
+   "rclpy_ms_per_msg": 0.3824
+  }
+ },
+ "rough20_gs2": {
+  "terrain": "rough",
+  "level": 20.0,
+  "walked_m": 0.711,
+  "ground_lidar": {
+   "n": 128,
+   "height_rms_mm": 6.4,
+   "height_bias_mm": -6.2,
+   "roll_rms_deg": 0.11,
+   "pitch_rms_deg": 0.14
+  },
+  "ground_feet": {
+   "n": 128,
+   "height_rms_mm": 3.4,
+   "height_bias_mm": -2.6,
+   "roll_rms_deg": 0.76,
+   "pitch_rms_deg": 1.43
+  },
+  "reports": {
+   "lidar": {
+    "reports": 55,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 17,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "gs2": {
+    "reports": 69,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  },
+  "map": {
+   "cells": 6887,
+   "area_m2": 2.75,
+   "rms_mm": 8.0,
+   "within_10mm": 0.835
+  },
+  "cpu": {
+   "process_pct_of_core": 61.9,
+   "messages_per_s": 722.7,
+   "callbacks_pct_of_core": 21.3,
+   "lidar_cycles_per_s": 10.4,
+   "lidar_points_per_s": 1897.0,
+   "lidar_ms_per_scan": 1.599,
+   "lidar_pct_of_core": 1.66,
+   "tof_msgs_per_s": 103.7,
+   "tof_ms_per_msg": 0.2314,
+   "tof_pct_of_core": 2.4,
+   "rates_per_s": {
+    "joint_states": 516.1,
+    "imu": 51.8,
+    "odom": 25.9,
+    "tof": 103.7,
+    "lidar": 10.4,
+    "gs2": 14.8
+   },
+   "ms_per_msg": {
+    "joint_states": 0.2924,
+    "imu": 0.0137,
+    "odom": 0.0026,
+    "tof": 0.2314,
+    "lidar": 1.599,
+    "gs2": 1.2858
+   },
+   "gs2_points_per_s": 1687.0,
+   "gs2_pct_of_core": 1.9,
+   "rclpy_ms_per_msg": 0.5615
+  }
+ },
+ "steps20_gs2_feet": {
+  "terrain": "steps",
+  "level": 20.0,
+  "walked_m": 2.802,
+  "ground_lidar": {
+   "n": 342,
+   "height_rms_mm": 5.1,
+   "height_bias_mm": -4.7,
+   "roll_rms_deg": 0.12,
+   "pitch_rms_deg": 0.6
+  },
+  "ground_feet": {
+   "n": 342,
+   "height_rms_mm": 2.4,
+   "height_bias_mm": -1.7,
+   "roll_rms_deg": 0.68,
+   "pitch_rms_deg": 1.11
+  },
+  "detection": {
+   "stone_left": {
+    "lidar": {
+     "ahead_m": 0.494,
+     "where_err_mm": -18,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.088,
+     "where_err_mm": 47,
+     "by": "tof_fl"
+    },
+    "gs2": {
+     "ahead_m": 0.108,
+     "where_err_mm": 10,
+     "by": "left/line"
+    }
+   },
+   "stone_right": {
+    "not_in_path": true,
+    "lateral_m": -0.34
+   },
+   "step_down": {
+    "lidar": {
+     "ahead_m": 0.588,
+     "where_err_mm": 104,
+     "by": "right"
+    },
+    "tof": {
+     "ahead_m": 0.426,
+     "where_err_mm": 53,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "ahead_m": 0.143,
+     "where_err_mm": 28,
+     "by": "right/line"
+    }
+   },
+   "step_up": {
+    "lidar": {
+     "ahead_m": 0.572,
+     "where_err_mm": -24,
+     "by": "right"
+    },
+    "tof": {
+     "ahead_m": 0.609,
+     "where_err_mm": -146,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "ahead_m": 0.116,
+     "where_err_mm": 40,
+     "by": "right/plane"
+    }
+   }
+  },
+  "reports": {
+   "lidar": {
+    "reports": 917,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 947,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "gs2": {
+    "reports": 216,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  },
+  "map": {
+   "cells": 12300,
+   "area_m2": 4.92,
+   "rms_mm": 7.0,
+   "within_10mm": 0.897
+  },
+  "cpu": {
+   "process_pct_of_core": 74.1,
+   "messages_per_s": 1167.3,
+   "callbacks_pct_of_core": 32.0,
+   "lidar_cycles_per_s": 17.1,
+   "lidar_points_per_s": 3131.0,
+   "lidar_ms_per_scan": 1.556,
+   "lidar_pct_of_core": 2.67,
+   "tof_msgs_per_s": 171.4,
+   "tof_ms_per_msg": 0.2082,
+   "tof_pct_of_core": 3.57,
+   "rates_per_s": {
+    "joint_states": 825.7,
+    "imu": 85.7,
+    "odom": 42.9,
+    "tof": 171.4,
+    "lidar": 17.1,
+    "gs2": 24.5
+   },
+   "ms_per_msg": {
+    "joint_states": 0.271,
+    "imu": 0.0131,
+    "odom": 0.003,
+    "tof": 0.2082,
+    "lidar": 1.556,
+    "gs2": 1.2092
+   },
+   "gs2_points_per_s": 2926.0,
+   "gs2_pct_of_core": 2.96,
+   "rclpy_ms_per_msg": 0.3611
+  }
+ },
+ "flat_guard": {
+  "terrain": "flat",
+  "level": 0.0,
+  "walked_m": 1.108,
+  "ground_lidar": {
+   "n": 196,
+   "height_rms_mm": 3.9,
+   "height_bias_mm": -3.8,
+   "roll_rms_deg": 0.05,
+   "pitch_rms_deg": 0.06
+  },
+  "ground_feet": {
+   "n": 196,
+   "height_rms_mm": 5.0,
+   "height_bias_mm": -4.9,
+   "roll_rms_deg": 0.47,
+   "pitch_rms_deg": 0.68
+  },
+  "max_tilt_deg": 6.2,
+  "fell": false,
+  "guard": {
+   "clear": 1.0,
+   "high_steps": 0
+  },
+  "reports": {
+   "lidar": {
+    "reports": 0,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 0,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "gs2": {
+    "reports": 0,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  },
+  "map": {
+   "cells": 10266,
+   "area_m2": 4.11,
+   "rms_mm": 7.1,
+   "within_10mm": 0.907
+  },
+  "cpu": {
+   "process_pct_of_core": 20.4,
+   "messages_per_s": 1172.3,
+   "callbacks_pct_of_core": 5.7,
+   "lidar_cycles_per_s": 16.8,
+   "lidar_points_per_s": 3347.0,
+   "lidar_ms_per_scan": 0.798,
+   "lidar_pct_of_core": 1.34,
+   "tof_msgs_per_s": 167.7,
+   "tof_ms_per_msg": 0.1247,
+   "tof_pct_of_core": 2.09,
+   "rates_per_s": {
+    "joint_states": 838.0,
+    "imu": 83.8,
+    "odom": 41.9,
+    "tof": 167.7,
+    "lidar": 16.8,
+    "gs2": 24.0
+   },
+   "ms_per_msg": {
+    "joint_states": 0.0215,
+    "imu": 0.0018,
+    "odom": 0.0011,
+    "tof": 0.1247,
+    "lidar": 0.798,
+    "gs2": 0.2015
+   },
+   "gs2_points_per_s": 2808.0,
+   "gs2_pct_of_core": 0.48,
+   "rclpy_ms_per_msg": 0.1246
+  }
+ },
+ "wall80_guard": {
+  "terrain": "wall",
+  "level": 80.0,
+  "walked_m": 0.857,
+  "ground_lidar": {
+   "n": 328,
+   "height_rms_mm": 23.1,
+   "height_bias_mm": -18.5,
+   "roll_rms_deg": 0.14,
+   "pitch_rms_deg": 0.72
+  },
+  "ground_feet": {
+   "n": 328,
+   "height_rms_mm": 4.4,
+   "height_bias_mm": -4.3,
+   "roll_rms_deg": 0.27,
+   "pitch_rms_deg": 0.33
+  },
+  "max_tilt_deg": 4.8,
+  "fell": false,
+  "guard": {
+   "clear": 0.275,
+   "caution": 0.27,
+   "stop": 0.455,
+   "high_steps": 0
+  },
+  "wall": {
+   "body_to_wall_m": 0.307,
+   "front_feet_to_wall_m": 0.217,
+   "touched": false
+  },
+  "detection": {
+   "wall": {
+    "lidar": {
+     "ahead_m": 0.512,
+     "where_err_mm": -18,
+     "by": "right"
+    },
+    "tof": {
+     "ahead_m": 0.386,
+     "where_err_mm": 94,
+     "by": "tof_fc"
+    },
+    "gs2": null
+   }
+  },
+  "reports": {
+   "lidar": {
+    "reports": 677,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 464,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "gs2": {
+    "reports": 0,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  },
+  "map": {
+   "cells": 8631,
+   "area_m2": 3.45,
+   "rms_mm": 9.4,
+   "within_10mm": 0.886
+  },
+  "cpu": {
+   "process_pct_of_core": 19.6,
+   "messages_per_s": 1176.8,
+   "callbacks_pct_of_core": 6.0,
+   "lidar_cycles_per_s": 16.8,
+   "lidar_points_per_s": 3358.0,
+   "lidar_ms_per_scan": 0.866,
+   "lidar_pct_of_core": 1.46,
+   "tof_msgs_per_s": 168.3,
+   "tof_ms_per_msg": 0.1392,
+   "tof_pct_of_core": 2.34,
+   "rates_per_s": {
+    "joint_states": 841.3,
+    "imu": 84.2,
+    "odom": 42.0,
+    "tof": 168.3,
+    "lidar": 16.8,
+    "gs2": 24.0
+   },
+   "ms_per_msg": {
+    "joint_states": 0.0212,
+    "imu": 0.0016,
+    "odom": 0.001,
+    "tof": 0.1392,
+    "lidar": 0.866,
+    "gs2": 0.1824
+   },
+   "gs2_points_per_s": 2889.0,
+   "gs2_pct_of_core": 0.44,
+   "rclpy_ms_per_msg": 0.1148
+  }
+ },
+ "wall80_noguard": {
+  "terrain": "wall",
+  "level": 80.0,
+  "walked_m": 1.068,
+  "ground_lidar": {
+   "n": 360,
+   "height_rms_mm": 14.5,
+   "height_bias_mm": -9.4,
+   "roll_rms_deg": 0.1,
+   "pitch_rms_deg": 0.76
+  },
+  "ground_feet": {
+   "n": 360,
+   "height_rms_mm": 5.4,
+   "height_bias_mm": -5.1,
+   "roll_rms_deg": 0.53,
+   "pitch_rms_deg": 0.92
+  },
+  "max_tilt_deg": 7.2,
+  "fell": false,
+  "wall": {
+   "body_to_wall_m": 0.074,
+   "front_feet_to_wall_m": -0.016,
+   "touched": true
+  },
+  "detection": {
+   "wall": {
+    "lidar": {
+     "ahead_m": 0.498,
+     "where_err_mm": -14,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.415,
+     "where_err_mm": 67,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "ahead_m": 0.114,
+     "where_err_mm": -1,
+     "by": "left/plane"
+    }
+   }
+  },
+  "reports": {
+   "lidar": {
+    "reports": 323,
+    "unexplained": 7,
+    "unexplained_per_m": 6.55
+   },
+   "tof": {
+    "reports": 767,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "gs2": {
+    "reports": 324,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  },
+  "map": {
+   "cells": 12376,
+   "area_m2": 4.95,
+   "rms_mm": 9.0,
+   "within_10mm": 0.886
+  },
+  "cpu": {
+   "process_pct_of_core": 18.8,
+   "messages_per_s": 1283.0,
+   "callbacks_pct_of_core": 5.6,
+   "lidar_cycles_per_s": 18.4,
+   "lidar_points_per_s": 3652.0,
+   "lidar_ms_per_scan": 0.694,
+   "lidar_pct_of_core": 1.27,
+   "tof_msgs_per_s": 183.6,
+   "tof_ms_per_msg": 0.12,
+   "tof_pct_of_core": 2.2,
+   "rates_per_s": {
+    "joint_states": 917.3,
+    "imu": 91.7,
+    "odom": 45.9,
+    "tof": 183.6,
+    "lidar": 18.4,
+    "gs2": 26.2
+   },
+   "ms_per_msg": {
+    "joint_states": 0.0173,
+    "imu": 0.0016,
+    "odom": 0.0009,
+    "tof": 0.12,
+    "lidar": 0.694,
+    "gs2": 0.2008
+   },
+   "gs2_points_per_s": 3200.0,
+   "gs2_pct_of_core": 0.53,
+   "rclpy_ms_per_msg": 0.1026
+  }
+ },
+ "steps20_guard": {
+  "terrain": "steps",
+  "level": 20.0,
+  "walked_m": 2.611,
+  "ground_lidar": {
+   "n": 576,
+   "height_rms_mm": 4.5,
+   "height_bias_mm": -4.3,
+   "roll_rms_deg": 0.07,
+   "pitch_rms_deg": 0.57
+  },
+  "ground_feet": {
+   "n": 576,
+   "height_rms_mm": 5.2,
+   "height_bias_mm": -5.0,
+   "roll_rms_deg": 0.43,
+   "pitch_rms_deg": 1.15
+  },
+  "max_tilt_deg": 12.7,
+  "fell": false,
+  "guard": {
+   "clear": 0.085,
+   "caution": 0.659,
+   "step_over": 0.256,
+   "high_steps": 115
+  },
+  "detection": {
+   "stone_left": {
+    "lidar": {
+     "ahead_m": 0.564,
+     "where_err_mm": -29,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.102,
+     "where_err_mm": 25,
+     "by": "tof_fl"
+    },
+    "gs2": {
+     "ahead_m": 0.112,
+     "where_err_mm": 0,
+     "by": "centre/line"
+    }
+   },
+   "stone_right": {
+    "not_in_path": true,
+    "lateral_m": -0.31
+   },
+   "step_down": {
+    "lidar": {
+     "ahead_m": 0.504,
+     "where_err_mm": 64,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.125,
+     "where_err_mm": 22,
+     "by": "tof_fl"
+    },
+    "gs2": {
+     "ahead_m": 0.131,
+     "where_err_mm": 46,
+     "by": "left/plane"
+    }
+   },
+   "step_up": {
+    "lidar": {
+     "ahead_m": 0.561,
+     "where_err_mm": -116,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.526,
+     "where_err_mm": -142,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "not_reached": true
+    }
+   }
+  },
+  "reports": {
+   "lidar": {
+    "reports": 302,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 587,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "gs2": {
+    "reports": 270,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  },
+  "map": {
+   "cells": 14461,
+   "area_m2": 5.78,
+   "rms_mm": 7.4,
+   "within_10mm": 0.878
+  },
+  "cpu": {
+   "process_pct_of_core": 19.0,
+   "messages_per_s": 1229.3,
+   "callbacks_pct_of_core": 5.5,
+   "lidar_cycles_per_s": 17.6,
+   "lidar_points_per_s": 3494.0,
+   "lidar_ms_per_scan": 0.694,
+   "lidar_pct_of_core": 1.22,
+   "tof_msgs_per_s": 175.8,
+   "tof_ms_per_msg": 0.1187,
+   "tof_pct_of_core": 2.09,
+   "rates_per_s": {
+    "joint_states": 879.0,
+    "imu": 87.9,
+    "odom": 44.0,
+    "tof": 175.8,
+    "lidar": 17.6,
+    "gs2": 25.1
+   },
+   "ms_per_msg": {
+    "joint_states": 0.0194,
+    "imu": 0.0013,
+    "odom": 0.0011,
+    "tof": 0.1187,
+    "lidar": 0.694,
+    "gs2": 0.1876
+   },
+   "gs2_points_per_s": 2922.0,
+   "gs2_pct_of_core": 0.47,
+   "rclpy_ms_per_msg": 0.1095
+  }
+ },
+ "steps20_noguard": {
+  "terrain": "steps",
+  "level": 20.0,
+  "walked_m": 2.843,
+  "ground_lidar": {
+   "n": 356,
+   "height_rms_mm": 4.8,
+   "height_bias_mm": -4.6,
+   "roll_rms_deg": 0.08,
+   "pitch_rms_deg": 0.65
+  },
+  "ground_feet": {
+   "n": 356,
+   "height_rms_mm": 5.9,
+   "height_bias_mm": -5.4,
+   "roll_rms_deg": 0.64,
+   "pitch_rms_deg": 1.61
+  },
+  "max_tilt_deg": 11.9,
+  "fell": false,
+  "detection": {
+   "stone_left": {
+    "lidar": {
+     "ahead_m": 0.552,
+     "where_err_mm": -8,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.103,
+     "where_err_mm": 51,
+     "by": "tof_fl"
+    },
+    "gs2": null
+   },
+   "stone_right": {
+    "lidar": {
+     "ahead_m": 0.525,
+     "where_err_mm": 13,
+     "by": "centre"
+    },
+    "tof": null,
+    "gs2": {
+     "ahead_m": 0.12,
+     "where_err_mm": 1,
+     "by": "centre/line"
+    }
+   },
+   "step_down": {
+    "lidar": {
+     "ahead_m": 0.45,
+     "where_err_mm": 93,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.14,
+     "where_err_mm": 28,
+     "by": "tof_fl"
+    },
+    "gs2": {
+     "ahead_m": 0.152,
+     "where_err_mm": 26,
+     "by": "left/line"
+    }
+   },
+   "step_up": {
+    "lidar": {
+     "ahead_m": 0.542,
+     "where_err_mm": 16,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.537,
+     "where_err_mm": 107,
+     "by": "tof_fc"
+    },
+    "gs2": null
+   }
+  },
+  "reports": {
+   "lidar": {
+    "reports": 192,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 350,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "gs2": {
+    "reports": 181,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  },
+  "map": {
+   "cells": 13088,
+   "area_m2": 5.24,
+   "rms_mm": 6.8,
+   "within_10mm": 0.904
+  },
+  "cpu": {
+   "process_pct_of_core": 18.8,
+   "messages_per_s": 1252.0,
+   "callbacks_pct_of_core": 5.5,
+   "lidar_cycles_per_s": 17.9,
+   "lidar_points_per_s": 3556.0,
+   "lidar_ms_per_scan": 0.728,
+   "lidar_pct_of_core": 1.3,
+   "tof_msgs_per_s": 179.0,
+   "tof_ms_per_msg": 0.1163,
+   "tof_pct_of_core": 2.08,
+   "rates_per_s": {
+    "joint_states": 895.2,
+    "imu": 89.5,
+    "odom": 44.8,
+    "tof": 179.0,
+    "lidar": 17.9,
+    "gs2": 25.6
+   },
+   "ms_per_msg": {
+    "joint_states": 0.0179,
+    "imu": 0.0018,
+    "odom": 0.0011,
+    "tof": 0.1163,
+    "lidar": 0.728,
+    "gs2": 0.1717
+   },
+   "gs2_points_per_s": 2937.0,
+   "gs2_pct_of_core": 0.44,
+   "rclpy_ms_per_msg": 0.1068
+  }
+ },
+ "steps30_guard": {
+  "terrain": "steps",
+  "level": 30.0,
+  "walked_m": 2.43,
+  "ground_lidar": {
+   "n": 576,
+   "height_rms_mm": 5.1,
+   "height_bias_mm": -4.7,
+   "roll_rms_deg": 0.09,
+   "pitch_rms_deg": 0.77
+  },
+  "ground_feet": {
+   "n": 576,
+   "height_rms_mm": 5.9,
+   "height_bias_mm": -5.4,
+   "roll_rms_deg": 0.73,
+   "pitch_rms_deg": 1.46
+  },
+  "max_tilt_deg": 17.3,
+  "fell": false,
+  "guard": {
+   "clear": 0.024,
+   "caution": 0.321,
+   "step_over": 0.655,
+   "high_steps": 295
+  },
+  "detection": {
+   "stone_left": {
+    "lidar": {
+     "ahead_m": 0.532,
+     "where_err_mm": -18,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.112,
+     "where_err_mm": 24,
+     "by": "tof_fl"
+    },
+    "gs2": {
+     "ahead_m": 0.116,
+     "where_err_mm": 4,
+     "by": "left/line"
+    }
+   },
+   "stone_right": {
+    "lidar": {
+     "ahead_m": 0.582,
+     "where_err_mm": -17,
+     "by": "right"
+    },
+    "tof": null,
+    "gs2": {
+     "ahead_m": 0.105,
+     "where_err_mm": 7,
+     "by": "right/line"
+    }
+   },
+   "step_down": {
+    "lidar": {
+     "ahead_m": 0.731,
+     "where_err_mm": 45,
+     "by": "right"
+    },
+    "tof": {
+     "ahead_m": 0.411,
+     "where_err_mm": -4,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "ahead_m": 0.135,
+     "where_err_mm": 54,
+     "by": "left/plane"
+    }
+   },
+   "step_up": {
+    "not_reached": true
+   }
+  },
+  "reports": {
+   "lidar": {
+    "reports": 723,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 1153,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "gs2": {
+    "reports": 357,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  },
+  "map": {
+   "cells": 14976,
+   "area_m2": 5.99,
+   "rms_mm": 8.3,
+   "within_10mm": 0.865
+  },
+  "cpu": {
+   "process_pct_of_core": 19.0,
+   "messages_per_s": 1231.3,
+   "callbacks_pct_of_core": 5.5,
+   "lidar_cycles_per_s": 17.6,
+   "lidar_points_per_s": 3489.0,
+   "lidar_ms_per_scan": 0.7,
+   "lidar_pct_of_core": 1.23,
+   "tof_msgs_per_s": 176.1,
+   "tof_ms_per_msg": 0.1199,
+   "tof_pct_of_core": 2.11,
+   "rates_per_s": {
+    "joint_states": 880.4,
+    "imu": 88.1,
+    "odom": 44.0,
+    "tof": 176.1,
+    "lidar": 17.6,
+    "gs2": 25.2
+   },
+   "ms_per_msg": {
+    "joint_states": 0.0192,
+    "imu": 0.002,
+    "odom": 0.0009,
+    "tof": 0.1199,
+    "lidar": 0.7,
+    "gs2": 0.1785
+   },
+   "gs2_points_per_s": 2808.0,
+   "gs2_pct_of_core": 0.45,
+   "rclpy_ms_per_msg": 0.1092
+  }
+ },
+ "slope10_guard": {
+  "terrain": "slope",
+  "level": 10.0,
+  "walked_m": 0.504,
+  "max_tilt_deg": 19.5,
+  "fell": false,
+  "guard": {
+   "caution": 0.1,
+   "step_over": 0.9,
+   "high_steps": 144
+  },
+  "reports": {
+   "lidar": {
+    "reports": 122,
+    "unexplained": 4,
+    "unexplained_per_m": 7.93
+   },
+   "tof": {
+    "reports": 471,
+    "unexplained": 89,
+    "unexplained_per_m": 176.43
+   },
+   "gs2": {
+    "reports": 118,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  },
+  "map": {
+   "cells": 10316,
+   "area_m2": 4.13,
+   "rms_mm": 8.4,
+   "within_10mm": 0.796
+  },
+  "cpu": {
+   "process_pct_of_core": 19.4,
+   "messages_per_s": 1242.8,
+   "callbacks_pct_of_core": 5.7,
+   "lidar_cycles_per_s": 17.8,
+   "lidar_points_per_s": 3711.0,
+   "lidar_ms_per_scan": 0.699,
+   "lidar_pct_of_core": 1.25,
+   "tof_msgs_per_s": 177.8,
+   "tof_ms_per_msg": 0.1275,
+   "tof_pct_of_core": 2.27,
+   "rates_per_s": {
+    "joint_states": 888.6,
+    "imu": 88.9,
+    "odom": 44.4,
+    "tof": 177.8,
+    "lidar": 17.8,
+    "gs2": 25.4
+   },
+   "ms_per_msg": {
+    "joint_states": 0.0197,
+    "imu": 0.0013,
+    "odom": 0.0011,
+    "tof": 0.1275,
+    "lidar": 0.699,
+    "gs2": 0.1807
+   },
+   "gs2_points_per_s": 3077.0,
+   "gs2_pct_of_core": 0.46,
+   "rclpy_ms_per_msg": 0.11
+  }
+ },
+ "rough20_guard": {
+  "terrain": "rough",
+  "level": 20.0,
+  "walked_m": 0.46,
+  "ground_lidar": {
+   "n": 170,
+   "height_rms_mm": 6.4,
+   "height_bias_mm": -6.2,
+   "roll_rms_deg": 0.13,
+   "pitch_rms_deg": 0.16
+  },
+  "ground_feet": {
+   "n": 170,
+   "height_rms_mm": 6.9,
+   "height_bias_mm": -6.0,
+   "roll_rms_deg": 1.27,
+   "pitch_rms_deg": 1.19
+  },
+  "max_tilt_deg": 7.4,
+  "fell": false,
+  "guard": {
+   "caution": 0.126,
+   "step_over": 0.874,
+   "high_steps": 140
+  },
+  "reports": {
+   "lidar": {
+    "reports": 133,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 36,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "gs2": {
+    "reports": 120,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  },
+  "map": {
+   "cells": 6811,
+   "area_m2": 2.72,
+   "rms_mm": 7.9,
+   "within_10mm": 0.85
+  },
+  "cpu": {
+   "process_pct_of_core": 14.4,
+   "messages_per_s": 766.5,
+   "callbacks_pct_of_core": 3.9,
+   "lidar_cycles_per_s": 11.0,
+   "lidar_points_per_s": 2183.0,
+   "lidar_ms_per_scan": 0.803,
+   "lidar_pct_of_core": 0.88,
+   "tof_msgs_per_s": 109.7,
+   "tof_ms_per_msg": 0.1284,
+   "tof_pct_of_core": 1.41,
+   "rates_per_s": {
+    "joint_states": 548.0,
+    "imu": 54.8,
+    "odom": 27.4,
+    "tof": 109.7,
+    "lidar": 11.0,
+    "gs2": 15.7
+   },
+   "ms_per_msg": {
+    "joint_states": 0.022,
+    "imu": 0.0012,
+    "odom": 0.0013,
+    "tof": 0.1284,
+    "lidar": 0.803,
+    "gs2": 0.2382
+   },
+   "gs2_points_per_s": 1827.0,
+   "gs2_pct_of_core": 0.37,
+   "rclpy_ms_per_msg": 0.1375
+  }
+ }
+}

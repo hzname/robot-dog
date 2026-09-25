@@ -10,6 +10,8 @@ Server -> client:
   {"type": "hello", "limits": {...}}
   {"type": "state", "mode": "...", "estop": bool, "clients": n}
   {"type": "power", "voltage": V, "current": A}      only when a current sensor is fitted
+  {"type": "guard", "state": "clear|caution|step_over|stop", "d": m | null}
+                                                      only with dog_perception running
 """
 
 import json
@@ -112,6 +114,18 @@ def hello(limits: Limits) -> str:
 
 def state(mode: str, estop: bool, clients: int) -> str:
     return json.dumps({'type': 'state', 'mode': mode, 'estop': estop, 'clients': clients})
+
+
+GUARD_STATES = ('clear', 'caution', 'step_over', 'stop')
+
+
+def guard(raw: str) -> str:
+    """perception/guard JSON -> the web message (only what the page shows)."""
+    g = json.loads(raw)
+    state = g.get('state') if g.get('state') in GUARD_STATES else 'clear'
+    d = g.get('d')
+    return json.dumps({'type': 'guard', 'state': state,
+                       'd': round(float(d), 2) if isinstance(d, (int, float)) else None})
 
 
 def power(voltage: float, current: float) -> str:

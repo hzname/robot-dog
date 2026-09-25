@@ -29,7 +29,7 @@ from dog_perception import core  # noqa: E402
 UP, DOWN, FLOOR, BEAM, ALERT = '#eb6834', '#2a78d6', '#8f9aa8', '#1baf7a', '#d03b3b'
 TOF = ('fl', 'fr', 'fc', 'rc')
 TOF_RU = {'fl': 'FL', 'fr': 'FR', 'fc': 'FC', 'rc': 'RC'}
-SENSORS = {
+SENSORS_OLD = {  # mounts of recordings made before they were stored in the recording
     'x_lidar': True, 'x_lidar_x': 0.10, 'x_lidar_y': 0.04, 'x_lidar_z': 0.05,
     'x_lidar_tilt_deg': 30.0, 'x_lidar_yaw_deg': 40.0,
     'tof': True, 'tof_names': list(TOF), 'tof_x': [0.115, 0.115, 0.115, -0.115],
@@ -71,7 +71,7 @@ def main():
     obs = terrain.obstacles(kind, level)
     stones = [o for o in obs if o['shape'] == 'box']
     hfield = [o for o in obs if o['shape'] != 'box']
-    mounts = core.mounts_from_params(SENSORS)
+    mounts = core.mounts_from_params(rec.get('sensors') or SENSORS_OLD)
     scans = {n: [s for s in rec['scans'] if s['name'] == n] for n in ('lidar_left', 'lidar_right', 'gs2')}
     has_gs2 = bool(scans['gs2'])
     fams = (('lidar', 'лидары'), ('tof', 'ToF')) + ((('gs2', 'GS2'),) if has_gs2 else ())
@@ -80,6 +80,8 @@ def main():
         if rec['tof'] else np.zeros((0, 5))
     ground = rec['ground']
     hazards = [h for h in rec['hazards'] if h['phase'] == 'walk']
+    guard = rec.get('guard') or []  # [t, state, max_vx, [step per leg], phase] on every change
+    guard_t = np.array([g[0] for g in guard]) if guard else np.zeros(0)
     scores = rec['scores']
 
     # first detection time of each known hazard per sensor family (steps world)
@@ -193,6 +195,24 @@ def main():
                         lw=2.2 if bad else 1.4, zorder=6, ls='-' if np.isfinite(rng) else ':')
                 ax.scatter([b[0]], [b[1]], [b[2]], s=18, c=ALERT if bad else BEAM, depthshade=False, zorder=6)
         rv.draw_robot(ax, f, {leg: False for leg, _, _ in rv.LEGS})
+        # hazard guard: state and the legs that swing higher
+        guard_line = None
+        if len(guard_t):
+            gk = int(np.searchsorted(guard_t, t, side='right')) - 1
+            g = guard[gk] if gk >= 0 else None
+            if g:
+                state, vmax, steps = g[1], g[2], g[3]
+                col = {'stop': ALERT, 'step_over': UP, 'caution': '#c9a227'}.get(state, rv.GOOD)
+                label = {'clear': 'путь свободен', 'caution': 'препятствие впереди — медленно',
+                         'step_over': 'перешагивает', 'stop': 'СТОП: препятствие'}.get(state, state)
+                legs = ', '.join(f'{n} {1e3 * h:.0f} мм' for n, h in zip(('ЛП', 'ПП', 'ЛЗ', 'ПЗ'), steps) if h)
+                speed = '' if vmax is None else f' · до {vmax:.2f} м/с'
+                guard_line = (f'Реакция: {label}{speed}' + (f' · высокий шаг: {legs}' if legs else ''), col)
+                for (leg, fr, sd), h in zip(rv.LEGS, steps):
+                    if h:  # a ring over the foot of a leg that steps high
+                        ft = rv.leg_points(f, leg, fr, sd)[3]
+                        ax.scatter([ft[0]], [ft[1]], [ft[2] + 0.02], s=140, facecolors='none', edgecolors=UP,
+                                   linewidths=2.2, depthshade=False, zorder=8)
 
         # ToF residual chart
         lo = t - 4.0
@@ -246,6 +266,8 @@ def main():
 
         for tx in list(fig.texts):
             tx.remove()
+        if guard_line:
+            fig.text(0.02, 0.12, guard_line[0], fontsize=11, fontweight='bold', color=guard_line[1])
         fig.text(0.02, 0.945, args.title, fontsize=17, fontweight='bold')
         fig.text(0.02, 0.905, args.subtitle, fontsize=10.5, color=rv.INK2)
         fig.text(0.02, 0.07, '● пол   ', color=FLOOR, fontsize=10)

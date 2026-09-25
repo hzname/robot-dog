@@ -15,4 +15,4 @@
 Всё собрано из прогонов в Gazebo Harmonic. Как повторить:
 - ходьба — [docs/SIMULATION.md](../docs/SIMULATION.md), [docs/TERRAIN.md](../docs/TERRAIN.md);
 - датчики — [docs/PERCEPTION.md](../docs/PERCEPTION.md);
-- рендер роликов — [tools/sim_video](../tools/sim_video/README.md).
+- рендер роликов и сборка этих страниц — [tools/sim_video](../tools/sim_video/README.md).

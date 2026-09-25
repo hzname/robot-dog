@@ -6,23 +6,35 @@
 //   body_pose      geometry_msgs/Vector3  x=roll [rad], y=pitch [rad], z=height offset [m]
 //   estop          std_msgs/Bool          true = limp, requires "stand" after release
 //   imu/data       sensor_msgs/Imu        optional: slope compensation and heading hold
+//   guard          std_msgs/Float64MultiArray  optional, from perception: [max forward
+//                  speed m/s (inf = none), swing height m per leg LF, RF, LR, RR
+//                  (NaN = default)]; dropped
+//                  after guard_timeout without messages
 // Publishes:
 //   joint_commands sensor_msgs/JointState 12 joint positions [rad]
 //   state          std_msgs/String        current mode, or "estop" (latched)
+//   odom           nav_msgs/Odometry      only with odom.publish (the real robot): pose
+//                  dead-reckoned from the walked twist and the IMU heading, 25 Hz.
+//                  In simulation Gazebo publishes the true pose on it instead.
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "dog_control/locomotion.hpp"
+#include "dog_control/odometry.hpp"
+#include "nav_msgs/msg/odometry.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/vector3.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "std_msgs/msg/bool.hpp"
+#include "std_msgs/msg/float64_multi_array.hpp"
 #include "std_msgs/msg/string.hpp"
 
 namespace dog_control
@@ -45,9 +57,15 @@ public:
     controller_ = std::make_unique<LocomotionController>(p);
     rate_ = declare_parameter("control_rate", 50.0);
     cmd_timeout_ = declare_parameter("cmd_vel_timeout", 0.5);
+    guard_timeout_ = declare_parameter("guard_timeout", 1.0);
+    odom_publish_ = declare_parameter("odom.publish", false);
+    odom_height_ = p.stand_height;
 
     const auto latched = rclcpp::QoS(1).reliable().transient_local();
     joint_pub_ = create_publisher<sensor_msgs::msg::JointState>("joint_commands", 10);
+    if (odom_publish_) {
+      odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("odom", 10);
+    }
     state_pub_ = create_publisher<std_msgs::msg::String>("state", latched);
 
     cmd_vel_sub_ = create_subscription<geometry_msgs::msg::Twist>(
@@ -88,6 +106,7 @@ public:
         if (msg->orientation_covariance[0] < 0.0) {return;}  // no orientation in this message
         const double roll = std::atan2(2.0 * (q.w * q.x + q.y * q.z), 1.0 - 2.0 * (q.x * q.x + q.y * q.y));
         const double pitch = std::asin(std::clamp(2.0 * (q.w * q.y - q.z * q.x), -1.0, 1.0));
+        imu_rpy_ = {roll, pitch, std::atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))};
         const auto t = now();
         const double dt = imu_seen_ ? std::clamp((t - last_imu_).seconds(), 0.0, 0.2) : 0.0;
         if (!imu_seen_) {
@@ -96,6 +115,30 @@ public:
         imu_seen_ = true;
         last_imu_ = t;
         controller_->setImuAttitude(roll, pitch, dt);
+      });
+
+    guard_sub_ = create_subscription<std_msgs::msg::Float64MultiArray>(
+      "guard", 10, [this](std_msgs::msg::Float64MultiArray::ConstSharedPtr msg) {
+        // [max_vx, step] (all legs) or [max_vx, step LF, RF, LR, RR]
+        if (msg->data.size() < 2) {return;}
+        const double vmax = msg->data[0];
+        std::array<double, kNumLegs> steps;
+        for (int leg = 0; leg < kNumLegs; ++leg) {
+          steps[leg] = msg->data.size() >= 1 + kNumLegs ? msg->data[1 + leg] : msg->data[1];
+        }
+        if (vmax != last_guard_vx_) {
+          if (vmax == 0.0) {
+            RCLCPP_WARN(get_logger(), "guard: hazard ahead - forward motion stopped");
+          } else if (std::isfinite(vmax)) {
+            RCLCPP_INFO(get_logger(), "guard: forward speed limited to %.2f m/s", vmax);
+          } else {
+            RCLCPP_INFO(get_logger(), "guard: clear");
+          }
+          last_guard_vx_ = vmax;
+        }
+        controller_->setGuard(vmax, steps);
+        last_guard_ = now();
+        guard_active_ = true;
       });
 
     joint_msg_.name = kJointNames;
@@ -167,10 +210,18 @@ private:
       RCLCPP_WARN(get_logger(), "cmd_vel timeout (%.2fs) - stopping", cmd_timeout_);
     }
 
+    if (guard_active_ && (t - last_guard_).seconds() > guard_timeout_) {
+      controller_->clearGuard();
+      guard_active_ = false;
+      last_guard_vx_ = std::numeric_limits<double>::infinity();
+      RCLCPP_WARN(get_logger(), "guard silent for %.1fs - hazard limits dropped", guard_timeout_);
+    }
+
     if (last_gyro_.nanoseconds() != 0 && (t - last_gyro_).seconds() > 0.2) {
       controller_->clearYawRate();  // IMU silent: no heading hold on stale data
     }
     const bool out = controller_->update(dt);
+    if (odom_publish_) {publishOdom(t, dt);}
     if (controller_->mode() != last_mode_ || controller_->estopActive() != last_estop_) {
       publishState();
     }
@@ -187,6 +238,34 @@ private:
     joint_pub_->publish(joint_msg_);
   }
 
+  void publishOdom(const rclcpp::Time & t, double dt)
+  {
+    const bool imu = imu_seen_ && (t - last_imu_).seconds() < 0.2;
+    const auto & v = controller_->gaitVelocity();
+    if (controller_->gait().stepping()) {
+      dead_reckoning_.update(dt, v.vx, v.vy, v.wz, imu ? imu_rpy_[2] : std::nan(""));
+    }
+    if (++odom_div_ % 2) {return;}  // 25 Hz at the 50 Hz control rate
+    nav_msgs::msg::Odometry m;
+    m.header.stamp = t;
+    m.header.frame_id = "odom";
+    m.child_frame_id = "base_link";
+    m.pose.pose.position.x = dead_reckoning_.x();
+    m.pose.pose.position.y = dead_reckoning_.y();
+    m.pose.pose.position.z = odom_height_;  // the floor under the robot stays at z = 0
+    const double r = imu ? imu_rpy_[0] : 0.0, p = imu ? imu_rpy_[1] : 0.0, y = dead_reckoning_.yaw();
+    const double cr = std::cos(r / 2), sr = std::sin(r / 2), cp = std::cos(p / 2), sp = std::sin(p / 2);
+    const double cy = std::cos(y / 2), sy = std::sin(y / 2);
+    m.pose.pose.orientation.w = cr * cp * cy + sr * sp * sy;
+    m.pose.pose.orientation.x = sr * cp * cy - cr * sp * sy;
+    m.pose.pose.orientation.y = cr * sp * cy + sr * cp * sy;
+    m.pose.pose.orientation.z = cr * cp * sy - sr * sp * cy;
+    m.twist.twist.linear.x = controller_->gait().stepping() ? v.vx : 0.0;
+    m.twist.twist.linear.y = controller_->gait().stepping() ? v.vy : 0.0;
+    m.twist.twist.angular.z = controller_->gait().stepping() ? v.wz : 0.0;
+    odom_pub_->publish(m);
+  }
+
   void publishState()
   {
     last_mode_ = controller_->mode();
@@ -201,9 +280,19 @@ private:
   double rate_{50.0};
   double cmd_timeout_{0.5};
   bool cmd_vel_active_{false};
+  double guard_timeout_{1.0};
+  bool guard_active_{false};
+  double last_guard_vx_{std::numeric_limits<double>::infinity()};
+  rclcpp::Time last_guard_;
   Mode last_mode_{Mode::PASSIVE};
   bool last_estop_{false};
   bool imu_seen_{false};
+  bool odom_publish_{false};
+  double odom_height_{0.15};
+  int odom_div_{0};
+  std::array<double, 3> imu_rpy_{};
+  DeadReckoning dead_reckoning_;
+  rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
   rclcpp::Time last_imu_;
   rclcpp::Time last_gyro_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_tick_;
@@ -213,6 +302,7 @@ private:
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr state_pub_;
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
+  rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr guard_sub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr command_sub_;
   rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr pose_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr estop_sub_;

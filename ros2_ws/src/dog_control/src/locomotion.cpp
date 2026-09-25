@@ -49,6 +49,7 @@ LocomotionController::LocomotionController(const LocomotionParams & params)
 : p_(params), gait_(params.gait, neutralFeet(params))
 {
   height_ = p_.lie_height;
+  guard_step_.fill(std::numeric_limits<double>::quiet_NaN());
 }
 
 Vec3 LocomotionController::hipPosition(int leg) const
@@ -133,6 +134,18 @@ void LocomotionController::setVelocity(const BodyVelocity & v)
   vel_target_.wz = std::clamp(v.wz, -m.wz, m.wz);
 }
 
+void LocomotionController::setGuard(double max_vx, const std::array<double, kNumLegs> & step_heights)
+{
+  guard_vx_ = std::isnan(max_vx) ? std::numeric_limits<double>::infinity() : std::max(0.0, max_vx);
+  guard_step_ = step_heights;
+}
+
+void LocomotionController::clearGuard()
+{
+  guard_vx_ = std::numeric_limits<double>::infinity();
+  guard_step_.fill(std::numeric_limits<double>::quiet_NaN());
+}
+
 void LocomotionController::setBodyPose(const BodyPose & pose)
 {
   pose_target_.roll = std::clamp(pose.roll, -p_.max_roll, p_.max_roll);
@@ -179,7 +192,15 @@ bool LocomotionController::update(double dt)
   const bool upright = mode_ == Mode::STAND || mode_ == Mode::WALK;
 
   // Accel-limited twist; zero unless upright and not about to lie down.
-  const BodyVelocity target = (upright && !pending_lie_) ? vel_target_ : BodyVelocity{};
+  BodyVelocity target = (upright && !pending_lie_) ? vel_target_ : BodyVelocity{};
+  target.vx = std::min(target.vx, guard_vx_);  // hazard ahead: forward only
+  // Swing height: towards the guard's value (or the configured one) at 0.1 m/s,
+  // so a foot in mid-swing is not jerked up or down.
+  for (int leg = 0; leg < kNumLegs; ++leg) {
+    const double goal = std::isfinite(guard_step_[leg]) ?
+      std::clamp(guard_step_[leg], 0.0, 0.08) : p_.gait.step_height;
+    gait_.setStepHeight(leg, approach(gait_.stepHeight(leg), goal, 0.1 * dt));
+  }
   vel_.vx = approach(vel_.vx, target.vx, p_.max_accel.vx * dt);
   vel_.vy = approach(vel_.vy, target.vy, p_.max_accel.vy * dt);
   vel_.wz = approach(vel_.wz, target.wz, p_.max_accel.wz * dt);

@@ -11,6 +11,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 
@@ -29,6 +30,7 @@ target_link_libraries(locomotion_node
   dog_control_core
   rclcpp::rclcpp
   ${geometry_msgs_TARGETS}
+  ${nav_msgs_TARGETS}
   ${sensor_msgs_TARGETS}
   ${std_msgs_TARGETS})
 

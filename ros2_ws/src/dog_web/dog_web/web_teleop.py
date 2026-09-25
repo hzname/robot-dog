@@ -58,6 +58,9 @@ class WebTeleop(Node):
         self.create_subscription(String, 'state', self._on_state, latched)
         self.create_subscription(BatteryState, 'power', self._on_power, 10)
         self._last_power = 0.0
+        # hazard guard (dog_perception): why the robot slows down or will not go forward
+        self.create_subscription(String, 'perception/guard', self._on_guard, 10)
+        self._guard = None
 
         self.mode = 'unknown'
         self.web_clients = set()
@@ -77,6 +80,17 @@ class WebTeleop(Node):
             return
         self._last_power = now
         text = protocol.power(msg.voltage, -msg.current)
+        self._aio_loop.call_soon_threadsafe(lambda: asyncio.ensure_future(self._broadcast(text)))
+
+    def _on_guard(self, msg: String):
+        try:
+            text = protocol.guard(msg.data)
+        except (ValueError, TypeError):
+            return
+        state = json.loads(text)['state']
+        if state == self._guard or not self._aio_loop:  # send changes only (10 Hz source)
+            return
+        self._guard = state
         self._aio_loop.call_soon_threadsafe(lambda: asyncio.ensure_future(self._broadcast(text)))
 
     async def _broadcast(self, text):

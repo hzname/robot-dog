@@ -49,6 +49,8 @@ def _rot(q):
 
 def features(kind, level):
     """Known hazards: (name, kind, x of the near edge, (y0, y1) or None = full width)."""
+    if kind == 'wall' and level > 0:
+        return [('wall', 'up', terrain.WALL_X, (-0.4, 0.4))]
     if kind != 'steps':
         return []
     (xl, yl), (xr, yr) = terrain.STONES
@@ -58,15 +60,11 @@ def features(kind, level):
             ('step_up', 'up', terrain.STEP_UP_X, None)]
 
 
-SENSOR_PARAMS = {
-    'x_lidar': True, 'x_lidar_x': 0.10, 'x_lidar_y': 0.04, 'x_lidar_z': 0.05,
-    'x_lidar_tilt_deg': 30.0, 'x_lidar_yaw_deg': 40.0,
-    'tof': True, 'tof_names': list(TOF), 'tof_x': [0.115, 0.115, 0.115, -0.115],
-    'tof_y': [0.045, -0.045, 0.0, 0.0], 'tof_z': [-0.012, -0.012, 0.0, -0.012],
-    'tof_pitch_deg': [40.0, 40.0, 20.0, 40.0], 'tof_yaw_deg': [23.0, -23.0, 0.0, 180.0],
-    'gs2': True, 'gs2_x': 0.115, 'gs2_y': 0.0, 'gs2_z': -0.012, 'gs2_pitch_deg': 40.0,
-}
-GS2_LINE_X = 0.294  # where the GS2 line lies on a flat floor (body frame)
+# Sensor mounts and stand height: the same robot.yaml the simulation runs
+# with (a copy here went stale whenever the mounts were changed).
+SENSOR_PARAMS, _GEOMETRY, _STANCE = core.robot_config()
+STAND_HEIGHT = float(_STANCE.get('stand_height', 0.15))
+GS2_LINE_X = core.gs2_line_x(SENSOR_PARAMS, STAND_HEIGHT) if SENSOR_PARAMS.get('gs2') else 0.28
 FAMILIES = ('lidar', 'tof', 'gs2')
 CORRIDOR_Y = {'left': 0.12, 'centre': 0.0, 'right': -0.12}
 
@@ -105,7 +103,7 @@ def score_detection(kind, level, hazards, trace):
     reach = (max(walk_x) if walk_x else 0.0) + FRONT_FOOT + 0.3  # the sensors look this far at least
     for name, kind_f, edge, ys in features(kind, level):
         det[name] = {}
-        if edge > reach:  # the robot stopped (or fell) before it came near
+        if edge > reach and kind != 'wall':  # the robot stopped (or fell) before it came near
             det[name] = {'not_reached': True}
             continue
         if ys is not None:
@@ -151,6 +149,7 @@ class PerceptionCheck:
         n = self.node
         self.state, self.odom, self.joints, self.imu = None, None, {}, None
         self.hazards, self.ground, self.tof, self.scans, self.trace = [], [], [], [], []
+        self.guard = []  # [t, state, max_vx, [step per leg]] on every change
         self.stats, self.map = None, None
         self.t0 = time.time()
         self.phase = 'setup'
@@ -162,6 +161,7 @@ class PerceptionCheck:
         n.create_subscription(Vector3Stamped, 'perception/ground_lidar', lambda m: self.on_ground('lidar', m), 50)
         n.create_subscription(Vector3Stamped, 'perception/ground_feet', lambda m: self.on_ground('feet', m), 50)
         n.create_subscription(Float32MultiArray, 'perception/tof', self.on_tof, 100)
+        n.create_subscription(String, 'perception/guard', self.on_guard, 20)
         n.create_subscription(Float64MultiArray, 'perception/stats', lambda m: setattr(self, 'stats', list(m.data)), 1)
         n.create_subscription(Float32MultiArray, 'perception/map', lambda m: setattr(self, 'map', list(m.data)), 1)
         for name in ('lidar_left', 'lidar_right', 'gs2'):
@@ -243,6 +243,12 @@ class PerceptionCheck:
         self.ground.append({'t': self.now(), 'src': src, 'x': round(float(p[0]), 3),
                             'est': [v.x, v.y, v.z], 'true': [roll_t, pitch_t, height_t]})
 
+    def on_guard(self, msg):
+        g = json.loads(msg.data)
+        row = [self.now(), g['state'], g['max_vx'], g['step']]
+        if not self.guard or self.guard[-1][1:] != row[1:]:
+            self.guard.append(row + [self.phase])
+
     def on_tof(self, msg):
         if self.phase == 'walk':
             d = list(msg.data)
@@ -297,13 +303,33 @@ class PerceptionCheck:
                                         'height_bias_mm': round(1e3 * float(np.mean(e[:, 2])), 1),
                                         'roll_rms_deg': round(math.degrees(float(np.sqrt(np.mean(e[:, 0] ** 2)))), 2),
                                         'pitch_rms_deg': round(math.degrees(float(np.sqrt(np.mean(e[:, 1] ** 2)))), 2)}
+        # reaction (guard) and how the walk went
+        walk = [e for e in self.trace if e['phase'] == 'walk']
+        tilt = [max(abs(v) for v in e['imu']) for e in walk if 'imu' in e]
+        out['max_tilt_deg'] = round(max(tilt), 1) if tilt else None
+        out['fell'] = bool(tilt) and max(tilt) > 35
+        if self.guard:
+            t_end = walk[-1]['t'] if walk else self.now()
+            share = collections.Counter()
+            gw = [g for g in self.guard if g[4] == 'walk']
+            for k, g in enumerate(gw):
+                t1 = gw[k + 1][0] if k + 1 < len(gw) else t_end
+                share[g[1]] += max(0.0, t1 - g[0])
+            total = sum(share.values()) or 1.0
+            out['guard'] = {k: round(v / total, 3) for k, v in share.items()}
+            out['guard']['high_steps'] = sum(1 for g in gw if any(h is not None for h in g[3]))
+        if self.kind == 'wall' and walk:
+            xmax = max(e['x'] for e in walk + [e for e in self.trace if e['phase'] == 'stop'])
+            out['wall'] = {'body_to_wall_m': round(terrain.WALL_X - xmax, 3),
+                           'front_feet_to_wall_m': round(terrain.WALL_X - xmax - 0.09, 3),
+                           'touched': terrain.WALL_X - xmax - 0.09 < 0.02}
         # detection
-        if self.kind == 'steps':
+        if self.kind in ('steps', 'wall'):
             out['detection'] = score_detection(self.kind, self.level, self.hazards, self.trace)
         # false reports: hazards not explained by a known feature
         def explained(h):
             x = h.get('world_x', h['robot'][0] + 0.3)
-            if self.kind == 'steps':
+            if self.kind in ('steps', 'wall'):
                 return any(abs(x - e) < 0.35 or 0 < e - (h['robot'][0] + FRONT_FOOT) < 1.2
                            for _, _, e, _ in features(self.kind, self.level))
             if self.kind == 'slope':
@@ -370,7 +396,7 @@ class PerceptionCheck:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--terrain', default='flat', choices=['flat', 'slope', 'waves', 'rough', 'steps'])
+    ap.add_argument('--terrain', default='flat', choices=['flat', 'slope', 'waves', 'rough', 'steps', 'wall'])
     ap.add_argument('--level', type=float, default=0.0)
     ap.add_argument('--seconds', type=float, default=10.0)
     ap.add_argument('--speed', type=float, default=0.12)
@@ -378,6 +404,9 @@ def main():
     ap.add_argument('--expect', action='store_true',
                     help='exit 1 unless the lidars found every hazard in the path (steps) '
                          'and gave no unexplained report (other terrains)')
+    ap.add_argument('--expect-guard', action='store_true',
+                    help='exit 1 unless the hazard guard did the right thing: flat - never stopped and '
+                         'slowed < 10 %% of the time; wall - stopped without touching it; any - no fall')
     args, ros_args = ap.parse_known_args()
     rclpy.init(args=ros_args)
     chk = PerceptionCheck(args.terrain, args.level, args.seconds, args.speed)
@@ -392,10 +421,29 @@ def main():
             ok = not missed and false <= 1.0
             print(('PASS' if ok else 'FAIL') + f': missed {missed or "none"}, '
                   f'unexplained lidar reports {false}/m')
+        if ok and args.expect_guard:
+            g = res.get('guard') or {}
+            why = []
+            if res.get('fell'):
+                why.append('fell')
+            if args.terrain == 'flat':
+                if g.get('stop', 0) > 0:
+                    why.append(f"stopped on a flat floor ({g['stop']:.0%} of the time)")
+                if g.get('caution', 0) + g.get('step_over', 0) > 0.10:
+                    why.append('slowed down on a flat floor for more than 10 % of the time')
+            if args.terrain == 'wall':
+                w = res.get('wall') or {}
+                if not g.get('stop'):
+                    why.append('never stopped before the wall')
+                if w.get('touched', True):
+                    why.append(f"touched the wall (front feet {w.get('front_feet_to_wall_m')} m)")
+            ok = not why
+            print(('PASS' if ok else 'FAIL') + ': guard ' + ('; '.join(why) or f'{g}'))
         if args.trace:
             with open(args.trace, 'w') as f:
                 json.dump({'terrain': args.terrain, 'level': args.level, 'scores': res, 'trace': chk.trace,
-                           'hazards': chk.hazards, 'ground': chk.ground, 'tof': chk.tof, 'scans': chk.scans,
+                           'sensors': SENSOR_PARAMS, 'stand_height': STAND_HEIGHT,
+                           'hazards': chk.hazards, 'guard': chk.guard, 'ground': chk.ground, 'tof': chk.tof, 'scans': chk.scans,
                            'map': chk.map}, f)
     finally:
         chk.node.destroy_node()

@@ -22,6 +22,13 @@ function connect() {
     if (msg.type === 'hello') limits = msg.limits;
     else if (msg.type === 'state') setMode(msg.mode);
     else if (msg.type === 'error') showError(msg.message);
+    else if (msg.type === 'guard') {
+      const el = $('guard');
+      const text = { caution: 'препятствие — медленно', step_over: 'перешагивает', stop: 'стоп: препятствие впереди' };
+      el.hidden = msg.state === 'clear';
+      el.textContent = text[msg.state] || '';
+      el.className = 'pill ' + (msg.state === 'stop' ? 'estop' : '');
+    }
     else if (msg.type === 'power') {
       const el = $('power');
       el.hidden = false;

@@ -54,3 +54,10 @@ def test_hello_and_state_are_json():
     assert json.loads(protocol.hello(LIM))['limits']['max_vx'] == LIM.max_vx
     s = json.loads(protocol.state('walk', False, 2))
     assert s == {'type': 'state', 'mode': 'walk', 'estop': False, 'clients': 2}
+
+
+def test_guard_message():
+    m = json.loads(protocol.guard('{"state": "stop", "max_vx": 0.0, "step": [null, null, null, null], "d": 0.2812}'))
+    assert m == {'type': 'guard', 'state': 'stop', 'd': 0.28}
+    m = json.loads(protocol.guard('{"state": "weird", "d": null}'))
+    assert m == {'type': 'guard', 'state': 'clear', 'd': None}

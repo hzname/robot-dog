@@ -46,6 +46,11 @@ def _rot(q):
                      [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
 
 
+# Body sag limit: 42 mm under the stand height (0.15 m). Before the foot fix
+# (calf to the contact point) the simulated body stood at 0.162 m and the
+# limit read 0.12 m; the same physical criterion is 0.108 m now.
+MIN_BODY_HEIGHT = 0.108
+
 class WalkCheck:
     def __init__(self, kind='flat', level=0.0, min_ratio=0.4, max_tilt=20.0, seconds=5.0,
                  record=False):
@@ -164,7 +169,7 @@ class WalkCheck:
         moved = {'x': dx, 'y': dy, 'yaw': dyaw}
         axis, target = expect
         ratio = moved[axis] / target
-        ok = ratio > self.min_ratio and tilt < self.max_tilt and z1 > 0.12 and not self.fallen
+        ok = ratio > self.min_ratio and tilt < self.max_tilt and z1 > MIN_BODY_HEIGHT and not self.fallen
         self.check(name, ok, 'dx=%+.2fm dy=%+.2fm dyaw=%+.0fdeg  (%d%% of command)  tilt<=%.0fdeg z=%.3f' % (
             dx, dy, math.degrees(dyaw), 100 * ratio, tilt, z1),
             cmd=[vx, vy, wz], seconds=seconds, dx=dx, dy=dy, dyaw_deg=math.degrees(dyaw),

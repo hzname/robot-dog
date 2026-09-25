@@ -1,11 +1,14 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <vector>
 
 #include "dog_control/locomotion.hpp"
+#include "dog_control/odometry.hpp"
 
 using dog_control::BodyPose;
+using dog_control::DeadReckoning;
 using dog_control::forwardKinematics;
 using dog_control::kNumLegs;
 using dog_control::legSide;
@@ -311,4 +314,64 @@ TEST(Locomotion, HeadingHoldIdleWithoutImuOrWhenStanding)
   run(c, 1.0);
   EXPECT_DOUBLE_EQ(c.gaitVelocity().wz, 0.0);
   EXPECT_DOUBLE_EQ(c.headingError(), 0.0);
+}
+
+TEST(Locomotion, GuardLimitsForwardSpeedAndRaisesSwingPerLeg)
+{
+  LocomotionParams p;
+  LocomotionController c(p);
+  const double nan = std::nan("");
+  c.request("stand");
+  run(c, 2.0);
+  c.setVelocity({0.12, 0.0, 0.0});
+  run(c, 1.0);
+  EXPECT_NEAR(c.velocity().vx, 0.12, 1e-9);
+  // stone in front of the left front foot: slow down, lift only that leg (ramped)
+  c.setGuard(0.05, {0.045, nan, nan, nan});
+  c.update(kDt);
+  EXPECT_LT(c.stepHeight(0), 0.045);
+  run(c, 1.0);
+  EXPECT_NEAR(c.velocity().vx, 0.05, 1e-9);
+  EXPECT_NEAR(c.stepHeight(0), 0.045, 1e-9);
+  for (int leg = 1; leg < kNumLegs; ++leg) {EXPECT_NEAR(c.stepHeight(leg), p.gait.step_height, 1e-9);}
+  // the swing of that leg really goes higher
+  double apex[kNumLegs] = {};
+  for (int i = 0; i < static_cast<int>(2.0 / kDt); ++i) {
+    c.update(kDt);
+    for (int leg = 0; leg < kNumLegs; ++leg) {apex[leg] = std::max(apex[leg], c.gait().feet()[leg].z);}
+  }
+  EXPECT_NEAR(apex[0], 0.045, 0.002);
+  EXPECT_NEAR(apex[1], p.gait.step_height, 0.002);
+  // stop: forward blocked, backing off and turning are not
+  c.setGuard(0.0, {nan, nan, nan, nan});
+  run(c, 1.0);
+  EXPECT_NEAR(c.velocity().vx, 0.0, 1e-9);
+  EXPECT_NEAR(c.stepHeight(0), p.gait.step_height, 1e-9);
+  c.setVelocity({-0.05, 0.0, 0.3});
+  run(c, 1.0);
+  EXPECT_NEAR(c.velocity().vx, -0.05, 1e-9);
+  EXPECT_NEAR(c.velocity().wz, 0.3, 1e-9);
+  // guard gone: full command again
+  c.clearGuard();
+  c.setVelocity({0.12, 0.0, 0.0});
+  run(c, 1.0);
+  EXPECT_NEAR(c.velocity().vx, 0.12, 1e-9);
+}
+
+TEST(DeadReckoning, IntegratesTwistWithImuHeading)
+{
+  DeadReckoning o;
+  for (int i = 0; i < 100; ++i) {o.update(0.01, 0.1, 0.0, 0.0);}  // 1 s straight
+  EXPECT_NEAR(o.x(), 0.1, 1e-9);
+  EXPECT_NEAR(o.y(), 0.0, 1e-9);
+  // IMU appears at yaw 1.0 rad (its own zero): continue from the current heading
+  o.update(0.01, 0.0, 0.0, 0.0, 1.0);
+  EXPECT_NEAR(o.yaw(), 0.0, 1e-9);
+  for (int i = 0; i < 100; ++i) {o.update(0.01, 0.1, 0.0, 0.0, 1.0 + M_PI / 2);}  // turned left 90 deg
+  EXPECT_NEAR(o.yaw(), M_PI / 2, 1e-9);
+  EXPECT_NEAR(o.x(), 0.1, 1e-3);
+  EXPECT_NEAR(o.y(), 0.1, 1e-3);
+  // IMU gone: integrate the commanded yaw rate
+  for (int i = 0; i < 100; ++i) {o.update(0.01, 0.0, 0.0, 0.5);}
+  EXPECT_NEAR(o.yaw(), M_PI / 2 + 0.5, 1e-9);
 }

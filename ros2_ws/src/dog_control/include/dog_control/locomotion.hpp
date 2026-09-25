@@ -7,6 +7,7 @@
 #pragma once
 
 #include <array>
+#include <limits>
 #include <string>
 
 #include "dog_control/gait.hpp"
@@ -92,6 +93,14 @@ public:
   void clearYawRate() {yaw_rate_valid_ = false;}
   /// Integrated heading error [rad] (commanded minus measured).
   double headingError() const {return heading_error_;}
+  /// Hazard guard from perception: forward speed limit [m/s] (inf = none)
+  /// and swing height per leg (LF, RF, LR, RR) [m] (NaN = gait.step_height):
+  /// only the legs whose path crosses the obstacle lift higher. clearGuard()
+  /// when the guard goes silent. Backwards, sideways and turning stay free.
+  void setGuard(double max_vx, const std::array<double, kNumLegs> & step_heights);
+  void clearGuard();
+  double guardMaxVx() const {return guard_vx_;}
+  double stepHeight(int leg) const {return gait_.stepHeight(leg);}
   /// Twist actually given to the gait (command + heading correction).
   const BodyVelocity & gaitVelocity() const {return gait_vel_;}
 
@@ -139,6 +148,8 @@ private:
   double heading_error_{0.0};
   double heading_integral_{0.0};
   BodyVelocity gait_vel_;
+  double guard_vx_{std::numeric_limits<double>::infinity()};
+  std::array<double, kNumLegs> guard_step_{};  // NaN = configured step height
 
   std::array<double, kNumJoints> joints_{};
   int unreachable_{0};

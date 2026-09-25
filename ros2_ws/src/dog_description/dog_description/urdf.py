@@ -162,11 +162,14 @@ def build_urdf(geometry, description=None, gazebo=False, namespace='dog', initia
             '<material name="leg"/></visual>'
             + _inertial(d['calf_mass'], _cyl_inertia(d['calf_mass'], r_leg * 0.8, L3), (0, 0, -L3 / 2))
             + '</link>')
-        # foot (contact point)
-        fr = d['foot_radius']
+        # foot: calf (robot.yaml, measured in DEPLOYMENT.md) runs to the
+        # CONTACT point, so the sphere's bottom - not its centre - is at L3.
+        # (Centre at L3 made the simulated robot stand 12 mm higher than
+        # stand_height and put the perception's leg plane 12 mm off.)
+        fr = min(d['foot_radius'], 0.5 * L3)
         out.append(
             f'<joint name="{name}_foot_joint" type="fixed"><parent link="{name}_calf"/>'
-            f'<child link="{name}_foot"/><origin xyz="0 0 {-L3}"/></joint>')
+            f'<child link="{name}_foot"/><origin xyz="0 0 {-(L3 - fr):.4f}"/></joint>')
         out.append(
             f'<link name="{name}_foot"><visual><geometry><sphere radius="{fr}"/></geometry>'
             '<material name="foot"/></visual>'

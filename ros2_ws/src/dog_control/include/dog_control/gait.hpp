@@ -48,6 +48,9 @@ public:
   double phase() const {return phase_;}
   bool inSwing(int leg) const {return in_swing_[leg];}
   const GaitParams & params() const {return params_;}
+  /// Swing apex of one leg [m]; takes effect at once (callers ramp it).
+  void setStepHeight(int leg, double h) {step_heights_[leg] = h;}
+  double stepHeight(int leg) const {return step_heights_[leg];}
 
   static bool isIdle(const BodyVelocity & v);
 
@@ -57,6 +60,7 @@ private:
   std::array<Vec3, kNumLegs> feet_;
   std::array<double, kNumLegs> swing_blend_{};  // progress of the current swing arc
   std::array<bool, kNumLegs> in_swing_{};
+  std::array<double, kNumLegs> step_heights_{};  // per-leg swing apex, params_.step_height at start
   double phase_{0.0};
   bool stepping_{false};
 };
