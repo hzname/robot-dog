@@ -59,6 +59,45 @@
       max_rate: 0.3         # [rad/s] correction limit
       max_error: 0.5        # [rad] error clamp (robot blocked / held)
 
+    # Perception sensors (docs/HEAD.md). Used by the URDF (frames, Gazebo
+    # sensors) and by dog_perception. Angles: pitch = down from horizontal,
+    # yaw = towards +y (left).
+    sensors:
+      # two single-beam 360 deg lidars (LD19-class) crossed in an X: each scan
+      # plane dips by x_lidar_tilt_deg towards azimuth +-x_lidar_yaw_deg; the
+      # right one dips to the left and vice versa
+      x_lidar: true
+      x_lidar_x: 0.10         # [m] from the body centre
+      x_lidar_y: 0.04         # [m] right one at -y
+      x_lidar_z: 0.05         # [m] beam above the body centre
+      x_lidar_tilt_deg: 30.0
+      x_lidar_yaw_deg: 40.0
+      x_lidar_rate: 10.0      # [Hz]
+      x_lidar_samples: 450    # per revolution (0.8 deg)
+      x_lidar_noise: 0.01     # [m] 1 sigma
+      # VL53L1X ToF sensors: name, position [m], pitch down / yaw [deg]
+      tof: true
+      tof_names: [fl, fr, fc, rc]
+      tof_x: [0.115, 0.115, 0.115, -0.115]
+      tof_y: [0.045, -0.045, 0.0, 0.0]
+      tof_z: [-0.012, -0.012, 0.0, -0.012]
+      tof_pitch_deg: [40.0, 40.0, 20.0, 40.0]
+      tof_yaw_deg: [23.0, -23.0, 0.0, 180.0]
+      tof_rate: 50.0          # [Hz]
+      tof_fov_deg: 27.0
+      tof_noise: 0.003        # [m] 1 sigma (+0.5 % of range)
+
+    # dog_perception (docs/PERCEPTION.md): hazard thresholds, ToF offsets.
+    perception:
+      reference: auto          # ground reference: auto (lidar plane, legs as fallback) | feet
+      threshold: 0.015         # [m] lidar: above / below the floor plane in the foot corridors
+      tof_threshold: [0.015, 0.015, 0.05, 0.015]  # [m] per ToF (fl, fr, fc, rc); FC looks flat and far
+      tof_confirm: 3           # readings in a row (60 ms at 50 Hz)
+      tof_offsets: [0.0, 0.0, 0.0, 0.0]  # [m] measure once on a flat floor, then keep here
+      tof_autocal: false       # never calibrate at every start (a ramp in view becomes an offset)
+      map_size: 3.0            # [m] elevation map window around the robot
+      map_resolution: 0.02     # [m]
+
     # Only used by the URDF generator (visuals, inertia, simulation).
     description:
       body_length: 0.23     # trunk box [m]

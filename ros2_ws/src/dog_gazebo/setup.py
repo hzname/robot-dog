@@ -24,5 +24,7 @@ setup(
         'joint_command_bridge = dog_gazebo.joint_command_bridge:main',
         'walk_check = dog_gazebo.walk_check:main',
         'terrain_sweep = dog_gazebo.terrain_sweep:main',
+        'tof_bridge = dog_gazebo.tof_bridge:main',
+        'perception_check = dog_gazebo.perception_check:main',
     ]},
 )

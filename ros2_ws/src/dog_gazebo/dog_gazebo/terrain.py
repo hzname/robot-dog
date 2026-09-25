@@ -8,6 +8,10 @@
   waves  level   cylinders across the path, bump height `level` mm
                  (a curved, washboard-like surface)
   rough  level   scattered stones up to `level` mm high
+  steps  level   perception test course, steps of `level` mm: the robot starts
+                 on a platform with a 20 mm stone in the left foot corridor
+                 (x 0.8 m) and one in the right (x 1.4 m), steps down at
+                 x 2.2 m and up again at x 3.0 m
 
 The spawn area (radius 0.2 m) is kept free of obstacles so the robot always
 starts from a well-defined stance.
@@ -27,6 +31,9 @@ HEADER = '''<?xml version="1.0"?>
     <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
     <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
     <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
     <light type="directional" name="sun">
       <cast_shadows>true</cast_shadows>
       <pose>0 0 10 0 0 0</pose>
@@ -39,6 +46,8 @@ FOOTER = '''  </world>
 '''
 RAMP_START = 0.25  # [m] start of the ramp in the slope world
 RAMP_LENGTH = 3.0
+STEP_DOWN_X, STEP_UP_X = 2.2, 3.0  # steps world
+STONES = ((0.80, 0.13), (1.40, -0.13))  # steps world: (x of the near edge, y) of 20 mm stones
 SURFACE = '<surface><friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction></surface>'
 
 
@@ -89,6 +98,10 @@ def obstacles(kind, level, seed=0):
             if abs(y) >= 0.2:
                 for xx in (-0.08, 0.08):
                     out.append({'shape': 'cyl_x', 'x': xx, 'y': y, 'z': h - r, 'r': r, 'length': 0.32})
+    elif kind == 'steps':
+        for x, y in STONES:
+            out.append({'shape': 'box', 'x': x + 0.03, 'y': y, 'z': h + 0.01, 'size': (0.06, 0.14, 0.02),
+                        'yaw': 0.0})
     elif kind == 'rough':
         rng = random.Random(seed)
         while len(out) < 260:
@@ -104,8 +117,8 @@ def obstacles(kind, level, seed=0):
 
 def world(kind='flat', level=0.0, seed=0):
     """SDF text of a test world."""
-    if kind not in ('flat', 'slope', 'waves', 'rough'):
-        raise ValueError(f'unknown terrain {kind!r} (flat, slope, waves, rough)')
+    if kind not in ('flat', 'slope', 'waves', 'rough', 'steps'):
+        raise ValueError(f'unknown terrain {kind!r} (flat, slope, waves, rough, steps)')
     parts = [HEADER, _ground()]
     if kind == 'slope':
         th = math.radians(level)
@@ -115,6 +128,12 @@ def world(kind='flat', level=0.0, seed=0):
             cx = RAMP_START + 0.5 * L * math.cos(th) + 0.5 * T * math.sin(th)
             cz = 0.5 * L * math.sin(th) - 0.5 * T * math.cos(th)
             parts.append(_box('ramp', (cx, 0, cz, 0, -th, 0), (L, 4.0, T), '0.65 0.62 0.55 1'))
+    if kind == 'steps' and level > 0:
+        h = level / 1000.0
+        parts.append(_box('platform1', ((-1.0 + STEP_DOWN_X) / 2, 0, h / 2, 0, 0, 0),
+                          (STEP_DOWN_X + 1.0, 4.0, h), '0.62 0.62 0.66 1'))
+        parts.append(_box('platform2', ((STEP_UP_X + 6.0) / 2, 0, h / 2, 0, 0, 0),
+                          (6.0 - STEP_UP_X, 4.0, h), '0.62 0.62 0.66 1'))
     for k, o in enumerate(obstacles(kind, level, seed)):
         if o['shape'] == 'cyl_y':
             parts.append(_cylinder(f'wave{k}', (o['x'], 0, o['z'], math.pi / 2, 0, 0), o['r'], o['length']))
@@ -144,18 +163,23 @@ def height(kind, level, x, y, obs=()):
             dx, dy = x - o['x'], y - o['y']
             u, v = c * dx + s_ * dy, -s_ * dx + c * dy
             if abs(u) < o['size'][0] / 2 and abs(v) < o['size'][1] / 2:
-                z = max(z, o['size'][2])
+                z = max(z, o['z'] + o['size'][2] / 2)
     return z
 
 
 def spawn_pose(kind, level, stand_z=0.25):
     """(z, pitch) to spawn the robot on the terrain's (flat) start area."""
+    if kind == 'steps':
+        return stand_z + level / 1000.0, 0.0
     return stand_z, 0.0
 
 
 def surface(kind, level, x):
     """(height [m], unit normal) of the smooth ground under world x.
     Obstacles of rough / waves are not included: they are what is tested."""
+    if kind == 'steps' and level > 0:
+        h = level / 1000.0
+        return (h if x < STEP_DOWN_X or x >= STEP_UP_X else 0.0), (0.0, 0.0, 1.0)
     if kind == 'slope' and level > 0 and x > RAMP_START:
         th = math.radians(level)
         return (x - RAMP_START) * math.tan(th), (-math.sin(th), 0.0, math.cos(th))

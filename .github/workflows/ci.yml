@@ -52,6 +52,19 @@ jobs:
       - run: python -m pytest -q tests
       - run: python -m robotdog_autocal demo
 
+  robot-setup:
+    name: robot parameter form (tools/robot_setup)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pyyaml pytest
+      - run: python -m pytest -q tools/robot_setup/test
+      - name: The committed config passes the checks
+        run: python tools/robot_setup/robot_setup.py --check
+
   simulation:
     name: gazebo walk check (${{ matrix.distro }})
     runs-on: ubuntu-24.04
@@ -117,11 +130,27 @@ jobs:
         run: |
           source install/setup.bash
           ros2 run dog_gazebo terrain_sweep --terrain rough --levels 10 --min-ratio 0.25 --out rough.json
+      - name: Perception (X lidars + ToF) - flat, no false alarms
+        timeout-minutes: 8
+        run: |
+          source install/setup.bash
+          ros2 launch dog_gazebo sim.launch.py headless:=true web:=false perception:=true > perc_flat.log 2>&1 &
+          ros2 run dog_gazebo perception_check --terrain flat --seconds 12 --expect > perception_flat.txt
+          kill %1; sleep 3
+      - name: Perception - steps 30 mm, every hazard in the path found
+        timeout-minutes: 8
+        run: |
+          source install/setup.bash
+          ros2 launch dog_gazebo sim.launch.py headless:=true web:=false perception:=true terrain:=steps level:=30 > perc_steps.log 2>&1 &
+          ros2 run dog_gazebo perception_check --terrain steps --level 30 --seconds 30 --expect > perception_steps.txt
+          kill %1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: terrain-results
-          path: ros2_ws/*.json
+          path: |
+            ros2_ws/*.json
+            ros2_ws/perception_*.txt
 
   robot-image:
     name: robot image (arm64)

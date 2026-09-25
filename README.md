@@ -45,6 +45,8 @@ ros2 launch dog_bringup robot.launch.py backend:=mock rviz:=true   # без фи
 
 ## Документация
 
+Отчёты испытаний с роликами из симуляции — [report/](report/README.md). План развёртывания на реальном роботе — [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), параметры для него вводятся в [tools/robot_setup](tools/robot_setup/README.md).
+
 | | |
 |---|---|
 | [docs/HARDWARE.md](docs/HARDWARE.md) | **Механика и электроника:** что собрано из v1, где источники противоречат друг другу, питание, моменты, что измерить |
@@ -54,7 +56,9 @@ ros2 launch dog_bringup robot.launch.py backend:=mock rviz:=true   # без фи
 | [docs/SIMULATION.md](docs/SIMULATION.md) | Gazebo, `walk_check`, как подбиралась походка |
 | [docs/TERRAIN.md](docs/TERRAIN.md) | **Подъём, спуск, волны, камни:** пределы уклонов и неровностей по манёврам, компенсация по IMU |
 | [docs/HEAD.md](docs/HEAD.md) | Варианты «головы»: камеры, лидар, датчики обрыва; нужен ли второй IMU и хватит ли двух серв |
+| [docs/PERCEPTION.md](docs/PERCEPTION.md) | **Симуляция лидаров «крестом» и VL53L1X:** точность пола, обнаружение камней и ступенек, ложные срабатывания, нагрузка на процессор |
 | [docs/COMPUTE.md](docs/COMPUTE.md) | Хватит ли одной платы: замер загрузки, что вынести на микроконтроллер, ноутбук или более мощную плату |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | **Развёртывание на железе по этапам:** измерения со схемами, питание, ОС, сборка, сервы, калибровка, первые шаги, рельеф, эксплуатация |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Узлы, топики, режимы, походка, кинематика, тесты |
 
 ## Структура
@@ -67,7 +71,8 @@ ros2_ws/src/
   dog_web/          веб-пульт: HTTP + WebSocket + страница             (Python)
   dog_description/  генератор URDF из robot.yaml                      (Python)
   dog_bringup/      launch, конфиги (robot / servos / teleop), calib_pose
-  dog_gazebo/       симуляция, walk_check, миры с рельефом, terrain_sweep
+  dog_gazebo/       симуляция, walk_check, миры с рельефом, terrain_sweep, perception_check
+  dog_perception/   лидары «крестом» + ToF: плоскость пола, карта высот, препятствия (Python)
 docker/             образ робота (arm64/amd64) и образ симуляции
 legacy/v1/          предыдущая версия (не собирается)
 ```
@@ -77,7 +82,7 @@ legacy/v1/          предыдущая версия (не собирается
 | | Статус |
 |---|---|
 | Сборка без предупреждений, Jazzy и Lyrical | ✅ |
-| 101 тест (юнит + интеграционные: весь стек, веб, геймпад через FIFO, IMU) | ✅ на обеих версиях |
+| 109 тестов (юнит + интеграционные: весь стек, веб, геймпад через FIFO, IMU, восприятие) | ✅ на обеих версиях |
 | Ходьба в Gazebo (`walk_check` 8/8), Harmonic и Jetty | ✅ |
 | Рельеф: уклон 10° (все манёвры), волны и камни 10 мм; пределы в TERRAIN.md | ✅ в CI |
 | Компенсация уклона по IMU (MPU6050 находится на шине сам) | ✅ в симуляции, на роботе проверить оси |

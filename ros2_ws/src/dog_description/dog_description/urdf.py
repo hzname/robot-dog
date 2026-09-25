@@ -25,13 +25,34 @@ DEFAULT_DESCRIPTION = {
 
 
 def load_config(path):
-    """Returns (geometry, description) dicts from a robot.yaml file."""
+    """Returns (geometry, description) dicts from a robot.yaml file.
+    The description also carries the perception sensors under 'sensors'."""
     with open(path) as f:
         data = yaml.safe_load(f)
     params = data['/**']['ros__parameters']
     desc = dict(DEFAULT_DESCRIPTION)
     desc.update(params.get('description', {}))
+    desc['sensors'] = dict(params.get('sensors', {}))
     return params['geometry'], desc
+
+
+def sensor_frames(sensors):
+    """[(frame, kind, xyz, rpy)] of the perception sensors; rpy makes the
+    sensor x axis point along the beam (lidar: the dip direction of its scan
+    plane)."""
+    s = sensors or {}
+    out = []
+    if s.get('x_lidar'):
+        tilt, yaw = math.radians(s['x_lidar_tilt_deg']), math.radians(s['x_lidar_yaw_deg'])
+        for name, side in (('lidar_left', 1), ('lidar_right', -1)):
+            # the left lidar dips towards the right (-yaw) and vice versa
+            out.append((name, 'lidar', (s['x_lidar_x'], side * s['x_lidar_y'], s['x_lidar_z']),
+                        (0.0, tilt, -side * yaw)))
+    if s.get('tof'):
+        for k, name in enumerate(s['tof_names']):
+            out.append((f'tof_{name}', 'tof', (s['tof_x'][k], s['tof_y'][k], s['tof_z'][k]),
+                        (0.0, math.radians(s['tof_pitch_deg'][k]), math.radians(s['tof_yaw_deg'][k]))))
+    return out
 
 
 def _box_inertia(m, x, y, z):
@@ -92,6 +113,15 @@ def build_urdf(geometry, description=None, gazebo=False, namespace='dog', initia
     out.append('<link name="imu_link"/>'
                '<joint name="imu_joint" type="fixed"><parent link="trunk"/>'
                '<child link="imu_link"/><origin xyz="0 0 0.02"/></joint>')
+    for frame, kind, xyz, rpy in sensor_frames(d.get('sensors')):
+        vis = ('<visual><geometry><cylinder radius="0.019" length="0.03"/></geometry>'
+               '<material name="foot"/></visual>') if kind == 'lidar' else \
+            ('<visual><geometry><box size="0.006 0.018 0.012"/></geometry>'
+             '<material name="foot"/></visual>')
+        out.append(f'<link name="{frame}">{vis}</link>'
+                   f'<joint name="{frame}_joint" type="fixed"><parent link="trunk"/>'
+                   f'<child link="{frame}"/><origin xyz="{xyz[0]} {xyz[1]} {xyz[2]}" '
+                   f'rpy="{rpy[0]:.5f} {rpy[1]:.5f} {rpy[2]:.5f}"/></joint>')
 
     eff, vel = d['servo_effort'], d['servo_velocity']
     for name, front, side in LEGS:
@@ -140,6 +170,7 @@ def build_urdf(geometry, description=None, gazebo=False, namespace='dog', initia
 
     if gazebo:
         out.append(_gazebo_extras(namespace, d['sim_p_gain'], d['servo_velocity'], initial))
+        out.append(_gazebo_sensors(namespace, d.get('sensors')))
     out.append('</robot>')
     return '\n'.join(out)
 
@@ -180,6 +211,40 @@ def _gazebo_extras(ns, p_gain, vmax, initial=None):
         f'<update_rate>100</update_rate><topic>/{ns}/sim/imu</topic></sensor></gazebo>')
     for leg, _, _ in LEGS:
         parts.append(f'<gazebo reference="{leg}_foot"><mu1>1.2</mu1><mu2>1.2</mu2></gazebo>')
+    return '\n'.join(parts)
+
+
+def sim_sensor_topic(namespace, frame):
+    return f'/{namespace}/sim/{frame}/scan'
+
+
+def _gazebo_sensors(ns, sensors):
+    """gpu_lidar sensors: the X lidars as 360 deg single-beam scanners, each
+    VL53L1X as a small 5 x 5 ray cone (dog_gazebo/tof_bridge turns it into a
+    sensor_msgs/Range like the real sensor)."""
+    s = sensors or {}
+    parts = []
+    for frame, kind, _, _ in sensor_frames(s):
+        if kind == 'lidar':
+            n, rate, noise = int(s['x_lidar_samples']), s['x_lidar_rate'], s['x_lidar_noise']
+            scan = (f'<horizontal><samples>{n}</samples><min_angle>{-math.pi:.5f}</min_angle>'
+                    f'<max_angle>{math.pi * (1 - 2.0 / n):.5f}</max_angle></horizontal>')
+            rng = '<min>0.03</min><max>12.0</max><resolution>0.001</resolution>'
+        else:
+            half = math.radians(s['tof_fov_deg']) / 2
+            n, rate, noise = 5, s['tof_rate'], s['tof_noise']
+            scan = (f'<horizontal><samples>5</samples><min_angle>{-half:.4f}</min_angle>'
+                    f'<max_angle>{half:.4f}</max_angle></horizontal>'
+                    f'<vertical><samples>5</samples><min_angle>{-half:.4f}</min_angle>'
+                    f'<max_angle>{half:.4f}</max_angle></vertical>')
+            rng = '<min>0.04</min><max>1.3</max><resolution>0.001</resolution>'
+        parts.append(
+            f'<gazebo reference="{frame}"><sensor name="{frame}" type="gpu_lidar">'
+            f'<always_on>1</always_on><update_rate>{rate}</update_rate>'
+            f'<topic>{sim_sensor_topic(ns, frame)}</topic><gz_frame_id>{frame}</gz_frame_id>'
+            f'<lidar><scan>{scan}</scan><range>{rng}</range>'
+            f'<noise><type>gaussian</type><mean>0</mean><stddev>{noise}</stddev></noise>'
+            '</lidar></sensor></gazebo>')
     return '\n'.join(parts)
 
 

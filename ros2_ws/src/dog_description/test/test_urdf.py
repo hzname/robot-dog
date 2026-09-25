@@ -75,3 +75,20 @@ def test_gazebo_extras_and_shipped_config():
     assert sum('JointPositionController' in p.get('name') for p in plugins) == 12
     masses = [float(m.get('value')) for m in root.iter('mass')]
     assert 1.0 < sum(masses) < 2.5  # MG996R dog: ~1.5 kg
+
+
+def test_perception_sensors_in_urdf():
+    """Sensor frames match the angles in robot.yaml; Gazebo gets gpu_lidar sensors."""
+    from dog_description.urdf import sensor_frames
+    cfg = os.path.join(os.path.dirname(__file__), '..', '..', 'dog_bringup', 'config', 'robot.yaml')
+    geometry, description = load_config(cfg)
+    s = description['sensors']
+    frames = {f[0]: f for f in sensor_frames(s)}
+    assert {'lidar_left', 'lidar_right', 'tof_fl', 'tof_fr', 'tof_fc', 'tof_rc'} <= set(frames)
+    # crossed: the left lidar dips towards the right and vice versa
+    assert frames['lidar_left'][3][2] < 0 < frames['lidar_right'][3][2]
+    assert abs(frames['tof_fl'][3][1] - math.radians(40)) < 1e-9
+    root = ET.fromstring(build_urdf(geometry, description, gazebo=True))
+    assert len(root.findall(".//sensor[@type='gpu_lidar']")) == 6
+    plain = ET.fromstring(build_urdf(geometry, description))
+    assert not plain.findall('.//sensor') and plain.find("link[@name='lidar_left']") is not None

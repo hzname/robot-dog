@@ -86,12 +86,57 @@ def stone_faces(o):
     sx, sy, sz = o['size']
     c, s = math.cos(o['yaw']), math.sin(o['yaw'])
     pts = []
-    for zz in (0.0, sz):
+    for zz in (o['z'] - sz / 2, o['z'] + sz / 2):
         for u, v in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
             du, dv = u * sx / 2, v * sy / 2
             pts.append((o['x'] + c * du - s * dv, o['y'] + s * du + c * dv, zz))
     idx = [[4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]]
     return [[pts[i] for i in fc] for fc in idx]
+
+
+def draw_ground(ax, kind, level, hfield, stones, cx, cy, r):
+    """Terrain around (cx, cy): grid following the surface, wave crests, stones."""
+    # ground: grid lines following the surface (ramp, waves)
+    xs = np.arange(math.floor((cx - r) / 0.04) * 0.04, cx + r, 0.04)
+    ys = np.arange(math.floor((cy - r) / 0.04) * 0.04, cy + r, 0.04)
+    fine_x = np.linspace(cx - r, cx + r, 90)
+    fine_y = np.linspace(cy - r, cy + r, 90)
+    for gy in ys:
+        ax.plot(fine_x, np.full_like(fine_x, gy),
+                [terrain.height(kind, level, x, gy, hfield) for x in fine_x], color=GRID, lw=0.8, zorder=1)
+    for gx in xs:
+        ax.plot(np.full_like(fine_y, gx), fine_y,
+                [terrain.height(kind, level, gx, y, hfield) for y in fine_y], color=GRID, lw=0.8, zorder=1)
+    if hfield:  # waves: shade the crests
+        for o in hfield:
+            if o['shape'] == 'cyl_y' and abs(o['x'] - cx) < r:
+                ax.plot([o['x']] * 2, [cy - r, cy + r], [o['z'] + o['r']] * 2, color='#9aa6b8', lw=2.2, zorder=2)
+            elif o['shape'] == 'cyl_x' and abs(o['y'] - cy) < r and abs(o['x'] - cx) < r:
+                ax.plot([o['x'] - o['length'] / 2, o['x'] + o['length'] / 2], [o['y']] * 2,
+                        [o['z'] + o['r']] * 2, color='#9aa6b8', lw=2.2, zorder=2)
+    near = [o for o in stones if abs(o['x'] - cx) < r - 0.03 and abs(o['y'] - cy) < r - 0.03]
+    if near:
+        ax.add_collection3d(Poly3DCollection([fc for o in near for fc in stone_faces(o)],
+                                             facecolor='#b3aa9c', edgecolor='#7d7468', lw=0.5, zorder=2))
+
+
+def draw_robot(ax, f, air):
+    """Body, legs and feet (filled = on the ground) of trace frame f."""
+    # robot
+    # the camera looks from the right side: left legs behind the body
+    for leg, fr, sd in LEGS:
+        if sd > 0:
+            pts = leg_points(f, leg, fr, sd)
+            ax.plot(pts[:, 0], pts[:, 1], pts[:, 2], color=PAIR[leg], lw=4, zorder=4, solid_capstyle='round')
+    ax.add_collection3d(Poly3DCollection(body_faces(f), facecolor='#3b4452', edgecolor=INK,
+                                         lw=0.8, alpha=0.95, zorder=5))
+    for leg, fr, sd in LEGS:
+        pts = leg_points(f, leg, fr, sd)
+        if sd < 0:
+            ax.plot(pts[:, 0], pts[:, 1], pts[:, 2], color=PAIR[leg], lw=4, zorder=6, solid_capstyle='round')
+        down = not air[leg]
+        ax.scatter([pts[3, 0]], [pts[3, 1]], [pts[3, 2]], s=60, c=PAIR[leg] if down else BG,
+                   edgecolors=PAIR[leg], linewidths=2, depthshade=False, zorder=7 if sd < 0 else 4)
 
 
 def main():
@@ -172,47 +217,12 @@ def main():
         # the camera follows the robot's heading: always from the front-right quarter
         yaw_cam = yaw_s[i] if yaw_s is not None else 0.0
         ax.view_init(elev=24, azim=yaw_cam - 55 + 10 * math.sin(f['t'] / 10))
-        # ground: grid lines following the surface (ramp, waves)
-        xs = np.arange(math.floor((cx - r) / 0.04) * 0.04, cx + r, 0.04)
-        ys = np.arange(math.floor((cy - r) / 0.04) * 0.04, cy + r, 0.04)
-        fine_x = np.linspace(cx - r, cx + r, 90)
-        fine_y = np.linspace(cy - r, cy + r, 90)
-        for gy in ys:
-            ax.plot(fine_x, np.full_like(fine_x, gy),
-                    [terrain.height(kind, level, x, gy, hfield) for x in fine_x], color=GRID, lw=0.8, zorder=1)
-        for gx in xs:
-            ax.plot(np.full_like(fine_y, gx), fine_y,
-                    [terrain.height(kind, level, gx, y, hfield) for y in fine_y], color=GRID, lw=0.8, zorder=1)
-        if hfield:  # waves: shade the crests
-            for o in hfield:
-                if o['shape'] == 'cyl_y' and abs(o['x'] - cx) < r:
-                    ax.plot([o['x']] * 2, [cy - r, cy + r], [o['z'] + o['r']] * 2, color='#9aa6b8', lw=2.2, zorder=2)
-                elif o['shape'] == 'cyl_x' and abs(o['y'] - cy) < r and abs(o['x'] - cx) < r:
-                    ax.plot([o['x'] - o['length'] / 2, o['x'] + o['length'] / 2], [o['y']] * 2,
-                            [o['z'] + o['r']] * 2, color='#9aa6b8', lw=2.2, zorder=2)
-        near = [o for o in stones if abs(o['x'] - cx) < r - 0.03 and abs(o['y'] - cy) < r - 0.03]
-        if near:
-            ax.add_collection3d(Poly3DCollection([fc for o in near for fc in stone_faces(o)],
-                                                 facecolor='#b3aa9c', edgecolor='#7d7468', lw=0.5, zorder=2))
+        draw_ground(ax, kind, level, hfield, stones, cx, cy, r)
         tr = trail[:i + 1]
         m = (np.abs(tr[:, 0] - cx) < r) & (np.abs(tr[:, 1] - cy) < r)
         ax.plot(tr[m, 0], tr[m, 1], [terrain.surface(kind, level, x)[0] + 0.002 for x in tr[m, 0]],
                 color=MUTED, lw=1.4, ls=(0, (2, 2)), zorder=3)
-        # robot
-        # the camera looks from the right side: left legs behind the body
-        for leg, fr, sd in LEGS:
-            if sd > 0:
-                pts = leg_points(f, leg, fr, sd)
-                ax.plot(pts[:, 0], pts[:, 1], pts[:, 2], color=PAIR[leg], lw=4, zorder=4, solid_capstyle='round')
-        ax.add_collection3d(Poly3DCollection(body_faces(f), facecolor='#3b4452', edgecolor=INK,
-                                             lw=0.8, alpha=0.95, zorder=5))
-        for leg, fr, sd in LEGS:
-            pts = leg_points(f, leg, fr, sd)
-            if sd < 0:
-                ax.plot(pts[:, 0], pts[:, 1], pts[:, 2], color=PAIR[leg], lw=4, zorder=6, solid_capstyle='round')
-            down = not air[leg][i]
-            ax.scatter([pts[3, 0]], [pts[3, 1]], [pts[3, 2]], s=60, c=PAIR[leg] if down else BG,
-                       edgecolors=PAIR[leg], linewidths=2, depthshade=False, zorder=7 if sd < 0 else 4)
+        draw_robot(ax, f, {leg: air[leg][i] for leg, _, _ in LEGS})
 
         lo = f['t'] - WIN
         sel = (ts >= lo) & (ts <= f['t'])

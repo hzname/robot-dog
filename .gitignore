@@ -15,3 +15,6 @@ __pycache__/
 .idea/
 *.swp
 .DS_Store
+
+# robot_setup backups
+ros2_ws/src/dog_bringup/config/*.bak

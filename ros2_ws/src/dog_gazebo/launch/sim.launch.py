@@ -18,13 +18,14 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
-from dog_description.urdf import build_urdf, joint_names, load_config, sim_command_topic, stand_angles
+from dog_description.urdf import (build_urdf, joint_names, load_config, sensor_frames, sim_command_topic,
+                                   sim_sensor_topic, stand_angles)
 from dog_gazebo import terrain
 
 NS = 'dog'
 
 
-def _bridge_config():
+def _bridge_config(sensors=None):
     entries = [
         {'ros_topic_name': '/clock', 'gz_topic_name': '/clock',
          'ros_type_name': 'rosgraph_msgs/msg/Clock', 'gz_type_name': 'gz.msgs.Clock',
@@ -39,6 +40,12 @@ def _bridge_config():
          'ros_type_name': 'nav_msgs/msg/Odometry', 'gz_type_name': 'gz.msgs.Odometry',
          'direction': 'GZ_TO_ROS'},
     ]
+    for frame, kind, _, _ in sensor_frames(sensors):
+        # lidars straight to their ROS topic, ToF cones to tof_bridge
+        ros = f'/{NS}/{frame}/scan' if kind == 'lidar' else sim_sensor_topic(NS, frame)
+        entries.append({'ros_topic_name': ros, 'gz_topic_name': sim_sensor_topic(NS, frame),
+                        'ros_type_name': 'sensor_msgs/msg/LaserScan', 'gz_type_name': 'gz.msgs.LaserScan',
+                        'direction': 'GZ_TO_ROS'})
     for j in joint_names():
         topic = sim_command_topic(NS, j)
         entries.append({'ros_topic_name': topic, 'gz_topic_name': topic,
@@ -90,13 +97,27 @@ def _setup(context):
                         # '-P=value': a separate negative value is taken for a flag
                         '-z', f'{spawn_z:.4f}', f'-P={spawn_pitch:.5f}']),
         Node(package='ros_gz_bridge', executable='parameter_bridge', name='gz_bridge',
-             parameters=[{'config_file': _bridge_config()}, sim_time]),
+             parameters=[{'config_file': _bridge_config(description.get('sensors'))}, sim_time]),
         Node(package='dog_gazebo', executable='joint_command_bridge', namespace=NS,
              parameters=[sim_time]),
         Node(package='dog_control', executable='locomotion_node', name='locomotion', namespace=NS,
              parameters=[robot_yaml, sim_time, overrides],
              output='screen'),
     ]
+    sensors = description.get('sensors', {})
+    if sensors.get('tof'):
+        actions.append(Node(package='dog_gazebo', executable='tof_bridge', namespace=NS,
+                            parameters=[{'names': sensors['tof_names'], 'fov_deg': sensors['tof_fov_deg']},
+                                        sim_time]))
+    if on('perception'):
+        actions.append(Node(package='dog_perception', executable='perception_node', name='perception',
+                            namespace=NS, output='screen',
+                            parameters=[robot_yaml, sim_time,
+                                        {'perception.reference': cfg('perception_reference')}]
+                            + ([{'perception.threshold': float(cfg('perception_threshold'))}]
+                               if cfg('perception_threshold') else [])
+                            + ([{'perception.tof_threshold': [float(v) for v in cfg('tof_threshold').split(',')]}]
+                               if cfg('tof_threshold') else [])))
     if on('gamepad'):
         actions += [
             Node(package='dog_teleop', executable='gamepad_node', name='gamepad', namespace=NS,
@@ -125,6 +146,14 @@ def generate_launch_description():
                               description='hold the heading with the IMU gyro'),
         DeclareLaunchArgument('step_height', default_value='',
                               description='override gait.step_height [m] (robot.yaml by default)'),
+        DeclareLaunchArgument('perception', default_value='false',
+                              description='start dog_perception (X lidars + ToF processing)'),
+        DeclareLaunchArgument('perception_reference', default_value='auto',
+                              description='ground reference: auto (lidar plane, legs as fallback) | feet'),
+        DeclareLaunchArgument('perception_threshold', default_value='',
+                              description='lidar hazard threshold [m] (default 0.02)'),
+        DeclareLaunchArgument('tof_threshold', default_value='',
+                              description='ToF thresholds [m], comma separated per sensor (fl,fr,fc,rc)'),
         DeclareLaunchArgument('web', default_value='true'),
         DeclareLaunchArgument('gamepad', default_value='false'),
         OpaqueFunction(function=_setup),

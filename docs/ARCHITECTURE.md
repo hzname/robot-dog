@@ -40,6 +40,7 @@
 | `dog_web` | Python | `web_teleop`: HTTP и WebSocket на стандартной библиотеке, страница с виртуальными стиками, клавиатурой и Gamepad API |
 | `dog_description` | Python | генератор URDF из `robot.yaml` (xacro не нужен) |
 | `dog_bringup` | launch | `robot.launch.py`, конфиги (`robot.yaml`, `servos.yaml`, `teleop*.yaml`), `calib_pose` |
+| `dog_perception` | Python | `perception_node`: лидары «крестом» и VL53L1X — плоскость пола, карта высот, препятствия в коридорах стоп ([PERCEPTION.md](PERCEPTION.md)) |
 | `dog_gazebo` | Python | `sim.launch.py`, миры (ровный, уклон, волны, камни), мост команд в Gazebo, `walk_check`, `terrain_sweep` |
 
 Внешние зависимости — только `ros-base`: rclcpp, rclpy, стандартные сообщения, robot_state_publisher, launch. Для симуляции нужен ещё ros_gz.
