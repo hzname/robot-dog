@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Испытания RobotDog 2.0</title>
+<style>
+:root {
+  --bg: #f4f6f8; --surface: #ffffff; --ink: #12161b; --ink-2: #48515e; --muted: #737d8a;
+  --grid: #e3e7ec; --line: #d3d9e0; --soft: #eef1f5; --accent: #2a78d6;
+  --good: #1d7a1d; --good-bg: #e5f4e5; --bad: #b3282a; --bad-bg: #fbe6e6; --warn: #8a5a00; --warn-bg: #fdf1d8;
+  --fall-bg: #d03b3b;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0f1216; --surface: #171b21; --ink: #e8ebef; --ink-2: #b4bbc6; --muted: #8791a0;
+    --grid: #252b34; --line: #333a45; --soft: #1e232a; --accent: #5b9df0;
+    --good: #6fd46f; --good-bg: #173017; --bad: #f28b8b; --bad-bg: #3a1a1a; --warn: #e8b64c; --warn-bg: #3a2c10;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1216; --surface: #171b21; --ink: #e8ebef; --ink-2: #b4bbc6; --muted: #8791a0;
+  --grid: #252b34; --line: #333a45; --soft: #1e232a; --accent: #5b9df0;
+  --good: #6fd46f; --good-bg: #173017; --bad: #f28b8b; --bad-bg: #3a1a1a; --warn: #e8b64c; --warn-bg: #3a2c10;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--sans); padding: 28px 16px 64px; }
+main { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 48px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1 { font-size: 30px; font-weight: 650; line-height: 1.2; }
+h2 { font-size: 22px; font-weight: 650; }
+h3 { font-size: 15px; font-weight: 600; }
+p { margin: 0; max-width: 72ch; color: var(--ink-2); }
+.eyebrow { font: 500 12px/1.4 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.mono { font-family: var(--mono); }
+header { display: flex; flex-direction: column; gap: 10px; }
+section { display: flex; flex-direction: column; gap: 18px; scroll-margin-top: 16px; }
+.sec-head { display: flex; flex-direction: column; gap: 6px; }
+.sec-head h2 { display: flex; gap: 12px; align-items: baseline; }
+.num-badge { font: 600 13px var(--mono); color: var(--surface); background: var(--accent); border-radius: 999px; padding: 2px 9px; }
+
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.stat .v { font: 600 26px/1.15 var(--mono); }
+.stat .v small { font-size: 14px; color: var(--muted); font-weight: 500; }
+.stat .k { font-size: 13px; color: var(--ink-2); }
+
+.steps { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; list-style: none; margin: 0; padding: 0; counter-reset: s; }
+.steps a { display: flex; flex-direction: column; gap: 2px; text-decoration: none; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; height: 100%; }
+.steps a:hover { border-color: var(--accent); }
+.steps a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.steps li { counter-increment: s; }
+.steps a::before { content: counter(s); font: 600 12px var(--mono); color: var(--accent); }
+.steps b { font-size: 14px; font-weight: 600; }
+.steps span { font-size: 12px; color: var(--muted); }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.note { font-size: 13px; color: var(--muted); max-width: none; }
+.callout { background: var(--soft); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.callout p { max-width: none; }
+
+figure.vid { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+figure.vid figcaption { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.player { position: relative; aspect-ratio: 16 / 9; background: #f7f8fa; border-radius: 6px; overflow: hidden; }
+.player video { width: 100%; height: 100%; display: block; }
+.player .err { position: absolute; inset: auto 0 0 0; background: rgba(18,22,27,.85); color: #fff; font-size: 13px; padding: 8px 12px; }
+.badge { font: 600 13px var(--mono); border-radius: 999px; padding: 2px 10px; }
+.badge.ok { color: var(--good); background: var(--good-bg); }
+.badge.warn { color: var(--warn); background: var(--warn-bg); }
+.badge.bad { color: var(--bad); background: var(--bad-bg); }
+.chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: flex; gap: 6px; align-items: baseline; font-size: 12.5px; padding: 3px 9px; border-radius: 6px; }
+.chip b { font: 600 12px var(--mono); }
+.chip.ok { background: var(--good-bg); color: var(--good); }
+.chip.bad { background: var(--bad-bg); color: var(--bad); }
+.chip.skip { background: var(--soft); color: var(--muted); }
+
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; vertical-align: top; }
+th { font-weight: 500; color: var(--muted); font-size: 12px; }
+td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+td.r-ok { color: var(--good); } td.r-bad { color: var(--bad); font-weight: 600; } td.r-warn { color: var(--warn); }
+td.r-fall { color: #fff; background: var(--fall-bg); font-weight: 600; }
+td .sub { font-size: 12px; color: var(--muted); white-space: normal; }
+.tag { font-size: 11.5px; color: var(--good); background: var(--good-bg); border-radius: 4px; padding: 1px 6px; margin-left: 6px; white-space: normal; }
+ul.list { margin: 0; padding-left: 20px; color: var(--ink-2); display: flex; flex-direction: column; gap: 6px; }
+ul.list b { color: var(--ink); }
+.legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 18px; font-size: 13px; color: var(--ink-2); }
+.legend b { color: var(--ink); font-weight: 600; }
+details summary { cursor: pointer; font-size: 14px; color: var(--ink-2); }
+
+@media (max-width: 860px) {
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pair, .legend { grid-template-columns: 1fr; }
+  h1 { font-size: 25px; }
+}
+</style></head>
+<body><main>
+
+<header>
+  <div class="eyebrow">RobotDog 2.0 · ветка hzname/busy-pascal-0d7hn7 · 25.09.2026</div>
+  <h1>Испытания RobotDog 2.0: полный цикл</h1>
+  <p>Отчёт проходит путь робота от кода до ходьбы по сложному рельефу: автоматические тесты, калибровка сервоприводов по камере, ровный пол, уклоны и неровности с IMU и без, удержание курса по гироскопу. Все ролики сделаны из реальных прогонов физической симуляции Gazebo Harmonic с тем же кодом управления, что работает на роботе. Робот нарисован по записанным углам суставов и положению корпуса.</p>
+</header>
+
+<div class="stats">
+  <div class="stat"><div class="v">109<small> / 109</small></div><div class="k">тестов проходят на ROS 2 Jazzy и Lyrical</div></div>
+  <div class="stat"><div class="v">0.9<small>°</small></div><div class="k">наибольшая ошибка нуля после калибровки по камере (было до 9°)</div></div>
+  <div class="stat"><div class="v">10<small>° / 6°</small></div><div class="k">уклон, где проходят все манёвры: с IMU / без IMU</div></div>
+  <div class="stat"><div class="v">≤ 9<small>°</small></div><div class="k">увод курса на прямой с удержанием по гироскопу (без него до 34°)</div></div>
+</div>
+
+<ol class="steps">
+  <li><a href="#s-tests"><b>Тесты</b><span>код, 2 версии ROS</span></a></li>
+  <li><a href="#s-cal"><b>Калибровка</b><span>камера + метки</span></a></li>
+  <li><a href="#s-flat"><b>Ровный пол</b><span>все манёвры</span></a></li>
+  <li><a href="#s-slope"><b>Уклоны</b><span>10° и 15°, IMU вкл/выкл</span></a></li>
+  <li><a href="#s-rough"><b>Неровности</b><span>волны, камни</span></a></li>
+  <li><a href="#s-heading"><b>Курс</b><span>гироскоп, вкл/выкл</span></a></li>
+  <li><a href="#s-limits"><b>Пределы</b><span>рекомендации</span></a></li>
+  <li><a href="#s-perception"><b>Датчики</b><span>лидары + ToF</span></a></li>
+</ol>
+
+<div class="callout">
+  <h3>Как читать ролики</h3>
+  <div class="legend">
+    <div><b>Слева</b> робот на рельефе. Синие ноги — пара LF+RR, оранжевые — RF+LR. Залитый кружок — стопа на земле, пустой — в воздухе. Пунктир — путь корпуса.</div>
+    <div><b>Справа вверху</b> список манёвров: ▶ идёт сейчас, ✔ пройден (доля выполненной команды), ✘ не пройден, «пропущен» — после падения.</div>
+    <div><b>Графики</b> — наклон корпуса к поверхности (выше 20° — провал), тангаж и крен по IMU, и какие ноги в воздухе.</div>
+  </div>
+  <p class="note">Ролики лежат рядом, в папке videos/. Откройте этот файл из клонированного репозитория (или через GitHub Pages) в Chrome, Edge или Safari.</p>
+</div>
+
+<section id="s-tests">
+  <div class="sec-head"><div class="eyebrow">colcon test · Docker ros:jazzy-ros-base и ros:lyrical-ros-base</div>
+    <h2><span class="num-badge">1</span>Автоматические тесты</h2>
+    <p>Перед любыми прогонами весь код собирается и тестируется в официальных образах двух версий ROS 2. Это юнит-тесты (кинематика, походка, компенсация уклона, драйвер серв и тяг, датчики тока и IMU, раскладки пультов, калибровка) и интеграционные тесты, которые поднимают весь стек: веб-пульт через WebSocket, геймпад через FIFO, IMU и датчик тока в режиме mock.</p></div>
+  <div class="pair">
+    <div class="panel"><h3>Тест-кейсы по пакетам</h3><div class="tbl-wrap"><table><thead><tr><th>Пакет</th><th class="num">Jazzy</th><th class="num">Lyrical</th></tr></thead><tbody><tr><td><span class="mono">dog_bringup</span><div class="sub">весь стек целиком</div></td><td class="num r-ok">3 ✔</td><td class="num r-ok">3 ✔</td></tr><tr><td><span class="mono">dog_control</span><div class="sub">кинематика, походка, режимы</div></td><td class="num r-ok">28 ✔</td><td class="num r-ok">28 ✔</td></tr><tr><td><span class="mono">dog_description</span><div class="sub">модель робота (URDF)</div></td><td class="num r-ok">4 ✔</td><td class="num r-ok">4 ✔</td></tr><tr><td><span class="mono">dog_hardware</span><div class="sub">сервы, датчик тока, IMU</div></td><td class="num r-ok">30 ✔</td><td class="num r-ok">30 ✔</td></tr><tr><td><span class="mono">dog_perception</span><div class="sub"></div></td><td class="num r-ok">7 ✔</td><td class="num r-ok">7 ✔</td></tr><tr><td><span class="mono">dog_teleop</span><div class="sub">геймпад, клавиатура</div></td><td class="num r-ok">12 ✔</td><td class="num r-ok">12 ✔</td></tr><tr><td><span class="mono">dog_web</span><div class="sub">веб-пульт, калибровка по сети</div></td><td class="num r-ok">15 ✔</td><td class="num r-ok">15 ✔</td></tr></tbody></table></div>
+      <p class="note">colcon считает 109 тестов (исполняемых файлов и наборов); внутри них 99 отдельных тест-кейсов. Ещё 26 тестов у инструмента автокалибровки (OpenCV 4.6 и 5.0).</p></div>
+    <div class="panel"><h3>Что проверяется в симуляции (CI)</h3>
+      <ul class="list">
+        <li><b>walk_check</b> на ровном полу: 8 манёвров на Gazebo Harmonic (Jazzy) и Jetty (Lyrical).</li>
+        <li><b>Позитивные тесты рельефа</b>: уклон 10°, волны 10 мм, камни 10 мм. Все манёвры должны пройти без падений.</li>
+        <li><b>Автокалибровка</b> на виртуальном роботе: найденные нули не дальше 2° от скрытых.</li>
+      </ul>
+      <p class="note">При повторном прогоне для отчёта на Lyrical один интеграционный тест упал: под нагрузкой (параллельно рендерились ролики) веб-пульт ждал сервис драйвера всего 0.5 с. Ожидание увеличено до 5 с, тест снова проходит.</p></div>
+  </div>
+</section>
+
+<section id="s-cal">
+  <div class="sec-head"><div class="eyebrow">tools/autocal · виртуальный робот и камера · OpenCV ArUco</div>
+    <h2><span class="num-badge">2</span>Калибровка сервоприводов по камере</h2>
+    <p>На ноги наклеены бумажные метки ArUco, камера ноутбука смотрит на робота на подставке. Программа поочерёдно качает каждый сустав на ±20°, по меткам измеряет реальный угол и подбирает для сервы направление, ноль и масштаб импульса. Порядок ракурсов: спереди, сзади (бёдра вбок), слева, справа (бедро и колено), два прохода. Здесь это сделано на виртуальном роботе, у которого настройки намеренно сбиты.</p></div>
+  <figure class="vid">
+  <figcaption><h3>Автокалибровка: 4 ракурса × 2 прохода, 240 измерений</h3></figcaption>
+  <div class="player"><video data-key="cal" src="videos/calibration.mp4" controls playsinline muted preload="none" poster="posters/calibration.jpg"></video></div>
+  
+  <p class="note">Слева кадр виртуальной камеры: зелёные рамки — найденные метки ArUco, линии — бедро, колено, стопа. Под ним робот на подставке и положение камеры. Справа текущий шаг, точки «импульс → угол» и подобранная модель сервы, внизу ошибка нуля каждого сустава до и после.</p>
+</figure>
+  <div class="panel"><h3>Результат: ошибка нуля каждого сустава</h3><div class="tbl-wrap"><table><thead><tr><th>Сустав</th><th class="num">Ошибка нуля до</th><th class="num">После калибровки</th></tr></thead><tbody><tr><td><span class="mono">lf_hip</span></td><td class="num r-warn">+0.2°</td><td class="num r-ok">+0.4°</td></tr><tr><td><span class="mono">rf_hip</span></td><td class="num r-warn">+5.9°</td><td class="num r-ok">+0.9°</td></tr><tr><td><span class="mono">lr_hip</span></td><td class="num r-warn">-3.1°</td><td class="num r-ok">-0.1°</td></tr><tr><td><span class="mono">rr_hip</span></td><td class="num r-warn">-5.3°</td><td class="num r-ok">-0.4°</td></tr><tr><td><span class="mono">lf_thigh</span></td><td class="num r-warn">-6.4°</td><td class="num r-ok">+0.1°</td></tr><tr><td><span class="mono">lf_calf</span></td><td class="num r-warn">-3.4°</td><td class="num r-ok">-0.0°</td></tr><tr><td><span class="mono">lr_thigh</span></td><td class="num r-warn">-3.5°</td><td class="num r-ok">-0.2°</td></tr><tr><td><span class="mono">lr_calf</span></td><td class="num r-warn">-6.6°</td><td class="num r-ok">+0.6°</td></tr><tr><td><span class="mono">rf_thigh</span></td><td class="num r-warn">+0.9°</td><td class="num r-ok">+0.5°</td></tr><tr><td><span class="mono">rf_calf</span></td><td class="num r-warn">+4.6°</td><td class="num r-ok">-0.1°</td></tr><tr><td><span class="mono">rr_thigh</span> <span class="tag">серва стояла наоборот, направление исправлено</span></td><td class="num r-warn">+4.5°</td><td class="num r-ok">+0.4°</td></tr><tr><td><span class="mono">rr_calf</span></td><td class="num r-warn">-0.3°</td><td class="num r-ok">-0.3°</td></tr></tbody></table></div>
+    <p class="note">«До» — насколько реальный ноль сервы отличался от записанного в servos.yaml. «После» — ошибка найденного нуля. Вся калибровка на виртуальном роботе занимает 45 с; на настоящем добавится около 0.8 с ожидания на каждое из 240 положений, итого 3–4 минуты плюс перестановка камеры.</p></div>
+</section>
+
+<section id="s-flat">
+  <div class="sec-head"><div class="eyebrow">Gazebo Harmonic · walk_check · IMU включена</div>
+    <h2><span class="num-badge">3</span>Ровный пол</h2>
+    <p>Базовая проверка походки: встать, пройти вперёд и назад, шагнуть влево и вправо, развернуться в обе стороны и лечь. Проценты — какая доля заданного пути пройдена: рысь работает без обратной связи по положению, поэтому ноги немного проскальзывают.</p></div>
+  <figure class="vid">
+  <figcaption><h3>Ровный пол</h3><span class="badge ok">8/8</span></figcaption>
+  <div class="player"><video data-key="flat" src="videos/flat.mp4" controls playsinline muted preload="none" poster="posters/flat.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Вперёд</span><b>115%</b></li><li class="chip ok"><span>Назад</span><b>56%</b></li><li class="chip ok"><span>Влево</span><b>80%</b></li><li class="chip ok"><span>Вправо</span><b>76%</b></li><li class="chip ok"><span>Разворот ↺</span><b>70%</b></li><li class="chip ok"><span>Разворот ↻</span><b>85%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure>
+  <p class="note">Ролики этапов 3–5 записаны до появления удержания курса. Как оно меняет ходьбу на тех же покрытиях, показано в этапе 6.</p>
+</section>
+
+<section id="s-slope">
+  <div class="sec-head"><div class="eyebrow">пандус с ровным заходом · IMU включена / выключена</div>
+    <h2><span class="num-badge">4</span>Уклоны: с IMU и без</h2>
+    <p>Робот сам заходит с ровной площадки на пандус (подъём), шагает поперёк склона в обе стороны, разворачивается на склоне и спускается задним ходом. С IMU контроллер оценивает уклон и сдвигает стопы вниз по склону на h·tan(уклон), чтобы центр масс оставался над серединой опоры. Без IMU походка «не знает» про склон.</p></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Уклон 10° · IMU включена</h3><span class="badge ok">8/8</span></figcaption>
+  <div class="player"><video data-key="s10on" src="videos/slope10_on.mp4" controls playsinline muted preload="none" poster="posters/slope10_on.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Подъём</span><b>85%</b></li><li class="chip ok"><span>Влево поперёк</span><b>69%</b></li><li class="chip ok"><span>Вправо поперёк</span><b>76%</b></li><li class="chip ok"><span>Разворот ↺</span><b>78%</b></li><li class="chip ok"><span>Разворот ↻</span><b>68%</b></li><li class="chip ok"><span>Спуск</span><b>78%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure><figure class="vid">
+  <figcaption><h3>Уклон 10° · без IMU</h3><span class="badge bad">2/8</span></figcaption>
+  <div class="player"><video data-key="s10off" src="videos/slope10_off.mp4" controls playsinline muted preload="none" poster="posters/slope10_off.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Подъём</span><b>73%</b></li><li class="chip bad"><span>Влево поперёк</span><b>33%</b></li><li class="chip bad"><span>Вправо поперёк</span><b>упал</b></li><li class="chip skip"><span>Разворот ↺</span><b>пропущен</b></li><li class="chip skip"><span>Разворот ↻</span><b>пропущен</b></li><li class="chip skip"><span>Спуск</span><b>пропущен</b></li><li class="chip bad"><span>Ложится</span><b>нет</b></li></ul>
+  
+</figure></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Уклон 15° · IMU включена</h3><span class="badge warn">6/8</span></figcaption>
+  <div class="player"><video data-key="s15on" src="videos/slope15_on.mp4" controls playsinline muted preload="none" poster="posters/slope15_on.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Подъём</span><b>82%</b></li><li class="chip bad"><span>Влево поперёк</span><b>24%</b></li><li class="chip ok"><span>Вправо поперёк</span><b>121%</b></li><li class="chip ok"><span>Разворот ↺</span><b>41%</b></li><li class="chip ok"><span>Разворот ↻</span><b>107%</b></li><li class="chip bad"><span>Спуск</span><b>12%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure><figure class="vid">
+  <figcaption><h3>Уклон 15° · без IMU</h3><span class="badge bad">1/8</span></figcaption>
+  <div class="player"><video data-key="s15off" src="videos/slope15_off.mp4" controls playsinline muted preload="none" poster="posters/slope15_off.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip bad"><span>Подъём</span><b>упал</b></li><li class="chip skip"><span>Влево поперёк</span><b>пропущен</b></li><li class="chip skip"><span>Вправо поперёк</span><b>пропущен</b></li><li class="chip skip"><span>Разворот ↺</span><b>пропущен</b></li><li class="chip skip"><span>Разворот ↻</span><b>пропущен</b></li><li class="chip skip"><span>Спуск</span><b>пропущен</b></li><li class="chip bad"><span>Ложится</span><b>нет</b></li></ul>
+  
+</figure></div>
+  <div class="panel"><h3>Все прогоны на уклоне с IMU</h3><div class="tbl-wrap"><table><thead><tr><th>Уклон</th><th class="num">Подъём</th><th class="num">Влево</th><th class="num">Вправо</th><th class="num">Разв. ↺</th><th class="num">Разв. ↻</th><th class="num">Спуск</th><th class="num">Наклон</th></tr></thead><tbody><tr><td>0° ×2</td><td class="num r-ok">97–110%</td><td class="num r-ok">75–84%</td><td class="num r-ok">72–92%</td><td class="num r-ok">86–102%</td><td class="num r-ok">81–103%</td><td class="num r-ok">53–70%</td><td class="num r-ok">9°</td></tr><tr><td>8°</td><td class="num r-ok">97%</td><td class="num r-ok">79%</td><td class="num r-ok">74%</td><td class="num r-ok">103%</td><td class="num r-ok">56%</td><td class="num r-ok">65%</td><td class="num r-ok">13°</td></tr><tr><td>10° ×4</td><td class="num r-ok">85–106%</td><td class="num r-ok">66–74%</td><td class="num r-ok">76–84%</td><td class="num r-ok">78–100%</td><td class="num r-ok">67–82%</td><td class="num r-ok">71–80%</td><td class="num r-ok">14°</td></tr><tr><td>12° ×2</td><td class="num r-ok">77–91%</td><td class="num r-ok">91–120%</td><td class="num r-ok">46–50%</td><td class="num r-ok">89–93%</td><td class="num r-ok">82–88%</td><td class="num r-ok">54–56%</td><td class="num r-ok">13°</td></tr><tr><td>15° ×2</td><td class="num r-ok">81–82%</td><td class="num r-warn">24–102%</td><td class="num r-warn">сполз / 121%</td><td class="num r-ok">40–106%</td><td class="num r-ok">79–106%</td><td class="num r-warn">12–65%</td><td class="num r-warn">19°</td></tr><tr><td>18°</td><td class="num r-ok">86%</td><td class="num r-bad">37%</td><td class="num r-bad">накл. 21°</td><td class="num r-bad">4%</td><td class="num r-ok">86%</td><td class="num r-bad">16%</td><td class="num r-bad">23°</td></tr><tr><td>20°</td><td class="num r-fall">упал</td><td></td><td></td><td></td><td></td><td></td><td></td></tr></tbody></table></div></div>
+  <div class="panel"><h3>Все прогоны без IMU</h3><div class="tbl-wrap"><table><thead><tr><th>Уклон</th><th class="num">Подъём</th><th class="num">Влево</th><th class="num">Вправо</th><th class="num">Разв. ↺</th><th class="num">Разв. ↻</th><th class="num">Спуск</th></tr></thead><tbody><tr><td>6°</td><td class="num r-ok">да</td><td class="num r-ok">да</td><td class="num r-ok">да</td><td class="num r-ok">да</td><td class="num r-ok">да</td><td class="num r-ok">да</td></tr><tr><td>8°</td><td class="num r-ok">да</td><td class="num r-ok">да</td><td class="num r-ok">да</td><td class="num r-ok">да</td><td class="num r-ok">да</td><td class="num r-fall">упал</td></tr><tr><td>10° ×2</td><td class="num r-warn">72% / упал</td><td class="num r-bad">32%</td><td class="num r-fall">упал</td><td></td><td></td><td></td></tr><tr><td>12°</td><td class="num r-ok">64%</td><td class="num r-fall">упал</td><td></td><td></td><td></td><td></td></tr><tr><td>15° ×2</td><td class="num r-fall">упал</td><td></td><td></td><td></td><td></td><td></td></tr></tbody></table></div>
+    <p class="note">Без IMU робот держится до 6°, на 8–10° уже опрокидывается. С IMU уклоны 10° и 12° пройдены полностью в каждом прогоне, на 15° сбоят шаг поперёк склона и спуск, на 20° робот падает на подъёме.</p></div>
+</section>
+
+<section id="s-rough">
+  <div class="sec-head"><div class="eyebrow">волны: цилиндры R 90 мм · камни: 260 штук 30–70 мм · IMU включена / выключена</div>
+    <h2><span class="num-badge">5</span>Неровности: волны и камни, с IMU и без</h2>
+    <p>Криволинейная поверхность — бугры радиусом 90 мм поперёк и вдоль пути. Каменистая — случайно разложенные камни. Критерий для неровностей мягче: робот не должен упасть или завалиться и должен продвинуться в нужную сторону (≥ 15 % команды на волнах, ≥ 25 % на камнях).</p></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Волны 20 мм · IMU включена</h3><span class="badge warn">7/8</span></figcaption>
+  <div class="player"><video data-key="w20on" src="videos/waves20_on.mp4" controls playsinline muted preload="none" poster="posters/waves20_on.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Вперёд</span><b>59%</b></li><li class="chip bad"><span>Назад</span><b>6%</b></li><li class="chip ok"><span>Влево</span><b>50%</b></li><li class="chip ok"><span>Вправо</span><b>51%</b></li><li class="chip ok"><span>Разворот ↺</span><b>30%</b></li><li class="chip ok"><span>Разворот ↻</span><b>20%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure><figure class="vid">
+  <figcaption><h3>Волны 20 мм · без IMU</h3><span class="badge ok">8/8</span></figcaption>
+  <div class="player"><video data-key="w20off" src="videos/waves20_off.mp4" controls playsinline muted preload="none" poster="posters/waves20_off.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Вперёд</span><b>61%</b></li><li class="chip ok"><span>Назад</span><b>22%</b></li><li class="chip ok"><span>Влево</span><b>52%</b></li><li class="chip ok"><span>Вправо</span><b>23%</b></li><li class="chip ok"><span>Разворот ↺</span><b>35%</b></li><li class="chip ok"><span>Разворот ↻</span><b>43%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Камни до 20 мм · IMU включена</h3><span class="badge warn">6/8</span></figcaption>
+  <div class="player"><video data-key="r20on" src="videos/rough20_on.mp4" controls playsinline muted preload="none" poster="posters/rough20_on.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Вперёд</span><b>65%</b></li><li class="chip bad"><span>Назад</span><b>9%</b></li><li class="chip bad"><span>Влево</span><b>24%</b></li><li class="chip ok"><span>Вправо</span><b>38%</b></li><li class="chip ok"><span>Разворот ↺</span><b>51%</b></li><li class="chip ok"><span>Разворот ↻</span><b>51%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure><figure class="vid">
+  <figcaption><h3>Камни до 20 мм · без IMU</h3><span class="badge warn">6/8</span></figcaption>
+  <div class="player"><video data-key="r20off" src="videos/rough20_off.mp4" controls playsinline muted preload="none" poster="posters/rough20_off.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Вперёд</span><b>69%</b></li><li class="chip ok"><span>Назад</span><b>40%</b></li><li class="chip ok"><span>Влево</span><b>42%</b></li><li class="chip bad"><span>Вправо</span><b>23%</b></li><li class="chip ok"><span>Разворот ↺</span><b>37%</b></li><li class="chip bad"><span>Разворот ↻</span><b>24%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure></div>
+  <div class="callout"><h3>IMU на неровностях почти ничего не меняет</h3>
+    <p>С IMU и без результаты отличаются в пределах разброса между прогонами. Так и должно быть: IMU видит средний наклон корпуса, а бугор под одной ногой корпус почти не наклоняет. На неровностях робот проигрывает не из-за наклона, а из-за того, что нога цепляет бугор или встаёт на камень раньше времени. Здесь нужны датчики касания ног и дальномер, смотрящий вперёд.</p></div>
+  <div class="panel"><h3>Волны, все прогоны (IMU вкл.)</h3><div class="tbl-wrap"><table><thead><tr><th>Высота</th><th class="num">Вперёд</th><th class="num">Назад</th><th class="num">Влево</th><th class="num">Вправо</th><th class="num">Разв. ↺</th><th class="num">Разв. ↻</th><th class="num">Наклон</th></tr></thead><tbody><tr><td>10 мм ×3</td><td class="num r-ok">97%</td><td class="num r-warn">17–36%</td><td class="num r-ok">60%</td><td class="num r-ok">66%</td><td class="num r-ok">80%</td><td class="num r-ok">83%</td><td class="num r-ok">10°</td></tr><tr><td>20 мм ×2</td><td class="num r-ok">58–59%</td><td class="num r-bad">5–13%</td><td class="num r-warn">25–49%</td><td class="num r-ok">51–76%</td><td class="num r-warn">13–29%</td><td class="num r-warn">20–41%</td><td class="num r-ok">13°</td></tr><tr><td>30 мм</td><td class="num r-ok">43%</td><td class="num r-bad">2%</td><td class="num r-ok">76%</td><td class="num r-ok">56%</td><td class="num r-warn">30%</td><td class="num r-warn">31%</td><td class="num r-warn">18°</td></tr><tr><td>40 мм</td><td class="num r-bad">накл. 27°</td><td class="num r-bad">1%</td><td class="num r-ok">45%</td><td class="num r-bad">накл. 21°</td><td class="num r-bad">2%</td><td class="num r-bad">2%</td><td class="num r-bad">27°</td></tr></tbody></table></div></div>
+  <div class="panel"><h3>Камни, все прогоны (IMU вкл.)</h3><div class="tbl-wrap"><table><thead><tr><th>Высота</th><th class="num">Вперёд</th><th class="num">Назад</th><th class="num">Влево</th><th class="num">Вправо</th><th class="num">Разв. ↺</th><th class="num">Разв. ↻</th><th class="num">Наклон</th></tr></thead><tbody><tr><td>10 мм ×3</td><td class="num r-ok">70%</td><td class="num r-warn">36%</td><td class="num r-ok">43%</td><td class="num r-ok">47%</td><td class="num r-ok">48%</td><td class="num r-ok">41%</td><td class="num r-ok">9°</td></tr><tr><td>20 мм ×2</td><td class="num r-ok">58–64%</td><td class="num r-warn">8–28%</td><td class="num r-warn">23–55%</td><td class="num r-warn">37–38%</td><td class="num r-ok">44–50%</td><td class="num r-ok">51–55%</td><td class="num r-ok">14°</td></tr><tr><td>30 мм</td><td class="num r-ok">58%</td><td class="num r-warn">34%</td><td class="num r-warn">34%</td><td class="num r-ok">45%</td><td class="num r-warn">32%</td><td class="num r-bad">17%</td><td class="num r-warn">17°</td></tr><tr><td>40 мм</td><td class="num r-ok">62%</td><td class="num r-bad">14%</td><td class="num r-warn">35%</td><td class="num r-warn">26%</td><td class="num r-ok">46%</td><td class="num r-warn">27%</td><td class="num r-warn">16°</td></tr></tbody></table></div></div>
+  <p class="note">На волнах до 30 мм и камнях до 40 мм робот ни разу не упал, он только теряет скорость и сильнее уходит по курсу. Слабое место — задний ход: колено смотрит назад и цепляет бугры.</p>
+</section>
+
+
+<section id="s-heading">
+  <div class="sec-head"><div class="eyebrow">гироскоп IMU · ПИ-регулятор курса · одинаковые маршруты с удержанием и без</div>
+    <h2><span class="num-badge">6</span>Удержание курса по гироскопу</h2>
+    <p>Рысь сама по себе уводит робота в сторону: ноги немного проскальзывают. Теперь контроллер сравнивает заданную скорость поворота с измеренной гироскопом, копит разницу как ошибку курса и доворачивает походку. Поворот стиком сдвигает заданный курс, поэтому и развороты получаются на заданный угол. В каждом ролике в списке манёвров рядом с процентом пути стоит, насколько отклонился курс («курс +4°»).</p></div>
+  <div class="panel"><h3>Итог по всем прогонам</h3><div class="tbl-wrap"><table><thead><tr><th>Покрытие</th><th class="num">Увод на прямой без удержания (средн. / макс.)</th><th class="num">С удержанием</th><th class="num">Развороты без удержания</th><th class="num">С удержанием</th></tr></thead><tbody><tr><td>Ровный пол <span class="sub">(3 / 3 прогона)</span></td><td class="num r-warn">7° / 22°</td><td class="num r-ok">4° / 8°</td><td class="num r-warn">52–72%</td><td class="num r-ok">95–110%</td></tr><tr><td>Уклон 10° <span class="sub">(3 / 1 прогона)</span></td><td class="num r-warn">4° / 11°</td><td class="num r-ok">4° / 10°</td><td class="num r-warn">53–81%</td><td class="num r-ok">84–102%</td></tr><tr><td>Волны 20 мм <span class="sub">(1 / 1 прогона)</span></td><td class="num r-warn">12° / 34°</td><td class="num r-ok">4° / 9°</td><td class="num r-warn">15–62%</td><td class="num r-ok">39–45%</td></tr><tr><td>Камни до 20 мм <span class="sub">(1 / 1 прогона)</span></td><td class="num r-warn">11° / 28°</td><td class="num r-ok">4° / 7°</td><td class="num r-warn">41–50%</td><td class="num r-ok">52–59%</td></tr></tbody></table></div>
+    <p class="note">«Увод» — насколько повернулся корпус за прямой манёвр (вперёд, назад, влево, вправо). Для разворотов показано, какая доля заданного угла выполнена. Регулятор: kp = 2.5, ki = 1.0, поправка не больше 0.3 рад/с. Интегральная часть работает только на прямой, поэтому в разворотах нет перекрута.</p></div>
+  <h3>Ровный пол: три прогона каждого варианта</h3>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Ровный пол · удержание ВКЛ · прогон 1</h3><span class="badge ok">8/8</span></figcaption>
+  <div class="player"><video data-key="hon_flat_1" src="videos/on_flat_1.mp4" controls playsinline muted preload="none" poster="posters/on_flat_1.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Вперёд</span><b>90%</b></li><li class="chip ok"><span>Назад</span><b>69%</b></li><li class="chip ok"><span>Влево</span><b>73%</b></li><li class="chip ok"><span>Вправо</span><b>76%</b></li><li class="chip ok"><span>Разворот ↺</span><b>95%</b></li><li class="chip ok"><span>Разворот ↻</span><b>110%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure><figure class="vid">
+  <figcaption><h3>Ровный пол · удержание ВЫКЛ · прогон 1</h3><span class="badge ok">8/8</span></figcaption>
+  <div class="player"><video data-key="hoff_flat_1" src="videos/off_flat_1.mp4" controls playsinline muted preload="none" poster="posters/off_flat_1.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Вперёд</span><b>100%</b></li><li class="chip ok"><span>Назад</span><b>52%</b></li><li class="chip ok"><span>Влево</span><b>74%</b></li><li class="chip ok"><span>Вправо</span><b>76%</b></li><li class="chip ok"><span>Разворот ↺</span><b>72%</b></li><li class="chip ok"><span>Разворот ↻</span><b>66%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Ровный пол · удержание ВКЛ · прогон 2</h3><span class="badge ok">8/8</span></figcaption>
+  <div class="player"><video data-key="hon_flat_2" src="videos/on_flat_2.mp4" controls playsinline muted preload="none" poster="posters/on_flat_2.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Вперёд</span><b>96%</b></li><li class="chip ok"><span>Назад</span><b>55%</b></li><li class="chip ok"><span>Влево</span><b>64%</b></li><li class="chip ok"><span>Вправо</span><b>67%</b></li><li class="chip ok"><span>Разворот ↺</span><b>100%</b></li><li class="chip ok"><span>Разворот ↻</span><b>108%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure><figure class="vid">
+  <figcaption><h3>Ровный пол · удержание ВЫКЛ · прогон 2</h3><span class="badge ok">8/8</span></figcaption>
+  <div class="player"><video data-key="hoff_flat_2" src="videos/off_flat_2.mp4" controls playsinline muted preload="none" poster="posters/off_flat_2.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Вперёд</span><b>101%</b></li><li class="chip ok"><span>Назад</span><b>59%</b></li><li class="chip ok"><span>Влево</span><b>82%</b></li><li class="chip ok"><span>Вправо</span><b>72%</b></li><li class="chip ok"><span>Разворот ↺</span><b>52%</b></li><li class="chip ok"><span>Разворот ↻</span><b>68%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Ровный пол · удержание ВКЛ · прогон 3</h3><span class="badge ok">8/8</span></figcaption>
+  <div class="player"><video data-key="hon_flat_3" src="videos/on_flat_3.mp4" controls playsinline muted preload="none" poster="posters/on_flat_3.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Вперёд</span><b>92%</b></li><li class="chip ok"><span>Назад</span><b>60%</b></li><li class="chip ok"><span>Влево</span><b>80%</b></li><li class="chip ok"><span>Вправо</span><b>73%</b></li><li class="chip ok"><span>Разворот ↺</span><b>110%</b></li><li class="chip ok"><span>Разворот ↻</span><b>110%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure><figure class="vid">
+  <figcaption><h3>Ровный пол · удержание ВЫКЛ · прогон 3</h3><span class="badge ok">8/8</span></figcaption>
+  <div class="player"><video data-key="hoff_flat_3" src="videos/off_flat_3.mp4" controls playsinline muted preload="none" poster="posters/off_flat_3.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Вперёд</span><b>95%</b></li><li class="chip ok"><span>Назад</span><b>56%</b></li><li class="chip ok"><span>Влево</span><b>64%</b></li><li class="chip ok"><span>Вправо</span><b>57%</b></li><li class="chip ok"><span>Разворот ↺</span><b>72%</b></li><li class="chip ok"><span>Разворот ↻</span><b>68%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure></div>
+  <h3>Уклон 10°</h3>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Уклон 10° · удержание ВКЛ</h3><span class="badge warn">7/8</span></figcaption>
+  <div class="player"><video data-key="hon_slope" src="videos/on_slope.mp4" controls playsinline muted preload="none" poster="posters/on_slope.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Подъём</span><b>82%</b></li><li class="chip ok"><span>Влево поперёк</span><b>67%</b></li><li class="chip ok"><span>Вправо поперёк</span><b>73%</b></li><li class="chip ok"><span>Разворот ↺</span><b>99%</b></li><li class="chip ok"><span>Разворот ↻</span><b>91%</b></li><li class="chip bad"><span>Спуск</span><b>51%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure><figure class="vid">
+  <figcaption><h3>Уклон 10° · удержание ВЫКЛ</h3><span class="badge ok">8/8</span></figcaption>
+  <div class="player"><video data-key="hoff_slope" src="videos/off_slope.mp4" controls playsinline muted preload="none" poster="posters/off_slope.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Подъём</span><b>71%</b></li><li class="chip ok"><span>Влево поперёк</span><b>70%</b></li><li class="chip ok"><span>Вправо поперёк</span><b>86%</b></li><li class="chip ok"><span>Разворот ↺</span><b>53%</b></li><li class="chip ok"><span>Разворот ↻</span><b>81%</b></li><li class="chip ok"><span>Спуск</span><b>49%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Уклон 10° · удержание ВКЛ · прогон 2</h3><span class="badge ok">8/8</span></figcaption>
+  <div class="player"><video data-key="hon_slope_2" src="videos/on_slope_2.mp4" controls playsinline muted preload="none" poster="posters/on_slope_2.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Подъём</span><b>69%</b></li><li class="chip ok"><span>Влево поперёк</span><b>74%</b></li><li class="chip ok"><span>Вправо поперёк</span><b>72%</b></li><li class="chip ok"><span>Разворот ↺</span><b>94%</b></li><li class="chip ok"><span>Разворот ↻</span><b>101%</b></li><li class="chip ok"><span>Спуск</span><b>62%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure><figure class="vid">
+  <figcaption><h3>Уклон 10° · удержание ВКЛ · прогон 3</h3><span class="badge ok">8/8</span></figcaption>
+  <div class="player"><video data-key="hon_slope_3" src="videos/on_slope_3.mp4" controls playsinline muted preload="none" poster="posters/on_slope_3.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Подъём</span><b>73%</b></li><li class="chip ok"><span>Влево поперёк</span><b>68%</b></li><li class="chip ok"><span>Вправо поперёк</span><b>73%</b></li><li class="chip ok"><span>Разворот ↺</span><b>102%</b></li><li class="chip ok"><span>Разворот ↻</span><b>84%</b></li><li class="chip ok"><span>Спуск</span><b>63%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure></div>
+  <p class="note">В первом прогоне с удержанием спуск засчитан как проваленный: при переходе с пандуса на пол наклон корпуса на миг дошёл до 20°, а это граница критерия. Прошёл он при этом столько же, сколько без удержания. Два повтора прошли 8/8.</p>
+  <h3>Волны 20 мм и камни до 20 мм</h3>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Волны 20 мм · удержание ВКЛ</h3><span class="badge warn">7/8</span></figcaption>
+  <div class="player"><video data-key="hon_waves" src="videos/on_waves.mp4" controls playsinline muted preload="none" poster="posters/on_waves.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Вперёд</span><b>71%</b></li><li class="chip bad"><span>Назад</span><b>2%</b></li><li class="chip ok"><span>Влево</span><b>64%</b></li><li class="chip ok"><span>Вправо</span><b>75%</b></li><li class="chip ok"><span>Разворот ↺</span><b>39%</b></li><li class="chip ok"><span>Разворот ↻</span><b>45%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure><figure class="vid">
+  <figcaption><h3>Волны 20 мм · удержание ВЫКЛ</h3><span class="badge warn">5/8</span></figcaption>
+  <div class="player"><video data-key="hoff_waves" src="videos/off_waves.mp4" controls playsinline muted preload="none" poster="posters/off_waves.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Вперёд</span><b>57%</b></li><li class="chip bad"><span>Назад</span><b>10%</b></li><li class="chip ok"><span>Влево</span><b>45%</b></li><li class="chip bad"><span>Вправо</span><b>12%</b></li><li class="chip ok"><span>Разворот ↺</span><b>62%</b></li><li class="chip bad"><span>Разворот ↻</span><b>15%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Камни до 20 мм · удержание ВКЛ</h3><span class="badge ok">8/8</span></figcaption>
+  <div class="player"><video data-key="hon_rough" src="videos/on_rough.mp4" controls playsinline muted preload="none" poster="posters/on_rough.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Вперёд</span><b>54%</b></li><li class="chip ok"><span>Назад</span><b>25%</b></li><li class="chip ok"><span>Влево</span><b>39%</b></li><li class="chip ok"><span>Вправо</span><b>26%</b></li><li class="chip ok"><span>Разворот ↺</span><b>59%</b></li><li class="chip ok"><span>Разворот ↻</span><b>52%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure><figure class="vid">
+  <figcaption><h3>Камни до 20 мм · удержание ВЫКЛ</h3><span class="badge ok">8/8</span></figcaption>
+  <div class="player"><video data-key="hoff_rough" src="videos/off_rough.mp4" controls playsinline muted preload="none" poster="posters/off_rough.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Вперёд</span><b>51%</b></li><li class="chip ok"><span>Назад</span><b>33%</b></li><li class="chip ok"><span>Влево</span><b>37%</b></li><li class="chip ok"><span>Вправо</span><b>39%</b></li><li class="chip ok"><span>Разворот ↺</span><b>50%</b></li><li class="chip ok"><span>Разворот ↻</span><b>41%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure></div>
+  <div class="callout"><h3>Что это даёт оператору</h3>
+    <p>На прямой робот держит направление в пределах нескольких градусов даже на волнах и камнях, где без удержания уходил на 28–34°. Разворот на месте выполняется на заданный угол, без недоворота. Боковой снос на несколько сантиметров остаётся: курс удерживается, а положение пока не измеряется. Для этого нужен лидар или камера, варианты в docs/HEAD.md.</p></div>
+</section>
+
+<section id="s-limits">
+  <div class="sec-head"><div class="eyebrow">по итогам всех прогонов</div>
+    <h2><span class="num-badge">7</span>Пределы и рекомендации</h2>
+    <p>Для реального робота нужен запас около 30 %: у MG996R люфт 1–2°, под нагрузкой они слабеют, трение и массы в модели заданы оценочно. Начинайте с последней строки таблицы и повышайте постепенно.</p></div>
+  <div class="panel"><h3>Рекомендуемые пределы по манёврам</h3><div class="tbl-wrap"><table><thead><tr><th>Манёвр</th><th class="num">Уклон с IMU</th><th class="num">Уклон без IMU</th><th class="num">Волны</th><th class="num">Камни</th></tr></thead><tbody><tr><td>Вперёд, подъём</td><td class="num r-ok">≤ 15°</td><td class="num r-warn">≤ 6°</td><td class="num r-ok">≤ 30 мм</td><td class="num r-ok">≤ 30 мм</td></tr><tr><td>Назад, спуск</td><td class="num r-ok">≤ 15°</td><td class="num r-warn">≤ 6°</td><td class="num r-warn">≤ 10 мм, ползком</td><td class="num r-warn">≤ 20 мм, медленно</td></tr><tr><td>Вбок поперёк склона</td><td class="num r-ok">≤ 12°</td><td class="num r-warn">≤ 6°</td><td class="num r-ok">≤ 10 мм</td><td class="num r-ok">≤ 20 мм</td></tr><tr><td>Разворот на месте</td><td class="num r-ok">≤ 15°</td><td class="num r-warn">≤ 6°</td><td class="num r-ok">≤ 10 мм</td><td class="num r-ok">≤ 20 мм</td></tr><tr><td>Любые манёвры</td><td class="num r-ok">≤ 10°</td><td class="num r-warn">≤ 6°</td><td class="num r-ok">≤ 10 мм</td><td class="num r-ok">≤ 10 мм</td></tr><tr><td><b>Реальный робот: начать с</b></td><td class="num r-">7°</td><td class="num r-">4°</td><td class="num r-">7 мм</td><td class="num r-">7 мм</td></tr></tbody></table></div></div>
+  <div class="pair">
+    <div class="panel"><h3>Правила эксплуатации</h3>
+      <ul class="list">
+        <li><b>На склоне идите прямо вверх или вниз.</b> Шаг поперёк склона — самый опасный манёвр.</li>
+        <li><b>Задний ход — только по ровному.</b> На неровностях лучше развернуться.</li>
+        <li><b>Высоту шага не поднимайте.</b> При 35 мм вместо 20 мм робот опрокидывался уже на волнах 20 мм.</li>
+        <li><b>Позу корпуса с пульта на склоне не используйте:</b> она складывается с компенсацией уклона.</li>
+        <li><b>Препятствия выше 20 мм</b> робот не перешагивает, а переползает, и это случайно.</li>
+      </ul></div>
+    <div class="panel"><h3>Хватит ли IMU?</h3>
+      <ul class="list">
+        <li><b>Для уклонов — да.</b> Компенсация по IMU подняла рабочий уклон с 6° до 10–12° для всех манёвров и до 15° по линии склона.</li>
+        <li><b>Для неровностей — нет.</b> Бугры под одной ногой, ступеньки и ямы впереди IMU не видит.</li>
+        <li><b>Удержание курса по гироскопу — сделано</b> (этап 6).</li>
+        <li><b>Что добавить дальше:</b> датчики касания ног (ток по каждой ноге или концевики), ToF-дальномер вниз-вперёд, лидар (docs/HEAD.md).</li>
+      </ul></div>
+  </div>
+</section>
+
+<section id="s-perception">
+  <div class="sec-head"><div class="eyebrow">отдельный отчёт</div>
+    <h2><span class="num-badge">8</span>Датчики головы: лидары «крестом» и VL53L1X</h2>
+    <p>Симуляция двух наклонных лидаров и четырёх ToF-дальномеров: точность пола, обнаружение камней и ступенек, ложные срабатывания, нагрузка на процессор — <a href="perception.html">perception.html</a> (14 роликов) и docs/PERCEPTION.md.</p></div>
+</section>
+</main>
+
+<script>
+(function () {
+  const probe = document.createElement('video');
+  const canMp4 = !!probe.canPlayType('video/mp4; codecs="avc1.4d401f"');
+  function load(v) {
+    if (v.dataset.loaded || v.getAttribute('src')) return;  // separate file: the browser loads it
+    v.dataset.loaded = '1';
+    const holder = document.getElementById('v-' + v.dataset.key);
+    if (!canMp4 || !holder) { fail(v); return; }
+    try {
+      const bin = atob(holder.textContent.trim());
+      const a = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+      v.src = URL.createObjectURL(new Blob([a], { type: 'video/mp4' }));
+      v.addEventListener('error', () => fail(v), { once: true });
+    } catch (e) { fail(v); }
+  }
+  function fail(v) {
+    const d = document.createElement('div');
+    d.className = 'err';
+    d.textContent = 'Этот браузер не воспроизводит MP4 (H.264). Откройте файл в Chrome, Edge или Safari.';
+    v.parentElement.appendChild(d);
+  }
+  const vids = [...document.querySelectorAll('video[data-key]')];
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { load(e.target); io.unobserve(e.target); } }), { rootMargin: '400px' });
+    vids.forEach(v => io.observe(v));
+  } else vids.forEach(load);
+  vids.forEach(v => v.addEventListener('play', () => load(v)));
+})();
+</script>
+</body></html>

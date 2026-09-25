@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Восприятие RobotDog 2.0</title>
+<style>
+:root {
+  --bg: #f4f6f8; --surface: #ffffff; --ink: #12161b; --ink-2: #48515e; --muted: #737d8a;
+  --grid: #e3e7ec; --line: #d3d9e0; --soft: #eef1f5; --accent: #2a78d6;
+  --good: #1d7a1d; --good-bg: #e5f4e5; --bad: #b3282a; --bad-bg: #fbe6e6; --warn: #8a5a00; --warn-bg: #fdf1d8;
+  --fall-bg: #d03b3b;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0f1216; --surface: #171b21; --ink: #e8ebef; --ink-2: #b4bbc6; --muted: #8791a0;
+    --grid: #252b34; --line: #333a45; --soft: #1e232a; --accent: #5b9df0;
+    --good: #6fd46f; --good-bg: #173017; --bad: #f28b8b; --bad-bg: #3a1a1a; --warn: #e8b64c; --warn-bg: #3a2c10;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1216; --surface: #171b21; --ink: #e8ebef; --ink-2: #b4bbc6; --muted: #8791a0;
+  --grid: #252b34; --line: #333a45; --soft: #1e232a; --accent: #5b9df0;
+  --good: #6fd46f; --good-bg: #173017; --bad: #f28b8b; --bad-bg: #3a1a1a; --warn: #e8b64c; --warn-bg: #3a2c10;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--sans); padding: 28px 16px 64px; }
+main { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 48px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1 { font-size: 30px; font-weight: 650; line-height: 1.2; }
+h2 { font-size: 22px; font-weight: 650; }
+h3 { font-size: 15px; font-weight: 600; }
+p { margin: 0; max-width: 72ch; color: var(--ink-2); }
+.eyebrow { font: 500 12px/1.4 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.mono { font-family: var(--mono); }
+header { display: flex; flex-direction: column; gap: 10px; }
+section { display: flex; flex-direction: column; gap: 18px; scroll-margin-top: 16px; }
+.sec-head { display: flex; flex-direction: column; gap: 6px; }
+.sec-head h2 { display: flex; gap: 12px; align-items: baseline; }
+.num-badge { font: 600 13px var(--mono); color: var(--surface); background: var(--accent); border-radius: 999px; padding: 2px 9px; }
+
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.stat .v { font: 600 26px/1.15 var(--mono); }
+.stat .v small { font-size: 14px; color: var(--muted); font-weight: 500; }
+.stat .k { font-size: 13px; color: var(--ink-2); }
+
+.steps { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; list-style: none; margin: 0; padding: 0; counter-reset: s; }
+.steps a { display: flex; flex-direction: column; gap: 2px; text-decoration: none; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; height: 100%; }
+.steps a:hover { border-color: var(--accent); }
+.steps a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.steps li { counter-increment: s; }
+.steps a::before { content: counter(s); font: 600 12px var(--mono); color: var(--accent); }
+.steps b { font-size: 14px; font-weight: 600; }
+.steps span { font-size: 12px; color: var(--muted); }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.note { font-size: 13px; color: var(--muted); max-width: none; }
+.callout { background: var(--soft); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.callout p { max-width: none; }
+
+figure.vid { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+figure.vid figcaption { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.player { position: relative; aspect-ratio: 16 / 9; background: #f7f8fa; border-radius: 6px; overflow: hidden; }
+.player video { width: 100%; height: 100%; display: block; }
+.player .err { position: absolute; inset: auto 0 0 0; background: rgba(18,22,27,.85); color: #fff; font-size: 13px; padding: 8px 12px; }
+.badge { font: 600 13px var(--mono); border-radius: 999px; padding: 2px 10px; }
+.badge.ok { color: var(--good); background: var(--good-bg); }
+.badge.warn { color: var(--warn); background: var(--warn-bg); }
+.badge.bad { color: var(--bad); background: var(--bad-bg); }
+.chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: flex; gap: 6px; align-items: baseline; font-size: 12.5px; padding: 3px 9px; border-radius: 6px; }
+.chip b { font: 600 12px var(--mono); }
+.chip.ok { background: var(--good-bg); color: var(--good); }
+.chip.bad { background: var(--bad-bg); color: var(--bad); }
+.chip.skip { background: var(--soft); color: var(--muted); }
+
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; vertical-align: top; }
+th { font-weight: 500; color: var(--muted); font-size: 12px; }
+td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+td.r-ok { color: var(--good); } td.r-bad { color: var(--bad); font-weight: 600; } td.r-warn { color: var(--warn); }
+td.r-fall { color: #fff; background: var(--fall-bg); font-weight: 600; }
+td .sub { font-size: 12px; color: var(--muted); white-space: normal; }
+.tag { font-size: 11.5px; color: var(--good); background: var(--good-bg); border-radius: 4px; padding: 1px 6px; margin-left: 6px; white-space: normal; }
+ul.list { margin: 0; padding-left: 20px; color: var(--ink-2); display: flex; flex-direction: column; gap: 6px; }
+ul.list b { color: var(--ink); }
+.legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 18px; font-size: 13px; color: var(--ink-2); }
+.legend b { color: var(--ink); font-weight: 600; }
+details summary { cursor: pointer; font-size: 14px; color: var(--ink-2); }
+
+@media (max-width: 860px) {
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pair, .legend { grid-template-columns: 1fr; }
+  h1 { font-size: 25px; }
+}
+
+td.r- { color: var(--ink-2); }
+</style></head>
+<body><main>
+<header>
+  <div class="eyebrow">RobotDog 2.0 · Gazebo Harmonic · dog_perception · 25.09.2026</div>
+  <h1>Лидары «крестом» и VL53L1X: симуляция</h1>
+  <p>Два однолучевых лидара наклонены вниз-вбок крест-накрест (α = 30°, β = 40°), четыре VL53L1X смотрят вниз-вперёд и назад. Все прогоны сделаны в физической симуляции с тем же кодом управления, что и на роботе. Точки лидаров и лучи ToF в роликах — это то, что датчики реально измерили в симуляции.</p>
+</header>
+<div class="stats">
+  <div class="stat"><div class="v">0.05<small>°</small></div><div class="k">точность наклона пола по лидарам (по ногам 0.7–1.2°)</div></div>
+  <div class="stat"><div class="v">0.36–0.73<small> м</small></div><div class="k">запас до стопы, с которым лидары замечают камни 20 мм и ступеньки</div></div>
+  <div class="stat"><div class="v">0<small> /м</small></div><div class="k">ложных срабатываний на ровном полу (лидары + ToF, порог 15 мм)</div></div>
+  <div class="stat"><div class="v">0.1–0.2<small> ядра</small></div><div class="k">Banana Pi для узла на C++ (на Python 1–1.5 ядра)</div></div>
+</div>
+<div class="callout"><h3>Как читать ролики</h3>
+  <div class="legend">
+    <div><b>Точки</b> — оба лидара: серые — пол, оранжевые — выше пола, синие — ниже. На ровном полу видна буква X.</div>
+    <div><b>Зелёные лучи</b> — VL53L1X до точки попадания; красный — датчик сработал.</div>
+    <div><b>Справа</b> — что и с каким запасом обнаружено, остатки ToF (измерено − ожидалось), тангаж по лидарам и ногам против истины, сообщения о препятствиях.</div>
+  </div>
+  <p class="note">Ролики лежат рядом, в папке videos/; основной отчёт — <a href="index.html">index.html</a>.</p></div>
+
+<section><div class="sec-head"><div class="eyebrow">мир steps: помост, камни 20 мм на линиях стоп, ступенька вниз и вверх</div>
+  <h2><span class="num-badge">1</span>Камни и ступеньки</h2>
+  <p>Главный тест: заметит ли робот препятствие до того, как на него наступит. «Запас» — расстояние от передней стопы до края в момент первого сообщения; при 0.12 м/с это около 8 с на метр.</p></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Ступеньки 30 мм · порог 15 мм</h3></figcaption>
+  <div class="player"><video data-key="steps30_t15" src="videos/perception_steps30_t15.mp4" controls playsinline muted preload="none" poster="posters/perception_steps30_t15.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>камень, левая линия · лидары</span><b>0.55 м</b></li><li class="chip bad"><span>камень, левая линия · ToF</span><b>нет</b></li><li class="chip ok"><span>камень, правая линия · лидары</span><b>0.48 м</b></li><li class="chip ok"><span>камень, правая линия · ToF</span><b>0.13 м</b></li><li class="chip ok"><span>ступенька ↓ · лидары</span><b>0.73 м</b></li><li class="chip ok"><span>ступенька ↓ · ToF</span><b>0.78 м</b></li><li class="chip ok"><span>ступенька ↑ · лидары</span><b>0.57 м</b></li><li class="chip ok"><span>ступенька ↑ · ToF</span><b>0.56 м</b></li><li class="chip skip"><span>ложные · лидары</span><b>1.06/м</b></li><li class="chip ok"><span>ложные · ToF</span><b>0/м</b></li><li class="chip skip"><span>пол по лидарам</span><b>±0.94°, ±5.9 мм</b></li></ul>
+</figure><figure class="vid">
+  <figcaption><h3>Ступеньки 20 мм · порог 15 мм</h3></figcaption>
+  <div class="player"><video data-key="steps20_t15b" src="videos/perception_steps20_t15b.mp4" controls playsinline muted preload="none" poster="posters/perception_steps20_t15b.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>камень, левая линия · лидары</span><b>0.53 м</b></li><li class="chip ok"><span>камень, левая линия · ToF</span><b>0.10 м</b></li><li class="chip ok"><span>камень, правая линия · лидары</span><b>0.36 м</b></li><li class="chip ok"><span>камень, правая линия · ToF</span><b>0.28 м</b></li><li class="chip ok"><span>ступенька ↓ · лидары</span><b>0.56 м</b></li><li class="chip ok"><span>ступенька ↓ · ToF</span><b>0.49 м</b></li><li class="chip ok"><span>ступенька ↑ · лидары</span><b>0.55 м</b></li><li class="chip ok"><span>ступенька ↑ · ToF</span><b>0.35 м</b></li><li class="chip ok"><span>ложные · лидары</span><b>0/м</b></li><li class="chip bad"><span>ложные · ToF</span><b>7.34/м</b></li><li class="chip skip"><span>пол по лидарам</span><b>±0.65°, ±5.4 мм</b></li></ul>
+</figure></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Ступеньки 30 мм · порог 20 мм</h3></figcaption>
+  <div class="player"><video data-key="steps30_auto" src="videos/perception_steps30_auto.mp4" controls playsinline muted preload="none" poster="posters/perception_steps30_auto.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>камень, левая линия · лидары</span><b>0.46 м</b></li><li class="chip ok"><span>камень, левая линия · ToF</span><b>0.13 м</b></li><li class="chip skip"><span>камень, правая линия</span><b>не на пути</b></li><li class="chip ok"><span>ступенька ↓ · лидары</span><b>0.57 м</b></li><li class="chip ok"><span>ступенька ↓ · ToF</span><b>0.37 м</b></li><li class="chip ok"><span>ступенька ↑ · лидары</span><b>0.57 м</b></li><li class="chip ok"><span>ступенька ↑ · ToF</span><b>0.58 м</b></li><li class="chip skip"><span>ложные · лидары</span><b>1/м</b></li><li class="chip ok"><span>ложные · ToF</span><b>0/м</b></li><li class="chip skip"><span>пол по лидарам</span><b>±0.89°, ±5.4 мм</b></li></ul>
+</figure><figure class="vid">
+  <figcaption><h3>Ступеньки 20 мм · порог 20 мм</h3></figcaption>
+  <div class="player"><video data-key="steps20_auto" src="videos/perception_steps20_auto.mp4" controls playsinline muted preload="none" poster="posters/perception_steps20_auto.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>камень, левая линия · лидары</span><b>0.44 м</b></li><li class="chip ok"><span>камень, левая линия · ToF</span><b>0.10 м</b></li><li class="chip skip"><span>камень, правая линия</span><b>не на пути</b></li><li class="chip bad"><span>ступенька ↓ · лидары</span><b>нет</b></li><li class="chip bad"><span>ступенька ↓ · ToF</span><b>нет</b></li><li class="chip ok"><span>ступенька ↑ · лидары</span><b>0.77 м</b></li><li class="chip ok"><span>ступенька ↑ · ToF</span><b>0.34 м</b></li><li class="chip ok"><span>ложные · лидары</span><b>0/м</b></li><li class="chip skip"><span>ложные · ToF</span><b>0.65/м</b></li><li class="chip skip"><span>пол по лидарам</span><b>±0.65°, ±5.0 мм</b></li></ul>
+</figure></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Ступеньки 30 мм · только ToF и ноги</h3></figcaption>
+  <div class="player"><video data-key="steps30_feet" src="videos/perception_steps30_feet.mp4" controls playsinline muted preload="none" poster="posters/perception_steps30_feet.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>камень, левая линия · лидары</span><b>0.47 м</b></li><li class="chip bad"><span>камень, левая линия · ToF</span><b>нет</b></li><li class="chip skip"><span>камень, правая линия</span><b>не на пути</b></li><li class="chip ok"><span>ступенька ↓ · лидары</span><b>0.51 м</b></li><li class="chip ok"><span>ступенька ↓ · ToF</span><b>0.57 м</b></li><li class="chip ok"><span>ступенька ↑ · лидары</span><b>0.48 м</b></li><li class="chip ok"><span>ступенька ↑ · ToF</span><b>0.60 м</b></li><li class="chip ok"><span>ложные · лидары</span><b>0/м</b></li><li class="chip ok"><span>ложные · ToF</span><b>0/м</b></li><li class="chip skip"><span>пол по лидарам</span><b>±0.76°, ±5.0 мм</b></li></ul>
+</figure><figure class="vid">
+  <figcaption><h3>Ступеньки 20 мм · порог 15 мм · робот споткнулся</h3><span class="badge bad">упал</span></figcaption>
+  <div class="player"><video data-key="steps20_t15" src="videos/perception_steps20_t15.mp4" controls playsinline muted preload="none" poster="posters/perception_steps20_t15.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>камень, левая линия · лидары</span><b>0.54 м</b></li><li class="chip ok"><span>камень, левая линия · ToF</span><b>0.10 м</b></li><li class="chip ok"><span>камень, правая линия · лидары</span><b>0.60 м</b></li><li class="chip ok"><span>камень, правая линия · ToF</span><b>0.29 м</b></li><li class="chip skip"><span>ступенька ↓</span><b>не дошёл</b></li><li class="chip skip"><span>ступенька ↑</span><b>не дошёл</b></li><li class="chip ok"><span>ложные · лидары</span><b>0/м</b></li><li class="chip ok"><span>ложные · ToF</span><b>0/м</b></li><li class="chip skip"><span>пол по лидарам</span><b>±14.09°, ±27.6 мм</b></li></ul>
+</figure></div>
+  <div class="panel"><h3>Итог по обнаружению</h3><div class="tbl-wrap"><table><thead><tr><th>Препятствие</th><th class="num">Лидары: запас до стопы</th><th class="num">Лидары: место</th><th class="num">ToF: запас</th><th class="num">ToF: датчик</th></tr></thead><tbody><tr><td>Камень 20 мм на линии стопы</td><td class="num r-ok">0.36–0.55 м</td><td class="num r-ok">±1–3 см</td><td class="num r-ok">0.10–0.28 м</td><td class="num r-">FL / FR</td></tr><tr><td>Ступенька вниз 20–30 мм</td><td class="num r-ok">0.56–0.73 м</td><td class="num r-ok">±7 см</td><td class="num r-ok">0.49–0.78 м</td><td class="num r-">FC</td></tr><tr><td>Ступенька вверх 20–30 мм</td><td class="num r-ok">0.55–0.57 м</td><td class="num r-ok">±0.5–2 см</td><td class="num r-ok">0.35–0.56 м</td><td class="num r-">FC</td></tr></tbody></table></div>
+    <p class="note">Лидары нашли все препятствия на пути во всех прогонах с порогом 15 мм. С порогом 20 мм ступенька ровно в 20 мм не ловится. «Не на пути» — камень, мимо которого робот прошёл сбоку после разворота от первого камня. В последнем ролике робот споткнулся о камень и упал: это ограничение походки, а не датчиков, и оба камня были замечены заранее.</p></div>
+</section>
+
+<section><div class="sec-head"><div class="eyebrow">ложные срабатывания и точность пола</div>
+  <h2><span class="num-badge">2</span>Ровный пол</h2>
+  <p>На ровном полу не должно быть ни одного сообщения. Сравниваются три настройки, в том числе ToF без опоры на лидары.</p></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Лидары + ToF, порог 15 мм</h3></figcaption>
+  <div class="player"><video data-key="flat_t15" src="videos/perception_flat_t15.mp4" controls playsinline muted preload="none" poster="posters/perception_flat_t15.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>ложные · лидары</span><b>0/м</b></li><li class="chip ok"><span>ложные · ToF</span><b>0/м</b></li><li class="chip skip"><span>пол по лидарам</span><b>±0.05°, ±3.8 мм</b></li></ul>
+</figure><figure class="vid">
+  <figcaption><h3>Только ToF и ноги, порог 30 мм</h3></figcaption>
+  <div class="player"><video data-key="flat_feet" src="videos/perception_flat_feet.mp4" controls playsinline muted preload="none" poster="posters/perception_flat_feet.jpg"></video></div>
+  <ul class="chips"><li class="chip bad"><span>ложные · лидары</span><b>73.98/м</b></li><li class="chip bad"><span>ложные · ToF</span><b>3.81/м</b></li><li class="chip skip"><span>пол по лидарам</span><b>±0.05°, ±4.0 мм</b></li></ul>
+</figure></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Лидары + ToF, порог 20 мм</h3></figcaption>
+  <div class="player"><video data-key="flat_auto" src="videos/perception_flat_auto.mp4" controls playsinline muted preload="none" poster="posters/perception_flat_auto.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>ложные · лидары</span><b>0/м</b></li><li class="chip ok"><span>ложные · ToF</span><b>0/м</b></li><li class="chip skip"><span>пол по лидарам</span><b>±0.06°, ±4.0 мм</b></li></ul>
+</figure><div class="panel"><h3>Ложные срабатывания</h3><div class="tbl-wrap"><table><thead><tr><th>Схема</th><th class="num">Лидары, ложных на метр</th><th class="num">ToF, ложных на метр</th><th class="num">Камни 20 мм замечены ToF</th></tr></thead><tbody><tr><td><b>Лидары крестом + ToF, порог 15 мм</b></td><td class="num r-ok">0</td><td class="num r-ok">0</td><td class="num r-ok">3 из 4</td></tr><tr><td>Лидары крестом + ToF, порог 20 мм</td><td class="num r-ok">0</td><td class="num r-ok">0</td><td class="num r-warn">ступенька 20 мм на пороге</td></tr><tr><td>Только ToF, опора на ноги, порог 30 мм</td><td class="num r-">—</td><td class="num r-warn">3.8</td><td class="num r-bad">0 из 2</td></tr></tbody></table></div>
+    <p class="note">Без лидаров опорная плоскость берётся по ногам и ошибается на 1–3°. Для FL/FR это 5–15 мм, для FC — 23 мм на градус. Порог приходится поднимать до 30 мм, и камни 20 мм пропускаются.</p></div></div>
+</section>
+
+<section><div class="sec-head"><div class="eyebrow">уклон 10°, камни и волны 20 мм</div>
+  <h2><span class="num-badge">3</span>Уклон и неровности</h2>
+  <p>На уклоне плоскость по лидарам повторяет пандус, и сообщения появляются только у начала подъёма. На камнях и волнах сообщения — это настоящие неровности.</p></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Уклон 10° · порог 15 мм</h3></figcaption>
+  <div class="player"><video data-key="slope10_t15" src="videos/perception_slope10_t15.mp4" controls playsinline muted preload="none" poster="posters/perception_slope10_t15.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>ложные · лидары</span><b>0/м</b></li><li class="chip bad"><span>ложные · ToF</span><b>6.14/м</b></li><li class="chip skip"><span>пол по лидарам</span><b>±0.07°, ±4.1 мм</b></li></ul>
+</figure><figure class="vid">
+  <figcaption><h3>Уклон 10° · порог 20 мм</h3></figcaption>
+  <div class="player"><video data-key="slope10_auto" src="videos/perception_slope10_auto.mp4" controls playsinline muted preload="none" poster="posters/perception_slope10_auto.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>ложные · лидары</span><b>0/м</b></li><li class="chip bad"><span>ложные · ToF</span><b>4.05/м</b></li><li class="chip skip"><span>пол по лидарам</span><b>±0.07°, ±4.1 мм</b></li></ul>
+</figure></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Камни 20 мм · порог 15 мм</h3></figcaption>
+  <div class="player"><video data-key="rough20_t15" src="videos/perception_rough20_t15.mp4" controls playsinline muted preload="none" poster="posters/perception_rough20_t15.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>ложные · лидары</span><b>0/м</b></li><li class="chip ok"><span>ложные · ToF</span><b>0/м</b></li><li class="chip skip"><span>пол по лидарам</span><b>±0.15°, ±6.4 мм</b></li></ul>
+</figure><figure class="vid">
+  <figcaption><h3>Камни 20 мм · порог 20 мм</h3></figcaption>
+  <div class="player"><video data-key="rough20_auto" src="videos/perception_rough20_auto.mp4" controls playsinline muted preload="none" poster="posters/perception_rough20_auto.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>ложные · лидары</span><b>0/м</b></li><li class="chip ok"><span>ложные · ToF</span><b>0/м</b></li><li class="chip skip"><span>пол по лидарам</span><b>±0.14°, ±6.5 мм</b></li></ul>
+</figure></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Волны 20 мм · порог 20 мм</h3></figcaption>
+  <div class="player"><video data-key="waves20_auto" src="videos/perception_waves20_auto.mp4" controls playsinline muted preload="none" poster="posters/perception_waves20_auto.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>ложные · лидары</span><b>0/м</b></li><li class="chip ok"><span>ложные · ToF</span><b>0/м</b></li><li class="chip skip"><span>пол по лидарам</span><b>±0.23°, ±15.0 мм</b></li></ul>
+</figure><div class="panel"><h3>Карта высот (3 × 3 м, ячейка 2 см)</h3><div class="tbl-wrap"><table><thead><tr><th>Поверхность</th><th class="num">Ошибка ячеек</th><th class="num">Ячеек точнее 10 мм</th></tr></thead><tbody><tr><td>Ровный пол</td><td class="num r-ok">7 мм</td><td class="num r-ok">89–91 %</td></tr><tr><td>Уклон 10°</td><td class="num r-ok">8 мм</td><td class="num r-ok">85 %</td></tr><tr><td>Ступеньки</td><td class="num r-ok">8 мм</td><td class="num r-ok">84–87 %</td></tr><tr><td>Камни 20 мм</td><td class="num r-warn">10 мм</td><td class="num r-warn">77–81 %</td></tr><tr><td>Волны 20 мм</td><td class="num r-warn">12 мм</td><td class="num r-warn">70 %</td></tr></tbody></table></div></div></div>
+</section>
+
+<section><div class="sec-head"><div class="eyebrow">все прогоны</div>
+  <h2><span class="num-badge">4</span>Точность плоскости пола</h2></div>
+  <div class="panel"><div class="tbl-wrap"><table><thead><tr><th>Поверхность</th><th class="num">Лидары: высота</th><th class="num">Лидары: наклон</th><th class="num">Ноги: высота</th><th class="num">Ноги: наклон</th></tr></thead><tbody><tr><td>Ровный пол</td><td class="num r-ok">4 мм</td><td class="num r-ok">0.05°</td><td class="num r-ok">2 мм</td><td class="num r-warn">0.7–1.2°</td></tr><tr><td>Уклон 10°</td><td class="num r-ok">4 мм</td><td class="num r-ok">0.07°</td><td class="num r-ok">3 мм</td><td class="num r-warn">0.6–1.0°</td></tr><tr><td>Камни 20 мм</td><td class="num r-ok">6 мм</td><td class="num r-ok">0.15°</td><td class="num r-warn">3–9 мм</td><td class="num r-bad">1.2–3.7°</td></tr><tr><td>Волны 20 мм</td><td class="num r-warn">15 мм (гребни)</td><td class="num r-ok">0.23°</td><td class="num r-warn">11 мм</td><td class="num r-bad">4.3°</td></tr><tr><td>Ступеньки</td><td class="num r-ok">5–6 мм</td><td class="num r-warn">0.6–0.9°</td><td class="num r-ok">2–5 мм</td><td class="num r-bad">1.2–2.9°</td></tr></tbody></table></div><p class="note">Лидары дают наклон пола в 10–20 раз точнее ног, ноги — высоту. Поэтому опорная плоскость объединённая: наклон по лидарам, высота сверяется по ногам (±15 мм), иначе берутся ноги.</p></div>
+</section>
+
+<section><div class="sec-head"><div class="eyebrow">замер в симуляции, пересчёт на частоты робота</div>
+  <h2><span class="num-badge">5</span>Вычислительная нагрузка</h2>
+  <p>Сами алгоритмы дешёвые: 1.5 мс на скан, 0.2 мс на замер ToF, около 8 % ядра ПК. Основную цену в Python даёт приём сообщений, 0.37 мс на каждое. Частоты робота: суставы 50 Гц, IMU 100 Гц, одометрия 50 Гц, ToF 4 × 50 Гц, лидары 2 × 10 Гц.</p></div>
+  <div class="panel"><div class="tbl-wrap"><table><thead><tr><th>Вариант узла</th><th class="num">ПК (Xeon 2.1 ГГц)</th><th class="num">Banana Pi, оценка (A53 1.5 ГГц)</th></tr></thead><tbody><tr><td>Python, как сейчас</td><td class="num r-">24 % ядра</td><td class="num r-bad">1–1.5 ядра из 4</td></tr><tr><td>Python, 4 ToF одним сообщением</td><td class="num r-">19 % ядра</td><td class="num r-warn">0.75–1.1 ядра</td></tr><tr><td>C++ (оценка)</td><td class="num r-">2–3 % ядра</td><td class="num r-ok">0.1–0.2 ядра</td></tr></tbody></table></div><p class="note">Пересчёт на A53 — оценка (одно ядро A53 в 4–6 раз медленнее ядра ПК); на самой плате не мерилось. Вывод: схема Banana Pi посильна, если узел на C++ или ToF собраны в одно сообщение. Тяжёлое — не эта обработка, а 3D-карта большой площади и планирование шагов; их лучше считать на ноутбуке.</p></div>
+</section>
+
+<section><div class="sec-head"><div class="eyebrow">по ходу симуляции</div><h2><span class="num-badge">6</span>Что нашли и исправили</h2></div>
+  <div class="panel"><ul class="list">
+    <li><b>Сканы двух лидаров снимаются в разные моменты</b> (до 0.1 с), а корпус на рыси кивает около 10°/с. Без доворота по IMU плоскость ошибалась на 1°, с ним — 0.05°. На настоящем лидаре так же придётся доворачивать каждую точку оборота.</li>
+    <li><b>Автокалибровка ToF при старте</b> запоминала пандус перед роботом как поправку (FC 130 мм), и весь путь становился «ямой». Теперь поправки снимаются один раз на ровном полу и хранятся в robot.yaml.</li>
+    <li><b>Многопоточная линейная алгебра numpy</b> занимала все ядра ожиданием. Теперь ограничена одним потоком: на Banana Pi это отняло бы ядра у походки.</li>
+    <li><b>Каждый замер сравнивается с положением корпуса в свой момент</b> (история IMU), а не с последним известным.</li>
+  </ul></div>
+  <div class="panel"><h3>Ограничения модели</h3><ul class="list">
+    <li>Лидар в Gazebo снимает оборот мгновенно, реальный — за 100 мс.</li>
+    <li>VL53L1X смоделирован медианой 25 лучей. Чёрные и блестящие поверхности и солнце не учтены.</li>
+    <li>Для карты высот взята точная одометрия симуляции. На роботе будет оценка, и карта со временем поплывёт.</li>
+    <li>Углы установки лидаров и поправки ToF на роботе нужно калибровать: 1° ошибки угла даёт около 1 см высоты на 0.6 м.</li>
+  </ul></div>
+</section>
+</main>
+<script>
+(function () {
+  const probe = document.createElement('video');
+  const canMp4 = !!probe.canPlayType('video/mp4; codecs="avc1.4d401f"');
+  function load(v) {
+    if (v.dataset.loaded || v.getAttribute('src')) return;  // separate file: the browser loads it
+    v.dataset.loaded = '1';
+    const holder = document.getElementById('v-' + v.dataset.key);
+    if (!canMp4 || !holder) { fail(v); return; }
+    try {
+      const bin = atob(holder.textContent.trim());
+      const a = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+      v.src = URL.createObjectURL(new Blob([a], { type: 'video/mp4' }));
+      v.addEventListener('error', () => fail(v), { once: true });
+    } catch (e) { fail(v); }
+  }
+  function fail(v) {
+    const d = document.createElement('div');
+    d.className = 'err';
+    d.textContent = 'Этот браузер не воспроизводит MP4 (H.264). Откройте файл в Chrome, Edge или Safari.';
+    v.parentElement.appendChild(d);
+  }
+  const vids = [...document.querySelectorAll('video[data-key]')];
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { load(e.target); io.unobserve(e.target); } }), { rootMargin: '400px' });
+    vids.forEach(v => io.observe(v));
+  } else vids.forEach(load);
+  vids.forEach(v => v.addEventListener('play', () => load(v)));
+})();
+</script>
+</body></html>
