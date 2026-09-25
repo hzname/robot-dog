@@ -206,5 +206,131 @@ def imu():
     save('measure_imu_axes.svg', w, h, s)
 
 
+# ---------------------------------------------------------------- sensors
+def _arrow(x1, y1, x2, y2, col, width=2.2, mk='o'):
+    return (f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" stroke="{col}" stroke-width="{width}" '
+            f'marker-end="url(#{mk})"/>')
+
+
+def _arc(cx, cy, r, a0, a1, col=ORANGE):
+    """Arc of radius r from screen angle a0 to a1 [deg, 0 = right, + = clockwise on screen]."""
+    x0, y0 = cx + r * math.cos(math.radians(a0)), cy + r * math.sin(math.radians(a0))
+    x1, y1 = cx + r * math.cos(math.radians(a1)), cy + r * math.sin(math.radians(a1))
+    sweep = 1 if a1 > a0 else 0
+    return (f'<path d="M{x0:.1f},{y0:.1f} A{r},{r} 0 0,{sweep} {x1:.1f},{y1:.1f}" fill="none" stroke="{col}" '
+            f'stroke-width="2" marker-end="url(#o)"/>')
+
+
+def sensors_top():
+    w, h, S = 800, 560, 1100.0  # px per metre
+    cx, cy = 300, 250
+    X = lambda x: cx + x * S  # noqa: E731
+    Y = lambda y: cy - y * S  # noqa: E731
+    s = text(20, 28, 'Датчики сверху: «вперёд» — вправо, левый бок — вверху. x, y — от центра корпуса', size=15, bold=True)
+    s += (f'<rect x="{X(-0.115):.0f}" y="{Y(0.06):.0f}" width="{0.23 * S:.0f}" height="{0.12 * S:.0f}" rx="6" '
+          f'fill="#3b4452" opacity="0.13" stroke="#3b4452"/>')
+    for fx, fy in ((1, 1), (1, -1), (-1, 1), (-1, -1)):
+        s += f'<circle cx="{X(fx * 0.09):.1f}" cy="{Y(fy * 0.115):.1f}" r="5" fill="{G}"/>'
+    s += text(X(-0.09), Y(0.115) - 10, 'стопы', col=G, anchor='middle', size=11)
+    s += f'<circle cx="{cx}" cy="{cy}" r="5" fill="{ORANGE}"/>'
+    s += _arrow(cx, cy, cx + 60, cy, T, 2, 'k') + text(cx + 64, cy + 4, 'x')
+    s += _arrow(cx, cy, cx, cy - 50, T, 2, 'k') + text(cx + 5, cy - 52, 'y')
+    s += text(cx - 8, cy + 18, 'центр', col=ORANGE, anchor='end', bold=True)
+    # X lidars
+    for side, name in ((1, 'L'), (-1, 'R')):
+        lx, ly = X(0.10), Y(side * 0.04)
+        s += f'<circle cx="{lx:.1f}" cy="{ly:.1f}" r="11" fill="#fff" stroke="{BLUE}" stroke-width="2.5"/>'
+        s += text(lx, ly + 4, name, col=BLUE, anchor='middle', bold=True, size=11)
+        a = math.radians(-side * 40)  # direction the scan plane dips to (yaw of the lidar frame)
+        s += _arrow(lx, ly, lx + 70 * math.cos(a), ly - 70 * math.sin(a), BLUE, 2.2, 'a')
+    s += _arc(X(0.10), Y(0.04), 46, 0, 40, BLUE)
+    s += text(X(0.10) + 52, Y(0.04) + 40, 'β', col=BLUE, bold=True, size=15)
+    s += dim(cx, Y(0.04) - 34, X(0.10), Y(0.04) - 34, 'x_lidar_x', ly=Y(0.04) - 40)
+    s += f'<line x1="{X(0.10)}" y1="{Y(0.04) - 40}" x2="{X(0.10)}" y2="{Y(0.04) - 10}" stroke="{G}" stroke-dasharray="3 3"/>'
+    s += dim(X(-0.03), cy, X(-0.03), Y(0.04), 'x_lidar_y', lx=X(-0.03) - 6, ly=Y(0.02) + 4, anchor='end')
+    s += f'<line x1="{X(-0.03)}" y1="{Y(0.04)}" x2="{X(0.10)}" y2="{Y(0.04)}" stroke="{G}" stroke-dasharray="3 3"/>'
+    # ToF + GS2 on the front face
+    fx0 = X(0.115)
+    for y, name, yaw in ((0.045, 'FL', 23), (-0.045, 'FR', -23), (0.0, 'FC / GS2', 0)):
+        yy = Y(y)
+        s += f'<rect x="{fx0 - 5:.1f}" y="{yy - 5:.1f}" width="10" height="10" fill="{ORANGE}"/>'
+        a = math.radians(yaw)
+        s += _arrow(fx0, yy, fx0 + 120 * math.cos(a), yy - 120 * math.sin(a), ORANGE)
+        s += text(fx0 + 128 * math.cos(a), yy - 128 * math.sin(a) + (-6 if yaw > 0 else 14 if yaw < 0 else 4), name,
+                  col=ORANGE, bold=True)
+    s += f'<line x1="{fx0}" y1="{Y(0.045)}" x2="{fx0 + 150}" y2="{Y(0.045)}" stroke="{G}" stroke-dasharray="3 3"/>'
+    s += _arc(fx0, Y(0.045), 90, 0, -23)
+    s += text(fx0 + 96, Y(0.045) - 20, '23°: yaw FL', col=ORANGE, size=12)
+    # GS2 fan 100 deg (dashed)
+    for a in (-50, 50):
+        r = math.radians(a)
+        s += (f'<line x1="{fx0}" y1="{cy}" x2="{fx0 + 150 * math.cos(r):.1f}" y2="{cy - 150 * math.sin(r):.1f}" '
+              f'stroke="#7a3fc4" stroke-width="1.5" stroke-dasharray="6 4"/>')
+    s += text(fx0 + 150, cy + 128, 'веер GS2 100°', col='#7a3fc4', size=12)
+    # RC at the rear, looking back
+    rx = X(-0.115)
+    s += f'<rect x="{rx - 5:.1f}" y="{cy - 5:.1f}" width="10" height="10" fill="{ORANGE}"/>'
+    s += _arrow(rx, cy, rx - 90, cy, ORANGE) + text(rx - 90, cy + 22, 'RC: yaw 180°', col=ORANGE, bold=True)
+    s += dim(cx, Y(-0.10), fx0, Y(-0.10), 'tof_x / gs2_x', ly=Y(-0.10) + 18)
+    s += f'<line x1="{fx0}" y1="{Y(-0.045)}" x2="{fx0}" y2="{Y(-0.10) + 4}" stroke="{G}" stroke-dasharray="3 3"/>'
+    s += dim(fx0 - 30, cy, fx0 - 30, Y(0.045), 'tof_y', lx=fx0 - 36, ly=Y(0.022) + 4, anchor='end')
+    s += notes(['x — вперёд от центра корпуса, y — влево (правые датчики с минусом). Меряйте до окна датчика:',
+                'у VL53L1X — до центра стекла, у GS2 — до центра окна лазера, у лидара — до оси вращения.',
+                'yaw (поворот) — угол луча от «вперёд»: + влево (против часовой сверху). FL +23°, FR −23°, RC 180°.',
+                'β лидаров — куда опущена плоскость скана: левый (L) опускает её вправо-вперёд, правый (R) —',
+                'влево-вперёд, поэтому их линии на полу перекрещиваются. Наклон α — на виде сбоку.'],
+               h - 96, size=12)
+    save('measure_sensors_top.svg', w, h, s)
+
+
+def sensors_side():
+    w, h, S = 800, 470, 900.0
+    cx, cz = 250, 150
+    X = lambda x: cx + x * S  # noqa: E731
+    Z = lambda z: cz - z * S  # noqa: E731
+    floor = Z(-0.15)
+    s = text(20, 28, 'Датчики сбоку: левый бок, «вперёд» — вправо; z — от высоты осей бедра', size=15, bold=True)
+    s += (f'<rect x="{X(-0.115):.0f}" y="{Z(0.03):.0f}" width="{0.23 * S:.0f}" height="{0.06 * S:.0f}" rx="5" '
+          f'fill="#3b4452" opacity="0.13" stroke="#3b4452"/>')
+    s += f'<line x1="40" y1="{floor}" x2="{w - 30}" y2="{floor}" stroke="{G}" stroke-width="2"/>' + text(w - 60, floor + 18, 'пол', col=G)
+    s += f'<line x1="60" y1="{cz}" x2="{X(0.30)}" y2="{cz}" stroke="{G}" stroke-dasharray="5 4"/>'
+    s += text(64, cz - 6, 'z = 0: оси бедра', col=G, size=12)
+    s += axis(X(0.09), cz, 7) + axis(X(-0.09), cz, 7)
+    s += dim(X(-0.16), cz, X(-0.16), floor, 'stand_height', lx=X(-0.16) - 6, ly=(cz + floor) / 2 + 20, anchor='end')
+    # ToF FL (z 0, 40 deg down) and GS2 (same place, 40 deg)
+    px, pz = X(0.115), Z(0.0)
+    t = 0.15 / math.sin(math.radians(40))
+    ex, ez = X(0.115 + t * math.cos(math.radians(40))), floor
+    s += f'<rect x="{px - 5:.1f}" y="{pz - 5:.1f}" width="10" height="10" fill="{ORANGE}"/>'
+    s += _arrow(px, pz, ex, ez, ORANGE)
+    s += f'<line x1="{px}" y1="{pz}" x2="{px + 130}" y2="{pz}" stroke="{G}" stroke-dasharray="3 3"/>'
+    s += _arc(px, pz, 70, 0, 40)
+    s += text(px + 20, floor + 20, '40°: pitch FL, FR, RC, GS2', col=ORANGE, size=12, bold=True)
+    s += text(ex + 6, ez - 8, 'FL / GS2 на полу', col=ORANGE, size=12)
+    # FC: z +12 mm, 20 deg down
+    fz = Z(0.012)
+    t2 = 0.162 / math.sin(math.radians(20))
+    s += f'<rect x="{px - 5:.1f}" y="{fz - 13:.1f}" width="10" height="10" fill="{ORANGE}"/>'
+    s += _arrow(px, fz - 8, X(0.115 + t2 * math.cos(math.radians(20))), floor, ORANGE, 1.6)
+    s += text(X(0.46), Z(-0.085), 'FC: 20°', col=ORANGE, size=12, bold=True)
+    s += dim(px - 14, pz, px - 14, floor, 'над полом: stand_height + z', lx=px - 20, ly=floor - 30, anchor='end')
+    # lidar: z +62 mm, plane tilted alpha
+    lx, lz = X(0.10), Z(0.062)
+    s += f'<circle cx="{lx:.1f}" cy="{lz:.1f}" r="11" fill="#fff" stroke="{BLUE}" stroke-width="2.5"/>'
+    a = math.radians(30)
+    s += (f'<line x1="{lx - 90 * math.cos(a):.1f}" y1="{lz - 90 * math.sin(a):.1f}" x2="{lx + 330 * math.cos(a):.1f}" '
+          f'y2="{lz + 330 * math.sin(a):.1f}" stroke="{BLUE}" stroke-width="2" stroke-dasharray="8 4"/>')
+    s += f'<line x1="{lx}" y1="{lz}" x2="{lx + 140}" y2="{lz}" stroke="{G}" stroke-dasharray="3 3"/>'
+    s += _arc(lx, lz, 110, 0, 30, BLUE)
+    s += text(lx + 116, lz + 36, 'α = 30°: x_lidar_tilt_deg', col=BLUE, size=12, bold=True)
+    s += dim(X(0.06), cz, X(0.06), lz, 'x_lidar_z', lx=X(0.06) - 6, ly=(cz + lz) / 2 + 4, anchor='end')
+    s += notes(['z — вверх от высоты осей бедра (их высота над полом = stand_height), ниже — с минусом.',
+                'pitch (наклон) — угол луча вниз от горизонтали корпуса: + вниз. Меряйте угломером по кронштейну',
+                'на ровном столе, корпус горизонтально. α лидара — наклон плоскости скана, в направлении β (вид сверху).',
+                'Где всё это ляжет на пол, robot_setup показывает сразу: линия GS2, пятна ToF, крест лидаров.'],
+               h - 80, size=12)
+    save('measure_sensors_side.svg', w, h, s)
+
+
 if __name__ == '__main__':
-    leg_side(), leg_rear(), body_top(), linkage(), imu()
+    leg_side(), leg_rear(), body_top(), linkage(), imu(), sensors_top(), sensors_side()
