@@ -212,3 +212,103 @@ TEST(Locomotion, SlopeCompensationIgnoresFallsAndCanBeDisabled)
   }
   EXPECT_NEAR(footInBody(d, off, 0).x, before.x, 1e-12);
 }
+
+TEST(Locomotion, HeadingHoldCountersYawDrift)
+{
+  LocomotionParams p;
+  LocomotionController c(p);
+  c.request("stand");
+  run(c, 2.0);
+  c.setVelocity({0.1, 0.0, 0.0});
+  // Robot drifts to the left (measured +0.2 rad/s) though commanded straight.
+  for (int i = 0; i < 50; ++i) {
+    c.setYawRate(0.2);
+    c.update(kDt);
+  }
+  EXPECT_LT(c.headingError(), 0.0);
+  EXPECT_LT(c.gaitVelocity().wz, 0.0);  // steers right
+  for (int i = 0; i < 500; ++i) {
+    c.setYawRate(0.2);
+    c.update(kDt);
+  }
+  // blocked robot: error and correction stay bounded
+  EXPECT_NEAR(c.headingError(), -p.heading_max_error, 1e-9);
+  EXPECT_NEAR(c.gaitVelocity().wz, -p.heading_max_rate, 1e-9);
+}
+
+TEST(Locomotion, HeadingHoldClosedLoopKeepsCourse)
+{
+  // Plant: the robot turns at the gait's yaw rate plus a constant slip bias.
+  for (bool hold : {false, true}) {
+    LocomotionParams p;
+    p.heading_hold = hold;
+    LocomotionController c(p);
+    c.request("stand");
+    run(c, 2.0);
+    c.setVelocity({0.12, 0.0, 0.0});
+    double yaw = 0.0, rate = 0.0;
+    for (int i = 0; i < static_cast<int>(6.0 / kDt); ++i) {
+      c.setYawRate(rate);
+      c.update(kDt);
+      rate = c.gaitVelocity().wz + 0.1;  // 0.1 rad/s = 34 deg over 6 s
+      yaw += rate * kDt;
+    }
+    if (hold) {
+      EXPECT_LT(std::abs(yaw), 0.02) << "PI: drift offset removed (< 1.2 deg)";
+    } else {
+      EXPECT_GT(std::abs(yaw), 0.5);
+    }
+  }
+}
+
+TEST(Locomotion, HeadingHoldTracksCommandedTurns)
+{
+  LocomotionParams p;
+  LocomotionController c(p);
+  c.request("stand");
+  run(c, 2.0);
+  c.setVelocity({0.0, 0.0, 0.5});
+  double yaw = 0.0, rate = 0.0;
+  const double T = 4.0;
+  for (int i = 0; i < static_cast<int>(T / kDt); ++i) {
+    c.setYawRate(rate);
+    c.update(kDt);
+    rate = 0.7 * c.gaitVelocity().wz;  // feet slip: only 70 % of the turn happens
+    yaw += rate * kDt;
+  }
+  // Without hold 70 %; with hold the missing turn is made up (ramp-up aside).
+  const double commanded = 0.5 * T - 0.5 * 0.5 / p.max_accel.wz;
+  EXPECT_GT(yaw / commanded, 0.9);
+  // Release the stick: the robot catches up, then stops without overshooting.
+  // Target = integral of the (accel-limited) command: ramp-up and ramp-down
+  // cancel, so it is 0.5 rad/s * T.
+  c.setVelocity({});
+  for (int i = 0; i < static_cast<int>(3.0 / kDt); ++i) {
+    c.setYawRate(rate);
+    c.update(kDt);
+    rate = 0.7 * c.gaitVelocity().wz;
+    yaw += rate * kDt;
+  }
+  EXPECT_NEAR(yaw / (0.5 * T), 1.0, 0.05);
+}
+
+TEST(Locomotion, HeadingHoldIdleWithoutImuOrWhenStanding)
+{
+  LocomotionParams p;
+  LocomotionController c(p);
+  c.request("stand");
+  run(c, 2.0);
+  // Standing still: gyro noise must not make it turn on the spot.
+  for (int i = 0; i < 200; ++i) {
+    c.setYawRate(0.05);
+    c.update(kDt);
+  }
+  EXPECT_DOUBLE_EQ(c.headingError(), 0.0);
+  EXPECT_EQ(c.mode(), Mode::STAND);
+  // Walking with the IMU gone: plain command.
+  c.clearYawRate();
+  c.setVelocity({0.1, 0.0, 0.0});
+  run(c, 1.0);
+  EXPECT_DOUBLE_EQ(c.gaitVelocity().wz, 0.0);
+  EXPECT_DOUBLE_EQ(c.headingError(), 0.0);
+}

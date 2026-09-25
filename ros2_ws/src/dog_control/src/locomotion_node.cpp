@@ -5,7 +5,7 @@
 //   command        std_msgs/String        "stand" | "lie"
 //   body_pose      geometry_msgs/Vector3  x=roll [rad], y=pitch [rad], z=height offset [m]
 //   estop          std_msgs/Bool          true = limp, requires "stand" after release
-//   imu/data       sensor_msgs/Imu        optional: slope compensation when present
+//   imu/data       sensor_msgs/Imu        optional: slope compensation and heading hold
 // Publishes:
 //   joint_commands sensor_msgs/JointState 12 joint positions [rad]
 //   state          std_msgs/String        current mode, or "estop" (latched)
@@ -82,6 +82,8 @@ public:
 
     imu_sub_ = create_subscription<sensor_msgs::msg::Imu>(
       "imu/data", rclcpp::SensorDataQoS(), [this](sensor_msgs::msg::Imu::ConstSharedPtr msg) {
+        controller_->setYawRate(msg->angular_velocity.z);
+        last_gyro_ = now();
         const auto & q = msg->orientation;
         if (msg->orientation_covariance[0] < 0.0) {return;}  // no orientation in this message
         const double roll = std::atan2(2.0 * (q.w * q.x + q.y * q.z), 1.0 - 2.0 * (q.x * q.x + q.y * q.y));
@@ -89,7 +91,7 @@ public:
         const auto t = now();
         const double dt = imu_seen_ ? std::clamp((t - last_imu_).seconds(), 0.0, 0.2) : 0.0;
         if (!imu_seen_) {
-          RCLCPP_INFO(get_logger(), "IMU data received - slope compensation active");
+          RCLCPP_INFO(get_logger(), "IMU data received - slope compensation and heading hold active");
         }
         imu_seen_ = true;
         last_imu_ = t;
@@ -138,6 +140,11 @@ private:
     p.slope_filter_tau = declare_parameter("slope.filter_tau", p.slope_filter_tau);
     p.slope_max_shift = declare_parameter("slope.max_shift", p.slope_max_shift);
     p.slope_max_deg = declare_parameter("slope.max_deg", p.slope_max_deg);
+    p.heading_hold = declare_parameter("heading.hold", p.heading_hold);
+    p.heading_kp = declare_parameter("heading.kp", p.heading_kp);
+    p.heading_ki = declare_parameter("heading.ki", p.heading_ki);
+    p.heading_max_rate = declare_parameter("heading.max_rate", p.heading_max_rate);
+    p.heading_max_error = declare_parameter("heading.max_error", p.heading_max_error);
 
     p.max_velocity.vx = declare_parameter("limits.max_vx", p.max_velocity.vx);
     p.max_velocity.vy = declare_parameter("limits.max_vy", p.max_velocity.vy);
@@ -160,6 +167,9 @@ private:
       RCLCPP_WARN(get_logger(), "cmd_vel timeout (%.2fs) - stopping", cmd_timeout_);
     }
 
+    if (last_gyro_.nanoseconds() != 0 && (t - last_gyro_).seconds() > 0.2) {
+      controller_->clearYawRate();  // IMU silent: no heading hold on stale data
+    }
     const bool out = controller_->update(dt);
     if (controller_->mode() != last_mode_ || controller_->estopActive() != last_estop_) {
       publishState();
@@ -195,6 +205,7 @@ private:
   bool last_estop_{false};
   bool imu_seen_{false};
   rclcpp::Time last_imu_;
+  rclcpp::Time last_gyro_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_tick_;
   rclcpp::Time last_cmd_vel_;
   sensor_msgs::msg::JointState joint_msg_;

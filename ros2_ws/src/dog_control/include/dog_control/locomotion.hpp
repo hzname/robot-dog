@@ -54,6 +54,14 @@ struct LocomotionParams
   double slope_max_shift{0.04};  // [m]
   double slope_max_deg{25.0};    // ignore readings beyond this (robot falling / lifted)
 
+  // Heading hold from the gyro: the heading error (commanded minus measured
+  // yaw, integrated while walking) is fed back (PI) into the yaw rate of the gait.
+  bool heading_hold{true};
+  double heading_kp{2.5};         // [1/s] yaw-rate correction per radian of error
+  double heading_ki{1.0};         // [1/s^2] integral part: removes the steady drift offset
+  double heading_max_rate{0.3};   // [rad/s] correction limit
+  double heading_max_error{0.5};  // [rad] error clamp (anti-windup: robot blocked)
+
   BodyVelocity max_velocity{0.15, 0.08, 0.6};
   BodyVelocity max_accel{0.5, 0.3, 2.0};
 
@@ -78,6 +86,14 @@ public:
   void setImuAttitude(double roll, double pitch, double dt);
   double slopePitch() const {return slope_pitch_;}
   double slopeRoll() const {return slope_roll_;}
+  /// Measured body yaw rate [rad/s] (gyro z). Call every IMU sample;
+  /// clearYawRate() when the IMU goes silent. Without it there is no hold.
+  void setYawRate(double wz);
+  void clearYawRate() {yaw_rate_valid_ = false;}
+  /// Integrated heading error [rad] (commanded minus measured).
+  double headingError() const {return heading_error_;}
+  /// Twist actually given to the gait (command + heading correction).
+  const BodyVelocity & gaitVelocity() const {return gait_vel_;}
 
   /// Advance the controller. Returns true when joints() should be sent.
   bool update(double dt);
@@ -118,6 +134,11 @@ private:
   bool slope_valid_{false};
   double shift_x_{0.0};  // applied (rate-limited) slope shift [m]
   double shift_y_{0.0};
+  double yaw_rate_{0.0};
+  bool yaw_rate_valid_{false};
+  double heading_error_{0.0};
+  double heading_integral_{0.0};
+  BodyVelocity gait_vel_;
 
   std::array<double, kNumJoints> joints_{};
   int unreachable_{0};

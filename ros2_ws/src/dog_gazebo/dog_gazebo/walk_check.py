@@ -154,7 +154,8 @@ class WalkCheck:
         t = Twist()
         t.linear.x, t.linear.y, t.angular.z = float(vx), float(vy), float(wz)
         tilt = self.spin(seconds, lambda: self.vel.publish(t))
-        tilt = max(tilt, self.spin(1.5))  # coast to a stop
+        # release the stick like an operator: zero twist, then coast to a stop
+        tilt = max(tilt, self.spin(1.5, lambda: self.vel.publish(Twist())))
         p1 = self.odom.pose.pose.position
         d = np.array([p1.x - p0.x, p1.y - p0.y, p1.z - p0.z])
         dx, dy = float(d @ R0[:, 0]), float(d @ R0[:, 1])  # along the body axes (on the slope)

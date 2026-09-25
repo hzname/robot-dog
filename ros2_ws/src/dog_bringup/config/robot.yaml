@@ -50,6 +50,15 @@
       max_shift: 0.04       # [m]
       max_deg: 25.0         # readings beyond this are ignored (falling / lifted)
 
+    # Heading hold from the IMU gyro (only while walking, only with imu/data):
+    # commanded minus measured yaw is integrated and fed back (PI) into the turn rate.
+    heading:
+      hold: true
+      kp: 2.5               # [1/s] correction per radian of heading error
+      ki: 1.0               # [1/s^2] integral part: removes the steady drift offset
+      max_rate: 0.3         # [rad/s] correction limit
+      max_error: 0.5        # [rad] error clamp (robot blocked / held)
+
     # Only used by the URDF generator (visuals, inertia, simulation).
     description:
       body_length: 0.23     # trunk box [m]

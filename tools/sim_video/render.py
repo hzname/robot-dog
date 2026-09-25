@@ -276,6 +276,8 @@ def main():
                 extra = ''
                 if 'ratio' in res:
                     extra = f' {100 * res["ratio"]:.0f}%'
+                    if not ph.startswith('turn') and 'dyaw_deg' in res:
+                        extra += f' · курс {res["dyaw_deg"]:+.0f}°'
                 if res.get('fallen'):
                     extra = ' пропущен'
                 elif res.get('tilt_deg', 0) > 60:

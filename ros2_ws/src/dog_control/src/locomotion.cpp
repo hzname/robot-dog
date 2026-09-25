@@ -119,6 +119,8 @@ void LocomotionController::setEstop(bool active)
     vel_ = BodyVelocity{};
     vel_target_ = BodyVelocity{};
     pose_ = BodyPose{};
+    heading_error_ = 0.0;
+    heading_integral_ = 0.0;
     gait_.reset();
   }
 }
@@ -157,6 +159,14 @@ void LocomotionController::setImuAttitude(double roll, double pitch, double dt)
   } else {
     slope_pitch_ += (gp - slope_pitch_) * k;
     slope_roll_ += (gr - slope_roll_) * k;
+  }
+}
+
+void LocomotionController::setYawRate(double wz)
+{
+  if (std::isfinite(wz)) {
+    yaw_rate_ = wz;
+    yaw_rate_valid_ = true;
   }
 }
 
@@ -214,7 +224,30 @@ bool LocomotionController::update(double dt)
 
     case Mode::STAND:
     case Mode::WALK: {
-      gait_.update(dt, vel_);
+      // Heading hold: only while commanded to move or still stepping, so the
+      // robot never turns on the spot by itself when it stands.
+      gait_vel_ = vel_;
+      const bool moving = gait_.stepping() || std::abs(vel_.vx) > 1e-3 ||
+        std::abs(vel_.vy) > 1e-3 || std::abs(vel_.wz) > 1e-3;
+      if (p_.heading_hold && yaw_rate_valid_ && moving && !pending_lie_) {
+        heading_error_ = std::clamp(heading_error_ + (vel_.wz - yaw_rate_) * dt,
+            -p_.heading_max_error, p_.heading_max_error);
+        const double i_max = p_.heading_ki > 0.0 ? p_.heading_max_rate / p_.heading_ki : 0.0;
+        // The integral is for slow drift on straight lines; during commanded
+        // turns or while catching up a large error it would wind up on the
+        // gait's lag and overshoot.
+        if (std::abs(vel_.wz) < 0.05 && std::abs(heading_error_) < 0.1) {
+          heading_integral_ = std::clamp(heading_integral_ + heading_error_ * dt, -i_max, i_max);
+        } else {
+          heading_integral_ = 0.0;
+        }
+        gait_vel_.wz += std::clamp(p_.heading_kp * heading_error_ + p_.heading_ki * heading_integral_,
+            -p_.heading_max_rate, p_.heading_max_rate);
+      } else {
+        heading_error_ = 0.0;
+        heading_integral_ = 0.0;
+      }
+      gait_.update(dt, gait_vel_);
       mode_ = gait_.stepping() ? Mode::WALK : Mode::STAND;
       height_ = std::clamp(p_.stand_height + pose_.height, p_.min_height, p_.max_height);
       if (pending_lie_ && !gait_.stepping()) {

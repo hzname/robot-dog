@@ -73,7 +73,7 @@ def _setup(context):
     initial = stand_angles(geometry, stand_h)
     urdf = build_urdf(geometry, description, gazebo=True, namespace=NS, initial=initial)
     sim_time = {'use_sim_time': True}
-    overrides = {'slope.compensation': on('slope_compensation')}
+    overrides = {'slope.compensation': on('slope_compensation'), 'heading.hold': on('heading_hold')}
     if cfg('step_height'):
         overrides['gait.step_height'] = float(cfg('step_height'))
 
@@ -121,6 +121,8 @@ def generate_launch_description():
         DeclareLaunchArgument('seed', default_value='0', description='random layout for rough'),
         DeclareLaunchArgument('slope_compensation', default_value='true',
                               description='IMU-based slope compensation in the gait'),
+        DeclareLaunchArgument('heading_hold', default_value='true',
+                              description='hold the heading with the IMU gyro'),
         DeclareLaunchArgument('step_height', default_value='',
                               description='override gait.step_height [m] (robot.yaml by default)'),
         DeclareLaunchArgument('web', default_value='true'),
