@@ -1,0 +1,59 @@
+# PCA9685 servo calibration for servo_driver.
+#
+# Joint angles use the URDF convention (see docs/CALIBRATION.md):
+#   hip   0 = leg vertical, + rolls the foot to the LEFT
+#   thigh 0 = thigh straight down, + swings the foot BACKWARDS
+#   calf  0 = knee straight, negative = knee bent backwards
+#
+# pulse = centre + direction * (angle_deg - offset_deg) * us_per_deg
+#   centre     = (pulse_min_us + pulse_max_us) / 2
+#   us_per_deg = (pulse_max_us - pulse_min_us) / range_deg
+#
+# offset_deg is "the joint angle when the servo sits at its centre pulse".
+# Defaults assume the v1 assembly reference ("all servos centred = half
+# crouch"): thigh 45 deg back, knee bent 90 deg. They MUST be checked on the
+# robot — follow docs/CALIBRATION.md and tune live with
+#   ros2 param set /dog/servo_driver lf_thigh_joint.offset_deg 47.5
+/**/servo_driver:
+  ros__parameters:
+    backend: pca9685            # pca9685 | mock
+    i2c:
+      device: /dev/i2c-0        # v1 production bus on the Banana Pi
+      address: 64               # 0x40
+    pwm:
+      frequency: 50.0
+      oscillator_hz: 25000000.0 # tune if the measured PWM period is off (typ. 25-27 MHz)
+    update_rate: 100.0
+    command_timeout: 0.5        # hold position when commands stop [s]
+    max_joint_speed: 6.0        # slew limit [rad/s]
+    enable_stagger: 0.15        # power legs on one after another [s]
+    relax_on_exit: true         # outputs off when the driver stops
+
+    # Rod drive (тяга): servo_arm_mm = 0 -> servo sits on the joint axis.
+    # servo_arm_mm > 0 -> the servo turns the joint through a rod; also set
+    #   axis_distance_mm  servo axis <-> joint axis            (required)
+    #   joint_arm_mm      lever on the joint (0 = same as servo_arm_mm)
+    #   rod_mm            rod length       (0 = same as axis_distance_mm)
+    # Equal arms + rod = axis distance is a parallelogram (1:1); other lengths
+    # make the transfer nonlinear and the driver inverts it exactly. The servo
+    # arm is assumed perpendicular to the servo-joint line at the centre pulse.
+    # Example, knee servo on the thigh next to the hip:
+    #   lf_calf_joint: {..., servo_arm_mm: 15.0, joint_arm_mm: 20.0, rod_mm: 95.0, axis_distance_mm: 95.0}
+    #
+    # Coupling: if the knee rod is anchored on the BODY (servo in the hip
+    # block), the servo sets knee + thigh. Declare it with
+    #   lf_calf_joint: {..., coupled_to: lf_thigh_joint, coupling: 1.0}
+    #
+    # v1 measured pulse range: 520..2220 us for 180 deg (centre 1370 us).
+    lf_hip_joint:   {channel: 0,  direction:  1, offset_deg:   0.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -40.0, max_deg:  40.0, servo_arm_mm: 0.0}
+    lf_thigh_joint: {channel: 1,  direction:  1, offset_deg:  45.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -45.0, max_deg: 135.0, servo_arm_mm: 0.0}
+    lf_calf_joint:  {channel: 2,  direction:  1, offset_deg: -90.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg: -165.0, max_deg: -15.0, servo_arm_mm: 0.0}
+    rf_hip_joint:   {channel: 3,  direction: -1, offset_deg:   0.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -40.0, max_deg:  40.0, servo_arm_mm: 0.0}
+    rf_thigh_joint: {channel: 4,  direction: -1, offset_deg:  45.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -45.0, max_deg: 135.0, servo_arm_mm: 0.0}
+    rf_calf_joint:  {channel: 5,  direction: -1, offset_deg: -90.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg: -165.0, max_deg: -15.0, servo_arm_mm: 0.0}
+    lr_hip_joint:   {channel: 6,  direction:  1, offset_deg:   0.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -40.0, max_deg:  40.0, servo_arm_mm: 0.0}
+    lr_thigh_joint: {channel: 7,  direction:  1, offset_deg:  45.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -45.0, max_deg: 135.0, servo_arm_mm: 0.0}
+    lr_calf_joint:  {channel: 8,  direction:  1, offset_deg: -90.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg: -165.0, max_deg: -15.0, servo_arm_mm: 0.0}
+    rr_hip_joint:   {channel: 9,  direction: -1, offset_deg:   0.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -40.0, max_deg:  40.0, servo_arm_mm: 0.0}
+    rr_thigh_joint: {channel: 10, direction: -1, offset_deg:  45.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -45.0, max_deg: 135.0, servo_arm_mm: 0.0}
+    rr_calf_joint:  {channel: 11, direction: -1, offset_deg: -90.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg: -165.0, max_deg: -15.0, servo_arm_mm: 0.0}

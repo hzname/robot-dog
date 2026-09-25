@@ -1,0 +1,116 @@
+# Robot Dog 2.0 — single source of truth for geometry and motion.
+# Read by locomotion (ROS parameters) and by the URDF generator (dog_description).
+#
+# ⚠ Link lengths / hip spacing come from v1 servo_config.json and still need to
+#   be measured on the real robot (see docs/HARDWARE.md, "Что измерить на роботе").
+/**:
+  ros__parameters:
+    geometry:
+      hip_offset: 0.055     # abduction axis -> thigh axis, lateral [m]   (v1: hip_mm 55)
+      thigh: 0.105          # thigh axis -> knee axis [m]                  (v1: thigh_mm 105)
+      calf: 0.105           # knee axis -> foot contact [m]                (v1: calf_mm 105)
+      hip_x: 0.09           # abduction axis from body centre, forward [m] (v1: length_mm 180 / 2)
+      hip_y: 0.06           # abduction axis from body centre, lateral [m] (v1: width_mm 120 / 2)
+      knee_direction: -1    # -1: knees point backwards
+
+    stance:
+      stand_height: 0.15    # hip axis above ground when standing [m]
+      lie_height: 0.08      # ... when lying down [m]
+      min_height: 0.10      # body height range reachable from the controls [m]
+      max_height: 0.18
+      foot_offset_x: 0.0    # neutral foot position relative to the hip [m]
+      foot_offset_y: 0.0
+      transition_time: 1.5  # stand up / lie down duration [s]
+      max_roll: 0.26        # [rad] ~15 deg
+      max_pitch: 0.26
+
+    # Tuned in Gazebo with servo speed capped at 6 rad/s (see docs/SIMULATION.md):
+    # duty > 0.5 adds 4-leg support phases that stop the body rocking about the
+    # diagonal; the swing (0.19 s) keeps joint speeds <= ~5.1 rad/s for MG996R.
+    gait:
+      period: 0.55          # full trot cycle [s]
+      duty: 0.65            # stance fraction (0.5 = pure trot, rocks ~15 deg in sim)
+      step_height: 0.02     # swing apex [m]
+      max_step: 0.06        # longest stance stroke [m] -> vx cap 0.17 m/s
+
+    limits:
+      max_vx: 0.15          # [m/s]
+      max_vy: 0.08          # [m/s]
+      max_wz: 0.6           # [rad/s]
+      accel_vx: 0.5         # [m/s^2]
+      accel_vy: 0.3
+      accel_wz: 2.0         # [rad/s^2]
+
+    # IMU slope compensation: used only while imu/data is published (Gazebo,
+    # or a robot with an IMU); feet shift downhill by gain * height * tan(slope).
+    slope:
+      compensation: true
+      gain: 1.0
+      filter_tau: 0.8       # [s] averages out the gait's own rocking
+      max_shift: 0.04       # [m]
+      max_deg: 25.0         # readings beyond this are ignored (falling / lifted)
+
+    # Heading hold from the IMU gyro (only while walking, only with imu/data):
+    # commanded minus measured yaw is integrated and fed back (PI) into the turn rate.
+    heading:
+      hold: true
+      kp: 2.5               # [1/s] correction per radian of heading error
+      ki: 1.0               # [1/s^2] integral part: removes the steady drift offset
+      max_rate: 0.3         # [rad/s] correction limit
+      max_error: 0.5        # [rad] error clamp (robot blocked / held)
+
+    # Perception sensors (docs/HEAD.md). Used by the URDF (frames, Gazebo
+    # sensors) and by dog_perception. Angles: pitch = down from horizontal,
+    # yaw = towards +y (left).
+    sensors:
+      # two single-beam 360 deg lidars (LD19-class) crossed in an X: each scan
+      # plane dips by x_lidar_tilt_deg towards azimuth +-x_lidar_yaw_deg; the
+      # right one dips to the left and vice versa
+      x_lidar: true
+      x_lidar_x: 0.10         # [m] from the body centre
+      x_lidar_y: 0.04         # [m] right one at -y
+      x_lidar_z: 0.05         # [m] beam above the body centre
+      x_lidar_tilt_deg: 30.0
+      x_lidar_yaw_deg: 40.0
+      x_lidar_rate: 10.0      # [Hz]
+      x_lidar_samples: 450    # per revolution (0.8 deg)
+      x_lidar_noise: 0.01     # [m] 1 sigma
+      # VL53L1X ToF sensors: name, position [m], pitch down / yaw [deg]
+      tof: true
+      tof_names: [fl, fr, fc, rc]
+      tof_x: [0.115, 0.115, 0.115, -0.115]
+      tof_y: [0.045, -0.045, 0.0, 0.0]
+      tof_z: [-0.012, -0.012, 0.0, -0.012]
+      tof_pitch_deg: [40.0, 40.0, 20.0, 40.0]
+      tof_yaw_deg: [23.0, -23.0, 0.0, 180.0]
+      tof_rate: 50.0          # [Hz]
+      tof_fov_deg: 27.0
+      tof_noise: 0.003        # [m] 1 sigma (+0.5 % of range)
+
+    # dog_perception (docs/PERCEPTION.md): hazard thresholds, ToF offsets.
+    perception:
+      reference: auto          # ground reference: auto (lidar plane, legs as fallback) | feet
+      threshold: 0.015         # [m] lidar: above / below the floor plane in the foot corridors
+      tof_threshold: [0.015, 0.015, 0.05, 0.015]  # [m] per ToF (fl, fr, fc, rc); FC looks flat and far
+      tof_confirm: 3           # readings in a row (60 ms at 50 Hz)
+      tof_offsets: [0.0, 0.0, 0.0, 0.0]  # [m] measure once on a flat floor, then keep here
+      tof_autocal: false       # never calibrate at every start (a ramp in view becomes an offset)
+      map_size: 3.0            # [m] elevation map window around the robot
+      map_resolution: 0.02     # [m]
+
+    # Only used by the URDF generator (visuals, inertia, simulation).
+    description:
+      body_length: 0.23     # trunk box [m]
+      body_width: 0.10
+      body_height: 0.05
+      body_mass: 0.80       # trunk + electronics + battery + 4 hip servos [kg] (estimate)
+      hip_mass: 0.06        # hip link incl. thigh servo (MG996R 55 g)
+      thigh_mass: 0.08      # thigh incl. knee servo
+      calf_mass: 0.03
+      foot_radius: 0.012
+      servo_effort: 1.1     # [N*m] MG996R ~11 kg*cm @ 6 V
+      servo_velocity: 6.0   # [rad/s] MG996R 0.14 s/60deg @ 6 V no-load, ~6 loaded
+      sim_p_gain: 25.0      # Gazebo joint position loop gain [1/s]
+      hip_limits_deg: [-40.0, 40.0]
+      thigh_limits_deg: [-45.0, 135.0]
+      calf_limits_deg: [-165.0, -15.0]

@@ -1,0 +1,20 @@
+# Optional servo-rail current sensor (INA226 recommended, INA219 with a
+# 10 mOhm shunt also works). Probed at start: if no sensor answers on the
+# listed addresses, power monitoring is simply off. 0x40 is never probed
+# (PCA9685 lives there).
+/**/power_monitor:
+  ros__parameters:
+    backend: auto              # auto (probe I2C) | mock | off
+    i2c:
+      device: /dev/i2c-0
+      addresses: [65, 68, 69]  # 0x41, 0x44, 0x45
+    chip: auto                 # auto | ina226 | ina219
+    shunt_ohm: 0.01            # 10 mOhm: up to ~8 A on INA226 at +-81.9 mV
+    rate: 20.0
+    filter_tau: 0.1            # [s] current smoothing: servo PWM bursts are spiky
+    overcurrent_a: 5.0         # sustained total servo current = stalled leg
+    overcurrent_time: 0.5      # [s]
+    overcurrent_action: estop  # estop | lie | warn
+    undervoltage_v: 5.0        # servo rail [V] (6 V BEC nominal)
+    undervoltage_time: 0.3     # [s]
+    undervoltage_action: lie   # estop | lie | warn

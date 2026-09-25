@@ -1,137 +1,171 @@
-name: ROS2 Build and Test
+name: CI
 
 on:
   push:
-    branches: [ main, master, develop ]
-    paths:
-      - 'robot_dog_ws/**'
+    branches: [main, master]
   pull_request:
-    branches: [ main, master ]
-    paths:
-      - 'robot_dog_ws/**'
+  workflow_dispatch:
 
 jobs:
-  build-python:
-    runs-on: ubuntu-22.04
+  build-test:
+    name: build + test (${{ matrix.distro }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [jazzy, lyrical]
     container:
-      image: ros:humble-ros-base
-    
+      image: ros:${{ matrix.distro }}-ros-base
+    defaults:
+      run:
+        shell: bash
+        working-directory: ros2_ws
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    
-    - name: Setup ROS2
-      run: |
-        apt-get update
-        apt-get install -y python3-pip python3-colcon-common-extensions
-        apt-get install -y ros-humble-robot-state-publisher ros-humble-joint-state-publisher
-        apt-get install -y ros-humble-joint-state-publisher-gui
-        apt-get install -y ros-humble-rviz2
-    
-    - name: Install dependencies
-      run: |
-        pip3 install -r robot_dog_ws/requirements.txt
-    
-    - name: Build Python packages
-      run: |
-        cd robot_dog_ws
-        source /opt/ros/humble/setup.bash
-        colcon build --packages-select dog_control dog_hardware dog_sensors dog_teleop
-    
-    - name: Run tests
-      run: |
-        cd robot_dog_ws
-        source /opt/ros/humble/setup.bash
-        source install/setup.bash
-        colcon test --packages-select dog_control dog_hardware dog_sensors dog_teleop
-        colcon test-result --verbose
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          source /opt/ros/${{ matrix.distro }}/setup.bash
+          colcon build --packages-skip dog_gazebo --event-handlers console_cohesion+
+      - name: Test
+        run: |
+          source /opt/ros/${{ matrix.distro }}/setup.bash
+          colcon test --packages-skip dog_gazebo --event-handlers console_cohesion+
+          colcon test-result --verbose
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-logs-${{ matrix.distro }}
+          path: ros2_ws/log
 
-  build-cmake:
-    runs-on: ubuntu-22.04
+  autocal:
+    name: camera auto-calibration tool
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: tools/autocal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install numpy opencv-contrib-python-headless pytest
+      - run: python -m pytest -q tests
+      - run: python -m robotdog_autocal demo
+
+  robot-setup:
+    name: robot parameter form (tools/robot_setup)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pyyaml pytest
+      - run: python -m pytest -q tools/robot_setup/test
+      - name: The committed config passes the checks
+        run: python tools/robot_setup/robot_setup.py --check
+
+  simulation:
+    name: gazebo walk check (${{ matrix.distro }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [jazzy, lyrical]
     container:
-      image: ros:humble-ros-base
-    
+      image: osrf/ros:${{ matrix.distro }}-simulation
+    defaults:
+      run:
+        shell: bash
+        working-directory: ros2_ws
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    
-    - name: Setup ROS2
-      run: |
-        apt-get update
-        apt-get install -y python3-colcon-common-extensions
-        apt-get install -y ros-humble-robot-state-publisher
-    
-    - name: Build CMake packages
-      run: |
-        cd robot_dog_ws
-        source /opt/ros/humble/setup.bash
-        colcon build --packages-select dog_bringup dog_description
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          source /opt/ros/${{ matrix.distro }}/setup.bash
+          colcon build
+      - name: Walk in Gazebo
+        timeout-minutes: 10
+        run: |
+          source install/setup.bash
+          ros2 launch dog_gazebo sim.launch.py headless:=true web:=false > sim.log 2>&1 &
+          ros2 run dog_gazebo walk_check
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: sim-log-${{ matrix.distro }}
+          path: ros2_ws/sim.log
 
-  build-rust:
-    runs-on: ubuntu-22.04
-    
+  terrain:
+    name: terrain limits (slope / waves / rough)
+    # Positive checks at the recommended limits from docs/TERRAIN.md: every
+    # maneuver must pass on each terrain (no fall, tilt < 20 deg, a share of
+    # the commanded distance: 40 % on the slope, 25 % on stones, 15 % on waves
+    # where walking backwards only creeps).
+    runs-on: ubuntu-24.04
+    container:
+      image: osrf/ros:jazzy-simulation
+    defaults:
+      run:
+        shell: bash
+        working-directory: ros2_ws
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    
-    - name: Install Rust
-      uses: dtolnay/rust-action@stable
-    
-    - name: Build Rust packages
-      run: |
-        cd robot_dog_ws/src/dog_control_rust && cargo build --release
-        cd ../dog_sensors_rust && cargo build --release
-        cd ../dog_hardware_rust && cargo build --release
-        cd ../dog_balance_rust && cargo build --release
-        cd ../dog_teleop_rust && cargo build --release
-    
-    - name: Check Rust formatting
-      run: |
-        rustup component add rustfmt
-        cd robot_dog_ws/src
-        cargo fmt --manifest-path dog_control_rust/Cargo.toml -- --check
-        cargo fmt --manifest-path dog_sensors_rust/Cargo.toml -- --check
-        cargo fmt --manifest-path dog_hardware_rust/Cargo.toml -- --check
-        cargo fmt --manifest-path dog_balance_rust/Cargo.toml -- --check
-        cargo fmt --manifest-path dog_teleop_rust/Cargo.toml -- --check
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon build
+      - name: Slope 10 deg (climb, traverse, turn, descend)
+        timeout-minutes: 8
+        run: |
+          source install/setup.bash
+          ros2 run dog_gazebo terrain_sweep --terrain slope --levels 10 --out slope.json
+      - name: Waves 10 mm
+        timeout-minutes: 8
+        run: |
+          source install/setup.bash
+          ros2 run dog_gazebo terrain_sweep --terrain waves --levels 10 --min-ratio 0.15 --out waves.json
+      - name: Stones 10 mm
+        timeout-minutes: 8
+        run: |
+          source install/setup.bash
+          ros2 run dog_gazebo terrain_sweep --terrain rough --levels 10 --min-ratio 0.25 --out rough.json
+      - name: Perception (X lidars + ToF) - flat, no false alarms
+        timeout-minutes: 8
+        run: |
+          source install/setup.bash
+          ros2 launch dog_gazebo sim.launch.py headless:=true web:=false perception:=true > perc_flat.log 2>&1 &
+          ros2 run dog_gazebo perception_check --terrain flat --seconds 12 --expect > perception_flat.txt
+          kill %1; sleep 3
+      - name: Perception - steps 30 mm, every hazard in the path found
+        timeout-minutes: 8
+        run: |
+          source install/setup.bash
+          ros2 launch dog_gazebo sim.launch.py headless:=true web:=false perception:=true terrain:=steps level:=30 > perc_steps.log 2>&1 &
+          ros2 run dog_gazebo perception_check --terrain steps --level 30 --seconds 30 --expect > perception_steps.txt
+          kill %1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: terrain-results
+          path: |
+            ros2_ws/*.json
+            ros2_ws/perception_*.txt
 
-  lint-python:
-    runs-on: ubuntu-22.04
-    
+  robot-image:
+    name: robot image (arm64)
+    # Emulated arm64 C++ build is slow; run on main and on demand only.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    
-    - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-    
-    - name: Install linters
-      run: |
-        pip install flake8 pylint black
-    
-    - name: Run flake8
-      run: |
-        cd robot_dog_ws
-        flake8 src --count --select=E9,F63,F7,F82 --show-source --statistics || true
-    
-    - name: Check formatting with black
-      run: |
-        cd robot_dog_ws
-        black --check src || true
-
-  security-audit:
-    runs-on: ubuntu-22.04
-    
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    
-    - name: Security audit for Rust
-      run: |
-        rustup update
-        cargo install cargo-audit
-        cd robot_dog_ws/src
-        cargo audit --manifest-path dog_control_rust/Cargo.toml || true
-        cargo audit --manifest-path dog_sensors_rust/Cargo.toml || true
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Build docker/Dockerfile for linux/arm64
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/arm64
+          push: false
+          build-args: BUILD_JOBS=4

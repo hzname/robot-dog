@@ -1,0 +1,2 @@
+numpy>=1.24
+opencv-contrib-python>=4.6   # ArUco; on a headless machine: opencv-contrib-python-headless

@@ -1,0 +1,48 @@
+# Teleop settings shared by joy_teleop, keyboard_teleop and web_teleop.
+# Speed limits should not exceed limits.* in robot.yaml (locomotion clamps anyway).
+/**:
+  ros__parameters:
+    max_vx: 0.15
+    max_vy: 0.08
+    max_wz: 0.6
+    max_pitch: 0.26
+    min_height: -0.05     # body height offset range [m]
+    max_height: 0.03
+
+/**/gamepad:
+  ros__parameters:
+    device: /dev/input/js0
+    publish_rate: 20.0
+
+# Default: Xbox-style pad on the Linux xpad driver (axes/buttons after the
+# ROS joy convention: left/up = +1). For PlayStation pads use
+# teleop_ps.yaml. Check your indices with `ros2 topic echo /dog/joy`.
+/**/joy_teleop:
+  ros__parameters:
+    axis_vx: 1          # left stick up/down
+    axis_vy: 0          # left stick left/right
+    axis_wz: 3          # right stick left/right
+    axis_pitch: 4       # right stick up/down
+    axis_height: 7      # d-pad up/down
+    button_deadman: 4   # LB  (hold to move)
+    button_turbo: 5     # RB  (hold for full speed)
+    button_stand: 0     # A
+    button_lie: 1       # B
+    button_estop: 6     # Back / View
+    button_release: 7   # Start / Menu
+    deadzone: 0.08
+    normal_scale: 0.5
+    height_step: 0.01
+    joy_timeout: 0.5
+
+/**/keyboard_teleop:
+  ros__parameters:
+    step_v: 0.03
+    step_w: 0.15
+    step_h: 0.01
+
+/**/web_teleop:
+  ros__parameters:
+    host: 0.0.0.0
+    port: 8080
+    drive_timeout: 0.4

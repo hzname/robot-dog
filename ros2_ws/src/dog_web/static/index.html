@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#111418">
+<title>Robot Dog 2.0</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="brand">🐕 Robot Dog <small>2.0</small></div>
+  <div class="status">
+    <span id="conn" class="pill off">нет связи</span>
+    <span id="power" class="pill" hidden></span>
+    <span id="mode" class="pill">—</span>
+  </div>
+</header>
+
+<main>
+  <section class="actions">
+    <button id="estop" class="estop">E-STOP</button>
+    <button id="release" class="ghost">Снять E-STOP</button>
+    <button id="stand">Встать</button>
+    <button id="lie">Лечь</button>
+  </section>
+
+  <section class="pads">
+    <div class="pad-wrap">
+      <div class="pad" id="pad-move"><div class="knob"></div></div>
+      <label>Движение</label>
+    </div>
+    <div class="readout" id="readout">vx 0.00 · vy 0.00 · wz 0.00</div>
+    <div class="pad-wrap">
+      <div class="pad" id="pad-turn"><div class="knob"></div></div>
+      <label>Поворот / наклон</label>
+    </div>
+  </section>
+
+  <section class="sliders">
+    <label>Скорость <output id="speed-out">50%</output>
+      <input id="speed" type="range" min="10" max="100" value="50">
+    </label>
+    <label>Высота <output id="height-out">0 мм</output>
+      <input id="height" type="range" min="-50" max="30" step="5" value="0">
+    </label>
+  </section>
+
+  <details class="help">
+    <summary>Клавиатура и геймпад</summary>
+    <table>
+      <tr><td><kbd>W</kbd><kbd>S</kbd> / <kbd>↑</kbd><kbd>↓</kbd></td><td>вперёд / назад (держать)</td></tr>
+      <tr><td><kbd>A</kbd><kbd>D</kbd></td><td>шаг влево / вправо</td></tr>
+      <tr><td><kbd>Q</kbd><kbd>E</kbd> / <kbd>←</kbd><kbd>→</kbd></td><td>поворот</td></tr>
+      <tr><td><kbd>Shift</kbd></td><td>полная скорость</td></tr>
+      <tr><td><kbd>1</kbd> / <kbd>2</kbd></td><td>встать / лечь</td></tr>
+      <tr><td><kbd>Esc</kbd> / <kbd>X</kbd></td><td>E-STOP</td></tr>
+      <tr><td><kbd>R</kbd></td><td>снять E-STOP</td></tr>
+      <tr><td>Геймпад</td><td>держать LB/L1 и двигать стиками; A — встать, B — лечь, Back — E-STOP, Start — снять</td></tr>
+    </table>
+  </details>
+  <p id="error" class="error" hidden></p>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
