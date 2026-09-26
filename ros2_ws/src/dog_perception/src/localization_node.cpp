@@ -109,7 +109,7 @@ public:
     reloc_clear_ = getD("localization.reloc_clear", 0.7);
     verify_distance_ = getD("localization.verify_distance", 3.0);
     reloc_min_fit_ = getD("localization.reloc_min_fit", 0.6);
-    reloc_ambiguity_ = getD("localization.reloc_ambiguity", 0.85);
+    reloc_ambiguity_ = getD("localization.reloc_ambiguity", 0.92);
     debug_dump_ = declare_parameter("localization.debug_dump", std::string(""));
     reloc_min_points_ = getI("localization.reloc_min_points", 400);
     match_.prior_xy = getD("localization.prior_xy", match_.prior_xy);
@@ -606,7 +606,7 @@ private:
   double reloc_radius_{8.0}, reloc_clear_{0.7}, verify_distance_{3.0}, verify_from_{0.0};
   int verify_fails_{0};
   int reloc_min_points_{400}, reloc_tries_{0};
-  double reloc_min_fit_{0.6}, reloc_ambiguity_{0.85};
+  double reloc_min_fit_{0.6}, reloc_ambiguity_{0.92};
   double tracking_since_{-1.0}, last_scan_t_{0.0};
   std::string debug_dump_;
   std::vector<rclcpp::SubscriptionBase::SharedPtr> subs_;
