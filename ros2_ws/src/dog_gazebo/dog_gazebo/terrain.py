@@ -44,9 +44,24 @@ HEADER = '''<?xml version="1.0"?>
 FOOTER = '''  </world>
 </sdf>
 '''
+KINDS = ('flat', 'slope', 'waves', 'rough', 'steps', 'wall', 'stairs', 'bar', 'block')
 RAMP_START = 0.25  # [m] start of the ramp in the slope world
 RAMP_LENGTH = 3.0
 STEP_DOWN_X, STEP_UP_X = 2.2, 3.0  # steps world
+WALL_X = 1.2  # wall world: near face of a block across the path
+# stairs world: three steps up (riser = level mm, tread 0.30 m), a landing,
+# three steps down
+STAIRS_UP = (0.8, 1.1, 1.4)
+STAIRS_DOWN = (2.3, 2.6, 2.9)
+BAR_X, BAR_DEPTH = 1.0, 0.04    # bar world: a bar across the path, level mm high
+BLOCK_X, BLOCK_SIZE = 1.0, (0.20, 0.20)  # block world: too tall, narrow: go round it
+
+
+def stairs_height(level, x):
+    """Ground height of the stairs world at x."""
+    h = level / 1000.0
+    n = sum(x >= e for e in STAIRS_UP) - sum(x >= e for e in STAIRS_DOWN)
+    return n * h
 STONES = ((0.80, 0.13), (1.40, -0.13))  # steps world: (x of the near edge, y) of 20 mm stones
 SURFACE = '<surface><friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction></surface>'
 
@@ -102,6 +117,14 @@ def obstacles(kind, level, seed=0):
         for x, y in STONES:
             out.append({'shape': 'box', 'x': x + 0.03, 'y': y, 'z': h + 0.01, 'size': (0.06, 0.14, 0.02),
                         'yaw': 0.0})
+    elif kind == 'bar':  # a bar across the path: step over it in the crawl
+        out.append({'shape': 'box', 'x': BAR_X + BAR_DEPTH / 2, 'y': 0.0, 'z': h / 2, 'size': (BAR_DEPTH, 1.6, h),
+                    'yaw': 0.0})
+    elif kind == 'block':  # too tall and narrow: go round it
+        sx, sy = BLOCK_SIZE
+        out.append({'shape': 'box', 'x': BLOCK_X + sx / 2, 'y': 0.0, 'z': h / 2, 'size': (sx, sy, h), 'yaw': 0.0})
+    elif kind == 'wall':  # a block too tall to step over (level = height in mm)
+        out.append({'shape': 'box', 'x': WALL_X + 0.05, 'y': 0.0, 'z': h / 2, 'size': (0.10, 0.80, h), 'yaw': 0.0})
     elif kind == 'rough':
         rng = random.Random(seed)
         while len(out) < 260:
@@ -117,8 +140,8 @@ def obstacles(kind, level, seed=0):
 
 def world(kind='flat', level=0.0, seed=0):
     """SDF text of a test world."""
-    if kind not in ('flat', 'slope', 'waves', 'rough', 'steps'):
-        raise ValueError(f'unknown terrain {kind!r} (flat, slope, waves, rough, steps)')
+    if kind not in KINDS:
+        raise ValueError(f'unknown terrain {kind!r} ({", ".join(KINDS)})')
     parts = [HEADER, _ground()]
     if kind == 'slope':
         th = math.radians(level)
@@ -128,6 +151,14 @@ def world(kind='flat', level=0.0, seed=0):
             cx = RAMP_START + 0.5 * L * math.cos(th) + 0.5 * T * math.sin(th)
             cz = 0.5 * L * math.sin(th) - 0.5 * T * math.cos(th)
             parts.append(_box('ramp', (cx, 0, cz, 0, -th, 0), (L, 4.0, T), '0.65 0.62 0.55 1'))
+    if kind == 'stairs' and level > 0:
+        h = level / 1000.0
+        edges = sorted(STAIRS_UP + STAIRS_DOWN) + [STAIRS_DOWN[-1] + 1.0]
+        for k in range(len(edges) - 1):
+            z = stairs_height(level, edges[k])
+            if z > 0:
+                parts.append(_box(f'stair{k}', ((edges[k] + edges[k + 1]) / 2, 0, z / 2, 0, 0, 0),
+                                  (edges[k + 1] - edges[k], 3.0, z), '0.62 0.62 0.66 1'))
     if kind == 'steps' and level > 0:
         h = level / 1000.0
         parts.append(_box('platform1', ((-1.0 + STEP_DOWN_X) / 2, 0, h / 2, 0, 0, 0),
@@ -180,6 +211,8 @@ def surface(kind, level, x):
     if kind == 'steps' and level > 0:
         h = level / 1000.0
         return (h if x < STEP_DOWN_X or x >= STEP_UP_X else 0.0), (0.0, 0.0, 1.0)
+    if kind == 'stairs' and level > 0:
+        return stairs_height(level, x), (0.0, 0.0, 1.0)
     if kind == 'slope' and level > 0 and x > RAMP_START:
         th = math.radians(level)
         return (x - RAMP_START) * math.tan(th), (-math.sin(th), 0.0, math.cos(th))

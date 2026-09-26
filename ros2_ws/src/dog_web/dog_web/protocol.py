@@ -3,18 +3,24 @@
 Client -> server (JSON text frames):
   {"type": "drive", "vx": -1..1, "vy": -1..1, "wz": -1..1}   normalized, >= 10 Hz while moving
   {"type": "stop"}
-  {"type": "command", "name": "stand" | "lie"}
+  {"type": "command", "name": "stand" | "lie" | "greet" | "crawl" | "trot"}
   {"type": "estop", "active": true | false}
   {"type": "pose", "pitch": -1..1, "height": <metres offset>}
 Server -> client:
   {"type": "hello", "limits": {...}}
   {"type": "state", "mode": "...", "estop": bool, "clients": n}
   {"type": "power", "voltage": V, "current": A}      only when a current sensor is fitted
+  {"type": "guard", "state": "clear|caution|step_over|crawl|stop|avoid", "d": m | null}
+                                                      only with dog_perception running
 """
 
 import json
 import math
 from dataclasses import dataclass, field
+
+# locomotion_node commands the page may send (greet: sit, paws up, wave;
+# crawl / trot: the operator's gait)
+COMMANDS = ('stand', 'lie', 'greet', 'crawl', 'trot')
 
 
 @dataclass
@@ -62,8 +68,8 @@ def handle_message(text: str, limits: Limits) -> Actions:
             out.twist = (0.0, 0.0, 0.0)
         elif kind == 'command':
             name = msg.get('name')
-            if name not in ('stand', 'lie'):
-                raise ValueError('command must be "stand" or "lie"')
+            if name not in COMMANDS:
+                raise ValueError('command must be one of ' + ', '.join(COMMANDS))
             out.command = name
             out.twist = (0.0, 0.0, 0.0)
         elif kind == 'estop':
@@ -112,6 +118,18 @@ def hello(limits: Limits) -> str:
 
 def state(mode: str, estop: bool, clients: int) -> str:
     return json.dumps({'type': 'state', 'mode': mode, 'estop': estop, 'clients': clients})
+
+
+GUARD_STATES = ('clear', 'caution', 'step_over', 'crawl', 'stop', 'avoid')
+
+
+def guard(raw: str) -> str:
+    """perception/guard JSON -> the web message (only what the page shows)."""
+    g = json.loads(raw)
+    state = g.get('state') if g.get('state') in GUARD_STATES else 'clear'
+    d = g.get('d')
+    return json.dumps({'type': 'guard', 'state': state,
+                       'd': round(float(d), 2) if isinstance(d, (int, float)) else None})
 
 
 def power(voltage: float, current: float) -> str:

@@ -42,7 +42,7 @@ def _bridge_config(sensors=None):
     ]
     for frame, kind, _, _ in sensor_frames(sensors):
         # lidars straight to their ROS topic, ToF cones to tof_bridge
-        ros = f'/{NS}/{frame}/scan' if kind == 'lidar' else sim_sensor_topic(NS, frame)
+        ros = f'/{NS}/{frame}/scan' if kind in ('lidar', 'gs2') else sim_sensor_topic(NS, frame)
         entries.append({'ros_topic_name': ros, 'gz_topic_name': sim_sensor_topic(NS, frame),
                         'ros_type_name': 'sensor_msgs/msg/LaserScan', 'gz_type_name': 'gz.msgs.LaserScan',
                         'direction': 'GZ_TO_ROS'})
@@ -113,7 +113,9 @@ def _setup(context):
         actions.append(Node(package='dog_perception', executable='perception_node', name='perception',
                             namespace=NS, output='screen',
                             parameters=[robot_yaml, sim_time,
-                                        {'perception.reference': cfg('perception_reference')}]
+                                        {'perception.reference': cfg('perception_reference'),
+                                         'perception.guard': on('guard'),
+                                         'perception.debug_topics': True}]
                             + ([{'perception.threshold': float(cfg('perception_threshold'))}]
                                if cfg('perception_threshold') else [])
                             + ([{'perception.tof_threshold': [float(v) for v in cfg('tof_threshold').split(',')]}]
@@ -137,7 +139,7 @@ def generate_launch_description():
         DeclareLaunchArgument('world', default_value='', description='SDF world (default: flat)'),
         DeclareLaunchArgument('spawn_z', default_value='0.25', description='spawn height [m]'),
         DeclareLaunchArgument('terrain', default_value='flat',
-                              description='flat | slope (level = deg) | waves | rough (level = mm)'),
+                              description='flat | slope (level = deg) | waves | rough | steps | wall (level = mm)'),
         DeclareLaunchArgument('level', default_value='0', description='slope angle or obstacle height'),
         DeclareLaunchArgument('seed', default_value='0', description='random layout for rough'),
         DeclareLaunchArgument('slope_compensation', default_value='true',
@@ -154,6 +156,8 @@ def generate_launch_description():
                               description='lidar hazard threshold [m] (default 0.02)'),
         DeclareLaunchArgument('tof_threshold', default_value='',
                               description='ToF thresholds [m], comma separated per sensor (fl,fr,fc,rc)'),
+        DeclareLaunchArgument('guard', default_value='true',
+                              description='with perception: slow down / step high / stop at hazards'),
         DeclareLaunchArgument('web', default_value='true'),
         DeclareLaunchArgument('gamepad', default_value='false'),
         OpaqueFunction(function=_setup),

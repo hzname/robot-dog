@@ -22,6 +22,16 @@ function connect() {
     if (msg.type === 'hello') limits = msg.limits;
     else if (msg.type === 'state') setMode(msg.mode);
     else if (msg.type === 'error') showError(msg.message);
+    else if (msg.type === 'guard') {
+      const el = $('guard');
+      const text = {
+        caution: 'препятствие — медленно', step_over: 'перешагивает', crawl: 'ступень — на трёх опорах',
+        stop: 'стоп: препятствие впереди', avoid: 'обходит препятствие',
+      };
+      el.hidden = msg.state === 'clear';
+      el.textContent = text[msg.state] || '';
+      el.className = 'pill ' + (msg.state === 'stop' ? 'estop' : '');
+    }
     else if (msg.type === 'power') {
       const el = $('power');
       el.hidden = false;
@@ -40,7 +50,7 @@ function setConn(on) {
 }
 const MODE_RU = {
   passive: 'выключен', standing_up: 'встаёт', stand: 'стоит', walk: 'идёт',
-  lying_down: 'ложится', lying: 'лежит', estop: 'E-STOP', unknown: '—',
+  lying_down: 'ложится', lying: 'лежит', greeting: 'здоровается', estop: 'E-STOP', unknown: '—',
 };
 function setMode(mode) {
   const el = $('mode');
@@ -60,6 +70,13 @@ $('estop').addEventListener('click', estop);
 $('release').addEventListener('click', () => send({ type: 'estop', active: false }));
 $('stand').addEventListener('click', () => send({ type: 'command', name: 'stand' }));
 $('lie').addEventListener('click', () => send({ type: 'command', name: 'lie' }));
+$('greet').addEventListener('click', () => send({ type: 'command', name: 'greet' }));
+let crawl = false;  // the operator's gait (the guard may still choose the crawl by itself)
+$('gait').addEventListener('click', () => {
+  crawl = !crawl;
+  send({ type: 'command', name: crawl ? 'crawl' : 'trot' });
+  $('gait').textContent = crawl ? 'Рысью' : 'Ползком';
+});
 
 const speed = $('speed');
 speed.addEventListener('input', () => { $('speed-out').textContent = speed.value + '%'; });
@@ -117,6 +134,7 @@ window.addEventListener('keydown', (ev) => {
   if (ev.code === 'KeyR') send({ type: 'estop', active: false });
   else if (ev.code === 'Digit1') send({ type: 'command', name: 'stand' });
   else if (ev.code === 'Digit2') send({ type: 'command', name: 'lie' });
+  else if (ev.code === 'Digit3') send({ type: 'command', name: 'greet' });
   if (KEYMAP[ev.code]) { keys.add(KEYMAP[ev.code]); ev.preventDefault(); }
   if (ev.key === 'Shift') keys.add('turbo');
 });
@@ -129,7 +147,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) keys.
 
 // ---------------------------------------------------------- browser gamepad
 // Standard mapping: axes 0/1 left stick, 2/3 right stick (down = +),
-// buttons 0 A, 1 B, 4 LB (deadman), 5 RB (turbo), 8 Back, 9 Start.
+// buttons 0 A, 1 B, 3 Y (greet), 4 LB (deadman), 5 RB (turbo), 8 Back, 9 Start.
 const padPrev = {};
 function readGamepad() {
   const gp = [...(navigator.getGamepads ? navigator.getGamepads() : [])].find((g) => g && g.connected);
@@ -140,6 +158,7 @@ function readGamepad() {
   if (edge(9)) send({ type: 'estop', active: false });
   if (edge(0)) send({ type: 'command', name: 'stand' });
   if (edge(1)) send({ type: 'command', name: 'lie' });
+  if (edge(3)) send({ type: 'command', name: 'greet' });  // Y
   if (!b(4)) return null;
   const dz = (v) => (Math.abs(v) < 0.08 ? 0 : v);
   return { vx: -dz(gp.axes[1]), vy: -dz(gp.axes[0]), wz: -dz(gp.axes[2]), pitch: dz(gp.axes[3]), turbo: b(5) };

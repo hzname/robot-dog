@@ -45,8 +45,10 @@ def _setup(context):
     actions = [
         Node(package='robot_state_publisher', executable='robot_state_publisher',
              namespace=NS, parameters=[{'robot_description': urdf}]),
+        # odom: dead-reckoned by locomotion (there is no odometry sensor); the
+        # perception guard and map need a pose
         Node(package='dog_control', executable='locomotion_node', name='locomotion',
-             namespace=NS, parameters=[robot_yaml], output='screen'),
+             namespace=NS, parameters=[robot_yaml, {'odom.publish': True}], output='screen'),
         Node(package='dog_hardware', executable='servo_driver_node', name='servo_driver',
              namespace=NS, parameters=[servos_yaml, {'backend': cfg('backend')}],
              output='screen'),
@@ -59,6 +61,13 @@ def _setup(context):
         actions.append(
             Node(package='dog_hardware', executable='imu_node', name='imu',
                  namespace=NS, parameters=[imu_yaml, {'backend': imu_backend}], output='screen'))
+    if on('perception'):
+        # lidars / GS2 / VL53L1X drivers publish lidar_left/scan, lidar_right/scan,
+        # gs2/scan, tof/<name> (DEPLOYMENT.md, stage 14); the guard slows / stops
+        # the gait at hazards
+        actions.append(
+            Node(package='dog_perception', executable='perception_node', name='perception',
+                 namespace=NS, parameters=[robot_yaml], output='screen'))
     if on('gamepad'):
         actions += [
             Node(package='dog_teleop', executable='gamepad_node', name='gamepad',
@@ -95,6 +104,8 @@ def generate_launch_description():
         DeclareLaunchArgument('imu', default_value='',
                               description='IMU (MPU6050): auto (probe I2C), mock or off; '
                                           'default auto on the robot, off with backend:=mock'),
+        DeclareLaunchArgument('perception', default_value='false',
+                              description='terrain perception + hazard guard (needs the sensor drivers)'),
         DeclareLaunchArgument('robot_config', default_value='',
                               description='override path to robot.yaml'),
         DeclareLaunchArgument('servo_config', default_value='',

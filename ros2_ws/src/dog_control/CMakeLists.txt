@@ -11,6 +11,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 
@@ -18,6 +19,8 @@ find_package(std_msgs REQUIRED)
 add_library(dog_control_core
   src/kinematics.cpp
   src/gait.cpp
+  src/crawl.cpp
+  src/greet.cpp
   src/locomotion.cpp)
 target_include_directories(dog_control_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -29,6 +32,7 @@ target_link_libraries(locomotion_node
   dog_control_core
   rclcpp::rclcpp
   ${geometry_msgs_TARGETS}
+  ${nav_msgs_TARGETS}
   ${sensor_msgs_TARGETS}
   ${std_msgs_TARGETS})
 
@@ -39,7 +43,7 @@ install(DIRECTORY include/ DESTINATION include)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
-  foreach(t kinematics gait locomotion)
+  foreach(t kinematics gait crawl greet locomotion)
     ament_add_gtest(test_${t} test/test_${t}.cpp)
     target_link_libraries(test_${t} dog_control_core)
   endforeach()

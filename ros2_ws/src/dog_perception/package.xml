@@ -2,18 +2,28 @@
 <package format="3">
   <name>dog_perception</name>
   <version>2.0.0</version>
-  <description>Terrain perception: crossed (X) single-beam lidars and VL53L1X ToF sensors -
-    ground plane, elevation map, obstacle / step detection ahead of the feet.</description>
+  <description>Terrain perception: crossed (X) single-beam lidars, GS2 line lidar and VL53L1X ToF
+    sensors - ground plane, elevation map, obstacle / step detection ahead of the feet, and the
+    hazard guard (speed limit, per-leg swing height, stop) for locomotion. C++ node; a numpy twin
+    of the core for offline tools.</description>
   <maintainer email="hzname@example.com">hzname</maintainer>
   <license>MIT</license>
-  <exec_depend>rclpy</exec_depend>
-  <exec_depend>std_msgs</exec_depend>
-  <exec_depend>sensor_msgs</exec_depend>
-  <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>nav_msgs</exec_depend>
-  <exec_depend>python3-numpy</exec_depend>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>python3-numpy</test_depend>
   <test_depend>python3-pytest</test_depend>
+
   <export>
-    <build_type>ament_python</build_type>
+    <build_type>ament_cmake</build_type>
   </export>
 </package>

@@ -3,19 +3,27 @@
 //
 //   PASSIVE --stand--> STANDING_UP --> STAND <--twist--> WALK
 //   STAND/WALK --lie--> LYING_DOWN --> LYING --stand--> STANDING_UP
+//   STAND --greet--> GREETING (sit, paws up, wave, back up) --> STAND
 //   any --estop--> PASSIVE (no joint output until "stand" after release)
 #pragma once
 
 #include <array>
+#include <limits>
 #include <string>
 
+#include "dog_control/crawl.hpp"
 #include "dog_control/gait.hpp"
+#include "dog_control/greet.hpp"
 #include "dog_control/kinematics.hpp"
 
 namespace dog_control
 {
 
-enum class Mode { PASSIVE, STANDING_UP, STAND, WALK, LYING_DOWN, LYING };
+enum class Mode { PASSIVE, STANDING_UP, STAND, WALK, LYING_DOWN, LYING, GREETING };
+
+/// TROT: the normal gait. CRAWL: three feet down at any time, slow, follows
+/// the terrain profile (steps, stairs, high bars) - see crawl.hpp.
+enum class GaitType { TROT, CRAWL };
 
 const char * modeName(Mode m);
 
@@ -61,11 +69,18 @@ struct LocomotionParams
   double heading_ki{1.0};         // [1/s^2] integral part: removes the steady drift offset
   double heading_max_rate{0.3};   // [rad/s] correction limit
   double heading_max_error{0.5};  // [rad] error clamp (anti-windup: robot blocked)
+  // The crawl turns only through its stance feet, slowly and with a lag of a
+  // whole cycle: the trot's gains make it swing from side to side.
+  double heading_crawl_kp{1.0};
+  double heading_crawl_ki{0.2};
+  double heading_crawl_max_rate{0.08};
 
   BodyVelocity max_velocity{0.15, 0.08, 0.6};
   BodyVelocity max_accel{0.5, 0.3, 2.0};
 
   GaitParams gait;
+  CrawlParams crawl;
+  GreetParams greet;
 };
 
 class LocomotionController
@@ -73,7 +88,8 @@ class LocomotionController
 public:
   explicit LocomotionController(const LocomotionParams & params);
 
-  /// Mode request: "stand" or "lie". Returns false if rejected.
+  /// Mode request: "stand", "lie", "greet" (from STAND, standing still in the
+  /// trot), or the gait: "crawl" / "trot". Returns false if rejected.
   bool request(const std::string & cmd);
   void setEstop(bool active);
   bool estopActive() const {return estop_;}
@@ -89,9 +105,35 @@ public:
   /// Measured body yaw rate [rad/s] (gyro z). Call every IMU sample;
   /// clearYawRate() when the IMU goes silent. Without it there is no hold.
   void setYawRate(double wz);
-  void clearYawRate() {yaw_rate_valid_ = false;}
+  /// Same with the rate integrated over the sample interval dt [s] (the IMU
+  /// stamps): the hold then sees every sample, also when the IMU runs faster
+  /// than the control loop - short yaw jerks (a foot slipping) fall between
+  /// the loop's ticks, and sampling the latest rate alone would miss them.
+  void addYawRate(double wz, double dt);
+  void clearYawRate() {yaw_rate_valid_ = false; yaw_turned_ = 0.0; yaw_turned_dt_ = 0.0;}
   /// Integrated heading error [rad] (commanded minus measured).
   double headingError() const {return heading_error_;}
+  /// Hazard guard from perception: forward speed limit [m/s] (inf = none)
+  /// and swing height per leg (LF, RF, LR, RR) [m] (NaN = gait.step_height):
+  /// only the legs whose path crosses the obstacle lift higher. clearGuard()
+  /// when the guard goes silent. Backwards, sideways and turning stay free.
+  void setGuard(double max_vx, const std::array<double, kNumLegs> & step_heights);
+  /// Guard extras: gait to use and a sideways velocity [m/s] added while the
+  /// operator walks forward (going round an obstacle).
+  void setGuardGait(GaitType gait, double vy_bias);
+  /// Gait wanted by the operator (the guard may ask for CRAWL on top).
+  void requestGait(GaitType gait) {operator_gait_ = gait;}
+  GaitType gaitType() const {return gait_type_;}
+  /// Ground heights along the foot lines for the crawl gait.
+  void setTerrain(const TerrainProfile & t) {terrain_ = t;}
+  void clearTerrain() {terrain_ = TerrainProfile();}
+  /// Height of the ground under the body above where the crawl started [m]
+  /// (0 in the trot): the body climbs with it.
+  double baseHeight() const {return gait_type_ == GaitType::CRAWL ? crawl_.baseHeight() : 0.0;}
+  const CrawlGait & crawl() const {return crawl_;}
+  void clearGuard();
+  double guardMaxVx() const {return guard_vx_;}
+  double stepHeight(int leg) const {return gait_.stepHeight(leg);}
   /// Twist actually given to the gait (command + heading correction).
   const BodyVelocity & gaitVelocity() const {return gait_vel_;}
 
@@ -112,10 +154,22 @@ public:
 
 private:
   void solve(double height, const BodyPose & pose);
+  /// Feet relative to the body centre in the yaw-aligned ground frame -> joints.
+  void solveRelative(const std::array<Vec3, kNumLegs> & g, const BodyPose & pose);
+  bool activeGaitStepping() const;
+  bool feetLevel() const;
+  std::array<Vec3, kNumLegs> activeFeet() const;
   void startTransition(Mode next, double from_height, double to_height);
 
   LocomotionParams p_;
   TrotGait gait_;
+  CrawlGait crawl_;
+  GreetSequence greet_;
+  GaitType gait_type_{GaitType::TROT};
+  GaitType operator_gait_{GaitType::TROT};
+  GaitType guard_gait_{GaitType::TROT};
+  double guard_vy_{0.0};
+  TerrainProfile terrain_;
   Mode mode_{Mode::PASSIVE};
   bool estop_{false};
   bool pending_lie_{false};
@@ -136,9 +190,12 @@ private:
   double shift_y_{0.0};
   double yaw_rate_{0.0};
   bool yaw_rate_valid_{false};
+  double yaw_turned_{0.0}, yaw_turned_dt_{0.0};  // gyro integrated since the last update
   double heading_error_{0.0};
   double heading_integral_{0.0};
   BodyVelocity gait_vel_;
+  double guard_vx_{std::numeric_limits<double>::infinity()};
+  std::array<double, kNumLegs> guard_step_{};  // NaN = configured step height
 
   std::array<double, kNumJoints> joints_{};
   int unreachable_{0};

@@ -11,5 +11,6 @@
     button_turbo: 5     # R1
     button_stand: 0     # Cross
     button_lie: 1       # Circle
+    button_greet: 2     # Triangle (greeting)
     button_estop: 8     # Share / Create
     button_release: 9   # Options

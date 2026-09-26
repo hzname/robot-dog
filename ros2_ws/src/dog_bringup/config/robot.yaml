@@ -33,6 +33,31 @@
       step_height: 0.02     # swing apex [m]
       max_step: 0.06        # longest stance stroke [m] -> vx cap 0.17 m/s
 
+    # Crawl: three feet down at any time, for steps, stairs and high bars
+    # (25-70 mm); chosen by the perception guard or with the "crawl" command.
+    crawl:
+      shift_time: 0.45      # body over the support triangle before each leg lifts [s]
+      swing_time: 0.65      # one leg in the air [s]
+      max_stride: 0.10      # [m] per cycle of four legs -> 0.011 m/s
+      clearance: 0.03       # [m] swing clears the terrain by this
+      max_lift: 0.10        # [m] highest swing above the higher foothold
+      shift_rate: 0.06      # [m/s] body shift over the support: slow - all four legs move
+      shift_accel: 0.3      # [m/s^2]  together, and a lagging servo drags the others' feet
+      max_pitch: 0.15       # [rad] body pitched along the stairs (legs near their working height)
+
+    # Greeting ("greet" command, from standing): kneels on the rear knees
+    # (calves flat on the ground: knees + rear feet are the support), front
+    # paws up, waves, stands up again (~30 s). Sitting on the rear edge of the
+    # body is impossible with knees that bend backwards (GAITS.md). The knees
+    # touch the ground: nothing on them that must not (a rod end, a horn).
+    greet:
+      rear_x: -0.03         # [m] rear feet step forward to here (from the body centre)
+      sit_deg: 20.0         # nose up when the front paws lift (front feet reach the ground)
+      beg_deg: 30.0         # ... paws up, waving
+      margin: 0.035         # [m] centre of mass inside the support
+      waves: 2
+      speed: 1.0
+
     limits:
       max_vx: 0.15          # [m/s]
       max_vy: 0.08          # [m/s]
@@ -58,6 +83,9 @@
       ki: 1.0               # [1/s^2] integral part: removes the steady drift offset
       max_rate: 0.3         # [rad/s] correction limit
       max_error: 0.5        # [rad] error clamp (robot blocked / held)
+      crawl_kp: 1.0         # the crawl: its cycle is long (~9 s) and every turn of it
+      crawl_ki: 0.2         #   swings the feet sideways (0.08 rad/s -> +-3 cm per step);
+      crawl_max_rate: 0.08  #   the gyro jerks of a slipping foot are caught up slowly
 
     # Perception sensors (docs/HEAD.md). Used by the URDF (frames, Gazebo
     # sensors) and by dog_perception. Angles: pitch = down from horizontal,
@@ -69,7 +97,7 @@
       x_lidar: true
       x_lidar_x: 0.10         # [m] from the body centre
       x_lidar_y: 0.04         # [m] right one at -y
-      x_lidar_z: 0.05         # [m] beam above the body centre
+      x_lidar_z: 0.062        # [m] beam above the body centre (0.21 m above the floor in the stand pose)
       x_lidar_tilt_deg: 30.0
       x_lidar_yaw_deg: 40.0
       x_lidar_rate: 10.0      # [Hz]
@@ -80,12 +108,27 @@
       tof_names: [fl, fr, fc, rc]
       tof_x: [0.115, 0.115, 0.115, -0.115]
       tof_y: [0.045, -0.045, 0.0, 0.0]
-      tof_z: [-0.012, -0.012, 0.0, -0.012]
+      tof_z: [0.0, 0.0, 0.012, 0.0]   # 150 mm above the floor in the stand pose (FC 162), as HEAD.md designs
       tof_pitch_deg: [40.0, 40.0, 20.0, 40.0]
       tof_yaw_deg: [23.0, -23.0, 0.0, 180.0]
       tof_rate: 50.0          # [Hz]
       tof_fov_deg: 27.0
       tof_noise: 0.003        # [m] 1 sigma (+0.5 % of range)
+      # YDLIDAR GS2 line laser (robot vacuum obstacle sensor): 100 deg fan,
+      # 25-300 mm, ~28 Hz. On the front face tilted 40 deg down: the line lies
+      # across the floor 0.29 m ahead of the body centre (0.14 m ahead of the
+      # front feet) and covers |y| <= 0.19 m (both foot lines).
+      gs2: true
+      gs2_x: 0.115
+      gs2_y: 0.0
+      gs2_z: 0.0                # 150 mm above the floor in the stand pose
+      gs2_pitch_deg: 40.0
+      gs2_fov_deg: 100.0
+      gs2_samples: 160
+      gs2_rate: 28.0
+      gs2_range_min: 0.025
+      gs2_range_max: 0.30
+      gs2_noise: 0.003        # [m] 1 sigma (assumed; check the datasheet)
 
     # dog_perception (docs/PERCEPTION.md): hazard thresholds, ToF offsets.
     perception:
@@ -95,6 +138,33 @@
       tof_confirm: 3           # readings in a row (60 ms at 50 Hz)
       tof_offsets: [0.0, 0.0, 0.0, 0.0]  # [m] measure once on a flat floor, then keep here
       tof_autocal: false       # never calibrate at every start (a ramp in view becomes an offset)
+      gs2_threshold: 0.012     # [m] GS2: off the straight-line fit of its own profile (stones, pits)
+      gs2_confirm: 3           # scans in a row (0.1 s at 28 Hz)
+      gs2_plane_threshold: 0.02  # [m] whole line off the leg plane (15 mm: false reports on a flat floor)
+      gs2_reference: feet      # GS2 steps relative to the legs (line is 0.14 m ahead of the feet)
+      # reaction to hazards (perception -> locomotion 'guard' topic)
+      guard: true
+      guard_slow_vx: 0.08      # [m/s] a confirmed hazard in the path
+      guard_near_vx: 0.05      # [m/s] while a leg steps over something
+      guard_stop_dist: 0.30    # [m] stop this far (body centre) before a stop hazard
+      guard_pass_dist: 0.20    # [m] a hazard counts until this far behind the body centre
+      guard_trot_climb: 0.025  # [m] edges up to this: trot, high swing on the leg that meets it
+      guard_trot_descend: 0.035 # [m] drops up to this: trot
+      guard_crawl: true        # edges above those: the crawl (steps, stairs, high bars) ...
+      guard_climb_max: 0.07    # [m] ... up to this; taller: stop and go round
+      guard_descend_max: 0.07  # [m] deeper drops: stop
+      guard_crawl_dist: 0.45   # [m] switch to the crawl this far (body centre) before the edge
+      guard_crawl_pass: 0.30   # [m] ... back to the trot when it is this far behind
+      guard_avoid: true        # go round what is too tall, if it is narrow (elevation map)
+      guard_avoid_vy: 0.06     # [m/s] sideways while going round
+      guard_avoid_max_shift: 0.6  # [m] wider than that: just stop
+      guard_max_step: 0.03     # [m] highest swing: 35-50 mm rocks this trot over (TERRAIN.md, PERCEPTION.md)
+      guard_step_margin: 0.01  # [m] swing clears the obstacle by this
+      guard_lift_min: 0.018    # [m] lidar edges below this may be noise: no higher swing
+      guard_deep_stop: false   # stop on 'no floor' from GS2 / ToF (false: they lose the floor when the body pitches)
+      guard_confirm: 2         # reports within 10 cm before a hazard counts
+      guard_stop_confirm: 3    # ... before it stops the robot
+      debug_topics: false      # perception/tof: every ToF reading (simulation checks / videos)
       map_size: 3.0            # [m] elevation map window around the robot
       map_resolution: 0.02     # [m]
 

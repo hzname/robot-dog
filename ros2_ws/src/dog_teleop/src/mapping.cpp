@@ -53,6 +53,8 @@ TeleopOutput JoyMapper::process(const std::vector<float> & axes, const std::vect
     out.command = "stand";
   } else if (pressed(buttons, p_.button_lie)) {
     out.command = "lie";
+  } else if (pressed(buttons, p_.button_greet)) {
+    out.command = "greet";
   }
 
   // D-pad: one height step per press.
@@ -162,6 +164,7 @@ TeleopOutput KeyboardMapper::apply(const KeyEvent & ev, bool & quit)
   else if (ev.key == Key::SPACE || ch == 'k') {t = Twist2D{};}
   else if (ch == '1') {out.command = "stand"; t = Twist2D{};}
   else if (ch == '2') {out.command = "lie"; t = Twist2D{};}
+  else if (ch == '3') {out.command = "greet"; t = Twist2D{};}
   else if (ev.key == Key::ESCAPE || ch == 'x') {out.estop = true; t = Twist2D{};}
   else if (ch == 'r') {out.estop = false;}
   else if (ch == '+' || ch == '=') {
@@ -194,6 +197,7 @@ const char * keyboardHelp()
     "  q / Left    turn left          e / Right  turn right\n"
     "  Space / k   stop moving\n"
     "  1           stand up           2          lie down\n"
+    "  3           greeting (sit, paws up, wave)\n"
     "  + / -       body height up / down\n"
     "  Esc / x     EMERGENCY STOP     r          release e-stop\n"
     "  h           this help          Ctrl-C     quit (sends stop)\n";

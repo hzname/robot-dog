@@ -20,7 +20,7 @@ std::vector<int> buttons(std::initializer_list<int> pressed)
   for (int i : pressed) {b[i] = 1;}
   return b;
 }
-constexpr int A = 0, B = 1, LB = 4, RB = 5, BACK = 6, START = 7;
+constexpr int A = 0, B = 1, Y = 3, LB = 4, RB = 5, BACK = 6, START = 7;
 }  // namespace
 
 TEST(JoyMapper, NoMotionWithoutDeadman)
@@ -63,6 +63,7 @@ TEST(JoyMapper, ButtonsAreEdgeTriggered)
   EXPECT_EQ(m.process(axes(), buttons({A})).command.value_or(""), "stand");
   EXPECT_FALSE(m.process(axes(), buttons({A})).command.has_value());
   EXPECT_EQ(m.process(axes(), buttons({B})).command.value_or(""), "lie");
+  EXPECT_EQ(m.process(axes(), buttons({Y})).command.value_or(""), "greet");
   EXPECT_TRUE(m.process(axes(), buttons({BACK})).estop.value_or(false));
   EXPECT_FALSE(m.process(axes(), buttons({START})).estop.value_or(true));
 }
@@ -161,6 +162,7 @@ TEST(KeyboardMapper, CommandsEstopAndQuit)
   EXPECT_FALSE(m.apply({Key::CHAR, 'r'}, quit).estop.value_or(true));
   EXPECT_EQ(m.apply({Key::CHAR, '1'}, quit).command.value_or(""), "stand");
   EXPECT_EQ(m.apply({Key::CHAR, '2'}, quit).command.value_or(""), "lie");
+  EXPECT_EQ(m.apply({Key::CHAR, '3'}, quit).command.value_or(""), "greet");
   EXPECT_NEAR(m.apply({Key::CHAR, '+'}, quit).height.value_or(0), 0.01, 1e-9);
   out = m.apply({Key::CTRL_C, 0}, quit);
   EXPECT_TRUE(quit);

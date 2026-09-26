@@ -48,6 +48,9 @@ def sensor_frames(sensors):
             # the left lidar dips towards the right (-yaw) and vice versa
             out.append((name, 'lidar', (s['x_lidar_x'], side * s['x_lidar_y'], s['x_lidar_z']),
                         (0.0, tilt, -side * yaw)))
+    if s.get('gs2'):
+        out.append(('gs2', 'gs2', (s['gs2_x'], s['gs2_y'], s['gs2_z']),
+                    (0.0, math.radians(s['gs2_pitch_deg']), 0.0)))
     if s.get('tof'):
         for k, name in enumerate(s['tof_names']):
             out.append((f'tof_{name}', 'tof', (s['tof_x'][k], s['tof_y'][k], s['tof_z'][k]),
@@ -116,6 +119,8 @@ def build_urdf(geometry, description=None, gazebo=False, namespace='dog', initia
     for frame, kind, xyz, rpy in sensor_frames(d.get('sensors')):
         vis = ('<visual><geometry><cylinder radius="0.019" length="0.03"/></geometry>'
                '<material name="foot"/></visual>') if kind == 'lidar' else \
+            ('<visual><geometry><box size="0.011 0.026 0.024"/></geometry>'
+             '<material name="foot"/></visual>') if kind == 'gs2' else \
             ('<visual><geometry><box size="0.006 0.018 0.012"/></geometry>'
              '<material name="foot"/></visual>')
         out.append(f'<link name="{frame}">{vis}</link>'
@@ -151,17 +156,24 @@ def build_urdf(geometry, description=None, gazebo=False, namespace='dog', initia
             f'<joint name="{name}_calf_joint" type="revolute"><parent link="{name}_thigh"/>'
             f'<child link="{name}_calf"/><origin xyz="0 0 {-L2}"/><axis xyz="0 1 0"/>'
             + _limit(d['calf_limits_deg'], eff, vel) + '</joint>')
+        # the knee is a contact too: the robot kneels on it (the greeting), and
+        # a knee that hits a riser or a bar should not pass through it
+        kr = min(d['foot_radius'], 0.5 * L3)
         out.append(
             f'<link name="{name}_calf"><visual><origin xyz="0 0 {-L3 / 2}"/>'
             f'<geometry><cylinder radius="{r_leg * 0.8:.4f}" length="{L3}"/></geometry>'
             '<material name="leg"/></visual>'
+            f'<collision><geometry><sphere radius="{kr}"/></geometry></collision>'
             + _inertial(d['calf_mass'], _cyl_inertia(d['calf_mass'], r_leg * 0.8, L3), (0, 0, -L3 / 2))
             + '</link>')
-        # foot (contact point)
-        fr = d['foot_radius']
+        # foot: calf (robot.yaml, measured in DEPLOYMENT.md) runs to the
+        # CONTACT point, so the sphere's bottom - not its centre - is at L3.
+        # (Centre at L3 made the simulated robot stand 12 mm higher than
+        # stand_height and put the perception's leg plane 12 mm off.)
+        fr = min(d['foot_radius'], 0.5 * L3)
         out.append(
             f'<joint name="{name}_foot_joint" type="fixed"><parent link="{name}_calf"/>'
-            f'<child link="{name}_foot"/><origin xyz="0 0 {-L3}"/></joint>')
+            f'<child link="{name}_foot"/><origin xyz="0 0 {-(L3 - fr):.4f}"/></joint>')
         out.append(
             f'<link name="{name}_foot"><visual><geometry><sphere radius="{fr}"/></geometry>'
             '<material name="foot"/></visual>'
@@ -211,6 +223,7 @@ def _gazebo_extras(ns, p_gain, vmax, initial=None):
         f'<update_rate>100</update_rate><topic>/{ns}/sim/imu</topic></sensor></gazebo>')
     for leg, _, _ in LEGS:
         parts.append(f'<gazebo reference="{leg}_foot"><mu1>1.2</mu1><mu2>1.2</mu2></gazebo>')
+        parts.append(f'<gazebo reference="{leg}_calf"><mu1>1.2</mu1><mu2>1.2</mu2></gazebo>')
     return '\n'.join(parts)
 
 
@@ -225,7 +238,13 @@ def _gazebo_sensors(ns, sensors):
     s = sensors or {}
     parts = []
     for frame, kind, _, _ in sensor_frames(s):
-        if kind == 'lidar':
+        if kind == 'gs2':  # a fan of rays in the sensor's x-y plane (tilted down with it)
+            half = math.radians(s['gs2_fov_deg']) / 2
+            n, rate, noise = int(s['gs2_samples']), s['gs2_rate'], s['gs2_noise']
+            scan = (f'<horizontal><samples>{n}</samples><min_angle>{-half:.4f}</min_angle>'
+                    f'<max_angle>{half:.4f}</max_angle></horizontal>')
+            rng = f'<min>{s["gs2_range_min"]}</min><max>{s["gs2_range_max"]}</max><resolution>0.001</resolution>'
+        elif kind == 'lidar':
             n, rate, noise = int(s['x_lidar_samples']), s['x_lidar_rate'], s['x_lidar_noise']
             scan = (f'<horizontal><samples>{n}</samples><min_angle>{-math.pi:.5f}</min_angle>'
                     f'<max_angle>{math.pi * (1 - 2.0 / n):.5f}</max_angle></horizontal>')

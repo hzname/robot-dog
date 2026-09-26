@@ -21,6 +21,7 @@ TrotGait::TrotGait(const GaitParams & params, const std::array<Vec3, kNumLegs> &
   params_.period = std::max(params_.period, 0.1);
   params_.duty = std::clamp(params_.duty, 0.5, 0.9);
   for (auto & n : neutral_) {n.z = 0.0;}
+  step_heights_.fill(params_.step_height);
   reset();
 }
 
@@ -107,7 +108,7 @@ void TrotGait::update(double dt, const BodyVelocity & cmd)
       swing_blend_[leg] = blend;
       p.x += (target.x - p.x) * k_move;
       p.y += (target.y - p.y) * k_move;
-      p.z = params_.step_height * std::sin(M_PI * s);
+      p.z = step_heights_[leg] * std::sin(M_PI * s);
     } else {
       // Foot stays on the ground: move it against the (clamped) body twist.
       const double yaw = -cmd.wz * k * dt;

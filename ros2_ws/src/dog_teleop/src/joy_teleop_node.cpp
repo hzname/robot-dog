@@ -29,6 +29,7 @@ public:
     p.button_turbo = static_cast<int>(declare_parameter("button_turbo", p.button_turbo));
     p.button_stand = static_cast<int>(declare_parameter("button_stand", p.button_stand));
     p.button_lie = static_cast<int>(declare_parameter("button_lie", p.button_lie));
+    p.button_greet = static_cast<int>(declare_parameter("button_greet", p.button_greet));
     p.button_estop = static_cast<int>(declare_parameter("button_estop", p.button_estop));
     p.button_release = static_cast<int>(declare_parameter("button_release", p.button_release));
     p.deadzone = declare_parameter("deadzone", p.deadzone);

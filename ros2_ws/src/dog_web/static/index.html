@@ -12,6 +12,7 @@
   <div class="brand">🐕 Robot Dog <small>2.0</small></div>
   <div class="status">
     <span id="conn" class="pill off">нет связи</span>
+    <span id="guard" class="pill" hidden title="реакция на препятствия (dog_perception): вперёд нельзя или медленно"></span>
     <span id="power" class="pill" hidden></span>
     <span id="mode" class="pill">—</span>
   </div>
@@ -23,6 +24,8 @@
     <button id="release" class="ghost">Снять E-STOP</button>
     <button id="stand">Встать</button>
     <button id="lie">Лечь</button>
+    <button id="greet" title="сесть на задние лапы, передние вверх, помахать (из стойки, ~25 с)">Привет</button>
+    <button id="gait" class="ghost" title="походка: рысь или медленная на трёх опорах (ступени, лестница, высокие препятствия)">Ползком</button>
   </section>
 
   <section class="pads">

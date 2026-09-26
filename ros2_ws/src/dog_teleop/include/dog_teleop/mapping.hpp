@@ -30,7 +30,7 @@ struct Limits
 struct TeleopOutput
 {
   std::optional<Twist2D> twist;
-  std::optional<std::string> command;  // "stand" | "lie"
+  std::optional<std::string> command;  // "stand" | "lie" | "greet"
   std::optional<bool> estop;
   std::optional<double> pitch;   // [rad]
   std::optional<double> height;  // offset [m]
@@ -51,6 +51,7 @@ struct JoyProfile
   int button_turbo{5};   // RB  - hold for full speed
   int button_stand{0};   // A
   int button_lie{1};     // B
+  int button_greet{3};   // Y - greeting (sit, paws up, wave)
   int button_estop{6};   // Back
   int button_release{7}; // Start
   double deadzone{0.08};

@@ -34,9 +34,9 @@ def _fk(root, leg, q):
     return T_p
 
 
-def _analytic(leg_side, q):
+def _analytic(leg_side, q, calf=None):
     """Same formulas as dog_control/kinematics.cpp forwardKinematics()."""
-    L1, L2, L3 = GEOM['hip_offset'], GEOM['thigh'], GEOM['calf']
+    L1, L2, L3 = GEOM['hip_offset'], GEOM['thigh'], GEOM['calf'] if calf is None else calf
     xs = -L2 * math.sin(q[1]) - L3 * math.sin(q[1] + q[2])
     zs = -L2 * math.cos(q[1]) - L3 * math.cos(q[1] + q[2])
     y0 = leg_side * L1
@@ -45,13 +45,18 @@ def _analytic(leg_side, q):
 
 
 def test_urdf_matches_controller_kinematics():
+    """calf runs to the foot CONTACT point: the foot sphere (radius r) sits on
+    the calf axis with its centre r short of the calf end, its bottom at the end."""
     root = ET.fromstring(build_urdf(GEOM))
+    r = 0.012  # DEFAULT_DESCRIPTION foot_radius
     rng = np.random.default_rng(0)
     for leg, front, side in (('lf', 1, 1), ('rf', 1, -1), ('lr', -1, 1), ('rr', -1, -1)):
         hip = np.array([front * GEOM['hip_x'], side * GEOM['hip_y'], 0.0])
         for _ in range(50):
             q = rng.uniform([-0.6, -0.8, -2.5], [0.6, 2.0, -0.2])
-            np.testing.assert_allclose(_fk(root, leg, q), hip + _analytic(side, q), atol=1e-9)
+            np.testing.assert_allclose(_fk(root, leg, q), hip + _analytic(side, q, GEOM['calf'] - r), atol=1e-9)
+    # standing straight on the floor: sphere bottom = calf end = what dog_control puts on the ground
+    np.testing.assert_allclose(_fk(root, 'lf', (0, 0, 0))[2] - r, -(GEOM['thigh'] + GEOM['calf']), atol=1e-9)
 
 
 def test_joint_names_and_limits():
@@ -84,11 +89,12 @@ def test_perception_sensors_in_urdf():
     geometry, description = load_config(cfg)
     s = description['sensors']
     frames = {f[0]: f for f in sensor_frames(s)}
-    assert {'lidar_left', 'lidar_right', 'tof_fl', 'tof_fr', 'tof_fc', 'tof_rc'} <= set(frames)
+    assert {'lidar_left', 'lidar_right', 'tof_fl', 'tof_fr', 'tof_fc', 'tof_rc', 'gs2'} <= set(frames)
+    assert abs(frames['gs2'][3][1] - math.radians(40)) < 1e-9
     # crossed: the left lidar dips towards the right and vice versa
     assert frames['lidar_left'][3][2] < 0 < frames['lidar_right'][3][2]
     assert abs(frames['tof_fl'][3][1] - math.radians(40)) < 1e-9
     root = ET.fromstring(build_urdf(geometry, description, gazebo=True))
-    assert len(root.findall(".//sensor[@type='gpu_lidar']")) == 6
+    assert len(root.findall(".//sensor[@type='gpu_lidar']")) == 7
     plain = ET.fromstring(build_urdf(geometry, description))
     assert not plain.findall('.//sensor') and plain.find("link[@name='lidar_left']") is not None
