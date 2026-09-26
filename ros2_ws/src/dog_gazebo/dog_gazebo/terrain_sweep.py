@@ -5,6 +5,9 @@
 Each level starts a fresh headless simulation (own ROS domain and Gazebo
 partition, so several sweeps can run side by side), drives the standard
 routine and records per-maneuver pass/fail with the measured numbers.
+The simulation's log goes to <out>_<level>.sim.log. A robot that never left
+passive (the stand request or the clock lost on a busy machine, before any
+manoeuvre) gets the simulation relaunched once; the row says "relaunched".
 """
 
 import argparse
@@ -17,13 +20,21 @@ import tempfile
 import time
 
 
-def run_level(kind, level, seed, domain, extra, launch_args=(), keep=None):
+def never_stood(data):
+    """The robot stayed passive: the stand request or the clock never reached
+    locomotion (DDS on a busy runner), before any manoeuvre was tried."""
+    r = data.get('results') or []
+    return bool(r) and r[0]['name'] == 'stand' and not r[0]['ok'] and 'state=passive' in r[0]['detail']
+
+
+def run_level(kind, level, seed, domain, extra, launch_args=(), keep=None, sim_log=None):
     env = dict(os.environ, ROS_DOMAIN_ID=str(domain), GZ_PARTITION=f'sweep{domain}')
     trace = keep or tempfile.mktemp(suffix='.json')
+    log = open(sim_log, 'w') if sim_log else subprocess.DEVNULL
     launch = subprocess.Popen(
         ['ros2', 'launch', 'dog_gazebo', 'sim.launch.py', 'headless:=true', 'web:=false',
          f'terrain:={kind}', f'level:={level}', f'seed:={seed}', *launch_args],
-        env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     try:
         check = subprocess.run(
             ['ros2', 'run', 'dog_gazebo', 'walk_check', '--terrain', kind, '--level', str(level),
@@ -42,8 +53,13 @@ def run_level(kind, level, seed, domain, extra, launch_args=(), keep=None):
             os.killpg(launch.pid, signal.SIGINT)
             launch.wait(timeout=20)
         except (subprocess.TimeoutExpired, ProcessLookupError):
+            pass
+        try:  # whatever of the launch outlived it (the whole session)
             os.killpg(launch.pid, signal.SIGKILL)
-        subprocess.run(['pkill', '-f', f'GZ_PARTITION=sweep{domain}'], check=False)
+        except ProcessLookupError:
+            pass
+        if sim_log:
+            log.close()
         time.sleep(2)
 
 
@@ -66,8 +82,16 @@ def main():
         if args.record_dir:
             os.makedirs(args.record_dir, exist_ok=True)
             keep = os.path.join(args.record_dir, f'{args.terrain}_{level:g}.json')
-        rows.append(run_level(args.terrain, level, args.seed, args.domain + k % 5, extra,
-                              args.launch_arg, keep))
+        sim_log = f'{os.path.splitext(args.out)[0]}_{level:g}.sim.log'
+        row = run_level(args.terrain, level, args.seed, args.domain + k % 5, extra,
+                        args.launch_arg, keep, sim_log)
+        if never_stood(row):
+            # before any test: the simulation did not come up whole - once more
+            print('robot never left passive - relaunching the simulation once', flush=True)
+            row = run_level(args.terrain, level, args.seed, args.domain + k % 5, extra,
+                            args.launch_arg, keep, sim_log.replace('.sim.log', '.retry.sim.log'))
+            row['relaunched'] = True
+        rows.append(row)
         with open(args.out, 'w') as f:
             json.dump(rows, f, indent=1)
     ok = all(r.get('results') and all(x['ok'] for x in r['results']) for r in rows)
