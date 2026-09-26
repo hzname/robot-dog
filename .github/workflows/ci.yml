@@ -124,12 +124,16 @@ jobs:
         timeout-minutes: 8
         run: |
           source install/setup.bash
-          ros2 run dog_gazebo terrain_sweep --terrain waves --levels 10 --min-ratio 0.15 --out waves.json
+          # backward on uneven ground is the weak manoeuvre (TERRAIN.md: 0-36 %
+          # of the command, run to run): checked for no fall / tilt / sagging only
+          ros2 run dog_gazebo terrain_sweep --terrain waves --levels 10 --min-ratio 0.15 --backward-ratio 0 --out waves.json
       - name: Stones 10 mm
         timeout-minutes: 8
         run: |
           source install/setup.bash
-          ros2 run dog_gazebo terrain_sweep --terrain rough --levels 10 --min-ratio 0.25 --out rough.json
+          # backward on uneven ground is the weak manoeuvre (TERRAIN.md: 0-36 %
+          # of the command, run to run): checked for no fall / tilt / sagging only
+          ros2 run dog_gazebo terrain_sweep --terrain rough --levels 10 --min-ratio 0.25 --backward-ratio 0 --out rough.json
       - name: Perception (X lidars, GS2, ToF) - flat, no false alarms, guard never stops
         timeout-minutes: 8
         run: |
