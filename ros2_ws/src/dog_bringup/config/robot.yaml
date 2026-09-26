@@ -162,6 +162,8 @@
       loop_closure: true      # recognise old submaps and straighten the map
       loop_radius: 3.0        # [m] (+10 % of the way since) old submaps this near are loop candidates
       loop_min_inliers: 0.55  # share of a submap's walls that must land on the old ones
+      scale_estimation: true  # learn dead reckoning's scale where walls across the way pin it down
+      scale_min_move: 1.0     # [m] reckoned between two such places
 
     # dog_perception (docs/PERCEPTION.md): hazard thresholds, ToF offsets.
     perception:

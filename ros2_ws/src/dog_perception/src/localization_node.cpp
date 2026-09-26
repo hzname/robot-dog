@@ -24,6 +24,7 @@
 // localize - load the map, find the robot in it (best after a survey: the
 // swaying lidars sweep the whole room), then follow it; auto - localize if
 // the map file exists, else mapping.
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <deque>
@@ -106,6 +107,8 @@ public:
     reloc_wait_ = getD("localization.reloc_wait", 3.0);
     match_.prior_xy = getD("localization.prior_xy", match_.prior_xy);
     match_.prior_yaw = getD("localization.prior_yaw_deg", 5.0) * M_PI / 180.0;
+    scale_on_ = declare_parameter("localization.scale_estimation", true);
+    scale_min_move_ = getD("localization.scale_min_move", 1.0);
     map_path_ = expandHome(declare_parameter("localization.map", std::string("")));
     save_on_exit_ = declare_parameter("localization.save_on_exit", true);
     const auto mode = declare_parameter("localization.mode", std::string("auto"));
@@ -192,14 +195,24 @@ private:
     const double t = stampSec(m.header.stamp);
     const Pose2 o{p.position.x, p.position.y,
       yawOf(p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w)};
-    if (!odom_hist_.empty()) {
-      walked_ += std::hypot(o.x - odom_hist_.back().pose.x, o.y - odom_hist_.back().pose.y);
+    // dead reckoning with its scale corrected: every step times scale_
+    if (have_raw_) {
+      const Pose2 d = raw_last_.inverse().compose(o);
+      const double len = std::hypot(d.x, d.y);
+      raw_walked_ += len;
+      walked_ += scale_ * len;
+      scaled_ = scaled_.compose(Pose2{scale_ * d.x, scale_ * d.y, d.yaw});
+    } else {
+      scaled_ = o;
+      have_raw_ = true;
     }
-    odom_hist_.push_back({t, o, p.position.z});
+    raw_last_ = o;
+    odom_hist_.push_back({t, scaled_, p.position.z});
     while (!odom_hist_.empty() && odom_hist_.front().t < t - 5.0) {odom_hist_.pop_front();}
-    // pose in the map: map <- odom <- base
-    const Pose2 b = T_.compose(o);
-    const double half = 0.5 * T_.yaw;
+    // pose in the map: map <- (scaled) odom <- base
+    const Pose2 b = T_.compose(scaled_);
+    const Pose2 map_raw = b.compose(o.inverse());  // map <- the odom frame as published
+    const double half = 0.5 * wrapAngle(b.yaw - o.yaw);
     const double qw = std::cos(half), qz = std::sin(half);  // rotation about z, times the odom attitude
     const auto & q = p.orientation;
     geometry_msgs::msg::PoseStamped ps;
@@ -217,10 +230,10 @@ private:
     tf.header.stamp = m.header.stamp;
     tf.header.frame_id = "map";
     tf.child_frame_id = m.header.frame_id.empty() ? "odom" : m.header.frame_id;
-    tf.transform.translation.x = T_.x;
-    tf.transform.translation.y = T_.y;
-    tf.transform.rotation.w = qw;
-    tf.transform.rotation.z = qz;
+    tf.transform.translation.x = map_raw.x;
+    tf.transform.translation.y = map_raw.y;
+    tf.transform.rotation.w = std::cos(0.5 * map_raw.yaw);
+    tf.transform.rotation.z = std::sin(0.5 * map_raw.yaw);
     tf_->sendTransform(tf);
   }
 
@@ -296,7 +309,10 @@ private:
       if (static_cast<int>(cloud.size()) >= min_points_) {
         const auto r = match(map_.merged(), cloud, T_, match_);
         last_ = r;
-        if (r.ok) {T_ = r.pose;}
+        if (r.ok) {
+          T_ = r.pose;
+          updateScale(r);
+        }
       }
     }
     std::vector<P2> w;
@@ -330,6 +346,7 @@ private:
       last_ = r;
       if (r.ok && r.inlier_fraction >= min_inliers_) {
         T_ = r.pose;
+        updateScale(r);
         last_good_ = t;
       } else if (t - last_good_ > lost_after_) {
         status_ = "lost";
@@ -370,6 +387,35 @@ private:
       reloc_ = thin(recentCloud(), 0.03);  // start collecting afresh
       reloc_t0_ = t;
     }
+  }
+
+  /// Dead reckoning's scale from stretches where the walls pinned the robot
+  /// down along its way at both ends: the true distance (map) over the raw
+  /// one. The walls at both ends were seen, not walked into by reckoning.
+  void updateScale(const MatchResult & r)
+  {
+    if (!scale_on_ || odom_hist_.empty()) {return;}
+    const Pose2 now = T_.compose(odom_hist_.back().pose);
+    auto strong = [](const MatchResult & m, double ux, double uy) {return m.constraint(ux, uy) >= 0.1;};
+    if (!anchor_) {
+      anchor_ = Anchor{now, raw_walked_, walked_, r};
+      return;
+    }
+    const double raw = raw_walked_ - anchor_->raw, walked = walked_ - anchor_->walked;
+    const double dx = now.x - anchor_->pose.x, dy = now.y - anchor_->pose.y, dist = std::hypot(dx, dy);
+    if (raw < scale_min_move_) {return;}
+    if (dist < 0.9 * walked || raw > 3.0 * scale_min_move_) {  // turned on the way, or never pinned down
+      anchor_ = Anchor{now, raw_walked_, walked_, r};
+      return;
+    }
+    const double ux = dx / dist, uy = dy / dist;
+    if (!strong(r, ux, uy)) {return;}  // wait for walls across the way
+    if (strong(anchor_->match, ux, uy)) {
+      const double ratio = dist / raw;
+      scale_ = std::clamp(scale_ + 0.3 * (ratio - scale_), 0.7, 1.4);
+      RCLCPP_DEBUG(get_logger(), "scale %.3f (%.2f m over %.2f m reckoned)", scale_, dist, raw);
+    }
+    anchor_ = Anchor{now, raw_walked_, walked_, r};
   }
 
   void onCommand(const std::string & c)
@@ -419,6 +465,7 @@ private:
       << "\", \"inliers\": " << last_.inlier_fraction << ", \"points\": " << last_.points
       << ", \"rms\": " << last_.rms << ", \"cells\": " << map_.merged().occupiedCount()
       << ", \"submaps\": " << map_.submaps().size() << ", \"loops\": " << map_.loops().size()
+      << ", \"scale\": " << scale_
       << ", \"x\": " << b.x << ", \"y\": " << b.y << ", \"yaw\": " << b.yaw << "}";
     std_msgs::msg::String m;
     m.data = o.str();
@@ -445,7 +492,13 @@ private:
   std::map<std::string, SensorMount> mounts_;
   SubmapParams sp_;
   SubmapMap map_;
-  double walked_{0.0};
+  double walked_{0.0}, raw_walked_{0.0};
+  // dead reckoning's scale, learnt where the walls allow
+  bool scale_on_{true}, have_raw_{false};
+  double scale_{1.0}, scale_min_move_{1.0};
+  Pose2 raw_last_, scaled_;
+  struct Anchor {Pose2 pose; double raw, walked; MatchResult match;};
+  std::optional<Anchor> anchor_;
   MatchParams match_;
   GlobalParams global_;
   Pose2 T_;  // map <- odom

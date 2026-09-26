@@ -453,12 +453,23 @@ MatchResult match(const WallGrid & map, const std::vector<P2> & cloud, const Pos
   double ss = 0.0, fit = 0.0;
   for (const auto & pt : cloud) {
     const P2 q = T.apply(pt);
-    const double d = map.distance(q.x, q.y);
+    double gx = 0.0, gy = 0.0;
+    const double d = map.distance(q.x, q.y, &gx, &gy);
     fit += std::max(0.0, 1.0 - d / 0.1);
     if (d > p.outlier) {continue;}
     ++used;
     ss += d * d;
-    if (d < p.inlier) {++inl;}
+    if (d < p.inlier) {
+      ++inl;
+      r.cxx += gx * gx;
+      r.cxy += gx * gy;
+      r.cyy += gy * gy;
+    }
+  }
+  if (inl > 0) {
+    r.cxx /= inl;
+    r.cxy /= inl;
+    r.cyy /= inl;
   }
   r.pose = T;
   r.points = used;

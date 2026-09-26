@@ -114,6 +114,10 @@ struct MatchResult
   double inlier_fraction{0.0};  // of all points
   double fit{0.0};            // mean over all points of max(0, 1 - d / 10 cm): finer than the inliers
   double rms{0.0};            // of the used points [m]
+  // how the inlier walls pin the translation down: mean of n n^T over the
+  // inliers (n = wall normal); u^T C u = share of them fixing direction u
+  double cxx{0.0}, cxy{0.0}, cyy{0.0};
+  double constraint(double ux, double uy) const {return ux * ux * cxx + 2.0 * ux * uy * cxy + uy * uy * cyy;}
   bool ok{false};
 };
 
