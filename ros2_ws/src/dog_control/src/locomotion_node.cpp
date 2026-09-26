@@ -117,7 +117,16 @@ public:
         const double gdt = gyro_stamp_ > 0.0 ? std::clamp(stamp - gyro_stamp_, 0.0, 0.1) : 0.0;
         gyro_stamp_ = stamp;
         controller_->addYawRate(msg->angular_velocity.z, gdt);
-        gyro_yaw_ += (msg->angular_velocity.z + odom_gyro_bias_) * gdt;
+        // the heading for dead reckoning ("gyro"): the rate minus its bias,
+        // refined whenever the robot stands still on its feet (the survey and
+        // the greeting turn the body: not then); imu_node measures the bias
+        // only once, at start, and it wanders with temperature
+        const double wz = msg->angular_velocity.z + odom_gyro_bias_;
+        const bool still = controller_->mode() == Mode::STAND && !controller_->gait().stepping() &&
+          !controller_->crawl().stepping() && std::abs(wz - gyro_bias_est_) < 0.05;
+        still_time_ = still ? still_time_ + gdt : 0.0;
+        if (still_time_ > 1.0) {gyro_bias_est_ += (wz - gyro_bias_est_) * std::min(1.0, gdt / 5.0);}
+        gyro_yaw_ += (wz - gyro_bias_est_) * gdt;
         last_gyro_ = now();
         const auto & q = msg->orientation;
         if (msg->orientation_covariance[0] < 0.0) {return;}  // no orientation in this message
@@ -358,7 +367,7 @@ private:
   bool odom_publish_{false};
   bool odom_gyro_{false};
   double odom_gyro_bias_{0.0};
-  double gyro_yaw_{0.0};
+  double gyro_yaw_{0.0}, gyro_bias_est_{0.0}, still_time_{0.0};
   double odom_height_{0.15};
   int odom_div_{0};
   std::array<double, 3> imu_rpy_{};
