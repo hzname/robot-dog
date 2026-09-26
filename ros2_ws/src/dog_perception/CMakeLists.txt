@@ -19,7 +19,7 @@ find_package(tf2_ros REQUIRED)
 
 # ROS-independent core: geometry, planes, detectors, guard (no Eigen: the
 # robot image is ros-base without extra packages).
-add_library(dog_perception_core src/core.cpp src/localization.cpp)
+add_library(dog_perception_core src/core.cpp src/localization.cpp src/submaps.cpp)
 target_include_directories(dog_perception_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
@@ -61,6 +61,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_core dog_perception_core)
   ament_add_gtest(test_localization test/test_localization.cpp)
   target_link_libraries(test_localization dog_perception_core)
+  ament_add_gtest(test_submaps test/test_submaps.cpp TIMEOUT 300)
+  target_link_libraries(test_submaps dog_perception_core)
   ament_add_pytest_test(test_core_py test/test_core.py
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}

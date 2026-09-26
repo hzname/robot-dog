@@ -11,6 +11,9 @@
   room           localization: a 5 x 4 m room with 1.2 m walls, a cabinet,
                  a sofa, a table and a chest. `seed` picks where in the room
                  the robot starts (ROOM_STARTS): the room is placed round it
+  house          loop closure: a corridor 1.5 m wide round a 7 x 4 m core
+                 (10 x 7 m outside), walls 1.2 m, a few pieces of furniture and
+                 long bare stretches; `seed` picks the start (HOUSE_STARTS)
   steps  level   perception test course, steps of `level` mm: the robot starts
                  on a platform with a 20 mm stone in the left foot corridor
                  (x 0.8 m) and one in the right (x 1.4 m), steps down at
@@ -47,7 +50,7 @@ HEADER = '''<?xml version="1.0"?>
 FOOTER = '''  </world>
 </sdf>
 '''
-KINDS = ('flat', 'slope', 'waves', 'rough', 'steps', 'wall', 'stairs', 'bar', 'block', 'room')
+KINDS = ('flat', 'slope', 'waves', 'rough', 'steps', 'wall', 'stairs', 'bar', 'block', 'room', 'house')
 # room world, in room coordinates (centre of the floor, x along the long side)
 ROOM_SIZE, ROOM_WALL_H = (5.0, 4.0), 1.2
 ROOM_FURNITURE = (  # name, centre x, y, size x, y, z, lifted (table top)
@@ -58,6 +61,16 @@ ROOM_FURNITURE = (  # name, centre x, y, size x, y, z, lifted (table top)
 TABLE_LEGS = ((-0.55, -0.30), (0.55, -0.30), (-0.55, 0.30), (0.55, 0.30))
 # where the robot starts (room x, y, yaw) for each seed
 ROOM_STARTS = ((-0.8, 0.0, 0.0), (0.9, -0.4, 2.2), (0.3, 0.6, -1.9))
+# house world (house coordinates): outer walls, the core, furniture as boxes
+HOUSE_OUTER, HOUSE_CORE = (10.0, 7.0), (7.0, 4.0)
+HOUSE_FURNITURE = (  # name, x0, y0, x1, y1, height
+    ('cabinet', -1.0, 3.1, 0.2, 3.5, 1.2),
+    ('shelf', 4.6, -1.0, 5.0, 0.2, 1.0),
+    ('chest', -5.0, -3.5, -4.4, -2.9, 0.6),
+    ('bench', 1.0, -2.3, 1.6, -2.0, 0.45))
+HOUSE_STARTS = ((-4.25, -1.5, 1.5708), (4.25, 1.0, -1.5708), (0.5, 2.75, 3.1416))
+# the loop round the core along the corridors' middle
+HOUSE_LOOP = ((-4.25, -2.75), (4.25, -2.75), (4.25, 2.75), (-4.25, 2.75))
 RAMP_START = 0.25  # [m] start of the ramp in the slope world
 RAMP_LENGTH = 3.0
 STEP_DOWN_X, STEP_UP_X = 2.2, 3.0  # steps world
@@ -104,10 +117,11 @@ def _ground():
     return _box('ground', (0, 0, -0.05, 0, 0, 0), (40, 40, 0.1), '0.7 0.7 0.7 1')
 
 
-def room_to_world(seed=0):
-    """(x, y, yaw) of the room frame in the world: the robot spawns at the
-    world origin facing +x, so the room is its start pose inverted."""
-    sx, sy, syaw = ROOM_STARTS[seed % len(ROOM_STARTS)]
+def room_to_world(seed=0, kind='room'):
+    """(x, y, yaw) of the room (house) frame in the world: the robot spawns
+    at the world origin facing +x, so the room is its start pose inverted."""
+    starts = HOUSE_STARTS if kind == 'house' else ROOM_STARTS
+    sx, sy, syaw = starts[seed % len(starts)]
     c, s_ = math.cos(syaw), math.sin(syaw)
     return -(c * sx + s_ * sy), -(-s_ * sx + c * sy), -syaw
 
@@ -135,6 +149,25 @@ def room_boxes(seed=0):
     return out
 
 
+def house_boxes(seed=0):
+    """Walls, core and furniture of the house world as world-frame boxes."""
+    ox, oy, oyaw = room_to_world(seed, 'house')
+    c, s_ = math.cos(oyaw), math.sin(oyaw)
+    L, W = HOUSE_OUTER
+    cl, cw = HOUSE_CORE
+    t, h = 0.10, ROOM_WALL_H
+    boxes = [
+        ('wall_s', 0.0, -(W + t) / 2, h / 2, (L + 2 * t, t, h)),
+        ('wall_n', 0.0, (W + t) / 2, h / 2, (L + 2 * t, t, h)),
+        ('wall_w', -(L + t) / 2, 0.0, h / 2, (t, W, h)),
+        ('wall_e', (L + t) / 2, 0.0, h / 2, (t, W, h)),
+        ('wall_core', 0.0, 0.0, h / 2, (cl, cw, h))]
+    for name, x0, y0, x1, y1, hh in HOUSE_FURNITURE:
+        boxes.append((name, (x0 + x1) / 2, (y0 + y1) / 2, hh / 2, (x1 - x0, y1 - y0, hh)))
+    return [{'shape': 'box', 'name': name, 'x': ox + c * x - s_ * y, 'y': oy + s_ * x + c * y, 'z': z,
+             'size': size, 'yaw': oyaw} for name, x, y, z, size in boxes]
+
+
 def obstacles(kind, level, seed=0):
     """Obstacles of the waves / rough worlds as plain shapes (also used to
     draw the terrain in videos):
@@ -144,6 +177,8 @@ def obstacles(kind, level, seed=0):
     out = []
     if kind == 'room':
         return room_boxes(seed)
+    if kind == 'house':
+        return house_boxes(seed)
     h = level / 1000.0
     if h <= 0:
         return out
@@ -216,7 +251,7 @@ def world(kind='flat', level=0.0, seed=0):
             parts.append(_cylinder(f'wave{k}', (o['x'], 0, o['z'], math.pi / 2, 0, 0), o['r'], o['length']))
         elif o['shape'] == 'cyl_x':
             parts.append(_cylinder(f'ridge{k}', (o['x'], o['y'], o['z'], 0, math.pi / 2, 0), o['r'], o['length']))
-        elif kind == 'room':
+        elif kind in ('room', 'house'):
             wall = o['name'].startswith('wall')
             parts.append(_box(o['name'], (o['x'], o['y'], o['z'], 0, 0, o['yaw']), o['size'],
                               '0.82 0.80 0.76 1' if wall else '0.55 0.42 0.30 1'))

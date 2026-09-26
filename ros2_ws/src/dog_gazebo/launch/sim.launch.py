@@ -129,7 +129,8 @@ def _setup(context):
         actions.append(Node(package='dog_perception', executable='localization_node', name='localization',
                             namespace=NS, output='screen',
                             parameters=[robot_yaml, sim_time,
-                                        {'localization.map': cfg('map'), 'localization.mode': cfg('localization_mode')}],
+                                        {'localization.map': cfg('map'), 'localization.mode': cfg('localization_mode'),
+                                         'localization.loop_closure': on('loop_closure')}],
                             remappings=[('odom', 'odom_dr')] if on('dead_reckoning') else []))
     if on('gamepad'):
         actions += [
@@ -175,6 +176,7 @@ def generate_launch_description():
         DeclareLaunchArgument('localization', default_value='false', description='start localization_node'),
         DeclareLaunchArgument('localization_mode', default_value='auto', description='auto | mapping | localize'),
         DeclareLaunchArgument('map', default_value='/tmp/dog_sim_map', description='map file without extension'),
+        DeclareLaunchArgument('loop_closure', default_value='true', description='localization: close loops'),
         DeclareLaunchArgument('web', default_value='true'),
         DeclareLaunchArgument('gamepad', default_value='false'),
         OpaqueFunction(function=_setup),

@@ -59,7 +59,18 @@ def main():
     walls = np.loadtxt(args.map + '.walls').reshape(-1, 2)
     c, s = math.cos(off[2]), math.sin(off[2])
     walls = walls @ np.array([[c, s], [-s, c]]) + np.array(off[:2])
-    boxes = terrain.room_boxes(truth_cfg.get('seed', 0))
+    world = truth_cfg.get('world', 'room')
+    boxes = terrain.obstacles(world, 0, truth_cfg.get('seed', 0))
+    # submap origins and loop closures of the map (house maps have a graph)
+    graph_nodes, graph_loops = [], []
+    if os.path.exists(args.map + '.graph'):
+        lines = open(args.map + '.graph').read().split('\n')
+        n = int(lines[0].split()[1])
+        graph_nodes = [compose(off, tuple(float(v) for v in ln.split()[1:4])) for ln in lines[1:1 + n]]
+        for ln in lines[2 + n:]:
+            f = ln.split()
+            if len(f) == 8 and f[7] == '1':
+                graph_loops.append((int(f[0]), int(f[1])))
     F = [e for e in rec['trace'] if e['phase'] != 'start']
     ts = np.array([e['t'] for e in F])
     t0 = ts[0]
@@ -87,6 +98,11 @@ def main():
         ax.add_patch(Polygon(pts, closed=True, fc='#e4e0da' if wall else FURN,
                              ec='none', alpha=0.9 if wall else 0.55, zorder=1))
     ax.scatter(walls[:, 0], walls[:, 1], s=3, c=WALL, lw=0, zorder=2, label='стены карты')
+    if graph_nodes:
+        gn = np.array(graph_nodes)
+        ax.plot(gn[:, 0], gn[:, 1], 'o', ms=5, mfc='none', mec='#8a5cd0', mew=1.2, zorder=6, label='подкарты')
+        for i, j in graph_loops:
+            ax.plot([gn[i, 0], gn[j, 0]], [gn[i, 1], gn[j, 1]], color='#8a5cd0', lw=1.4, ls=':', zorder=6)
     xs = [b['x'] for b in boxes]
     ys = [b['y'] for b in boxes]
     ax.set_xlim(min(xs) - 0.4, max(xs) + 0.4)
@@ -103,7 +119,7 @@ def main():
     ghost = Polygon(np.zeros((3, 2)), closed=True, fc=LOC, ec='none', alpha=0.8, zorder=6)
     ax.add_patch(robot)
     ax.add_patch(ghost)
-    ax.legend(loc='upper left', bbox_to_anchor=(0.0, 1.06), ncol=4, frameon=False, fontsize=11)
+    ax.legend(loc='upper left', bbox_to_anchor=(0.0, 1.06), ncol=5, frameon=False, fontsize=11)
 
     ae.set_xlim(0, ts[-1] - t0)
     ae.set_ylim(0, max(0.3, float(np.nanmax(e_dr)) * 1.1 if np.isfinite(e_dr).any() else 0.3))

@@ -277,6 +277,15 @@ double WallGrid::distance(double x, double y, double * gx, double * gy) const
   return d;
 }
 
+std::vector<P2> WallGrid::walls() const
+{
+  std::vector<P2> out;
+  for (int k = 0; k < w_ * h_; ++k) {
+    if (hits_[k] >= min_hits_) {out.push_back(cellPoint(k));}
+  }
+  return out;
+}
+
 std::vector<int8_t> WallGrid::occupancy() const
 {
   std::vector<int8_t> out(hits_.size(), 0);
@@ -480,9 +489,20 @@ GlobalResult globalSearch(const WallGrid & map, const std::vector<P2> & cloud,
   const double res = map.resolution();
   const P2 o = map.origin();
   std::vector<P2> pos;
-  for (double y = o.y + 0.5 * res; y < o.y + map.height() * res; y += gp.step_xy) {
-    for (double x = o.x + 0.5 * res; x < o.x + map.width() * res; x += gp.step_xy) {
-      if (map.distance(x, y) >= gp.clearance) {pos.push_back({x, y});}
+  if (gp.window) {
+    const int n = static_cast<int>(std::floor(gp.win_xy / gp.step_xy));
+    for (int j = -n; j <= n; ++j) {
+      for (int i = -n; i <= n; ++i) {
+        const double x = gp.center.x + i * gp.step_xy, y = gp.center.y + j * gp.step_xy;
+        if (std::hypot(x - gp.center.x, y - gp.center.y) <= gp.win_xy + 1e-9 &&
+          map.distance(x, y) >= gp.clearance) {pos.push_back({x, y});}
+      }
+    }
+  } else {
+    for (double y = o.y + 0.5 * res; y < o.y + map.height() * res; y += gp.step_xy) {
+      for (double x = o.x + 0.5 * res; x < o.x + map.width() * res; x += gp.step_xy) {
+        if (map.distance(x, y) >= gp.clearance) {pos.push_back({x, y});}
+      }
     }
   }
   const double sigma = 0.1;
@@ -496,9 +516,15 @@ GlobalResult globalSearch(const WallGrid & map, const std::vector<P2> & cloud,
     };
   struct Cand {double s; Pose2 p;};
   std::vector<Cand> cands;
-  const int nyaw = std::max(1, static_cast<int>(std::round(2.0 * M_PI / gp.step_yaw)));
-  for (int k = 0; k < nyaw; ++k) {
-    const double yaw = wrapAngle(k * 2.0 * M_PI / nyaw);
+  std::vector<double> yaws;
+  if (gp.window && gp.win_yaw < M_PI) {
+    const int n = static_cast<int>(std::floor(gp.win_yaw / gp.step_yaw));
+    for (int k = -n; k <= n; ++k) {yaws.push_back(wrapAngle(gp.center.yaw + k * gp.step_yaw));}
+  } else {
+    const int nyaw = std::max(1, static_cast<int>(std::round(2.0 * M_PI / gp.step_yaw)));
+    for (int k = 0; k < nyaw; ++k) {yaws.push_back(wrapAngle(k * 2.0 * M_PI / nyaw));}
+  }
+  for (const double yaw : yaws) {
     const double c = std::cos(yaw), s = std::sin(yaw);
     std::vector<P2> rot;
     for (const auto & q : coarse) {rot.push_back({c * q.x - s * q.y, s * q.x + c * q.y});}

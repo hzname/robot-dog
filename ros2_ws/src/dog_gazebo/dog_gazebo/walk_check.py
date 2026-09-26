@@ -198,6 +198,13 @@ class WalkCheck:
         self.phase = 'stand'
         self.spin(4.0, lambda: self.cmd.publish(String(data='stand'))
                   if self.state in ('passive', 'lying') else None)
+        # a heavy world (260 stones) on a slow runner: the first commands can
+        # come before locomotion ticks - ask again until it stands (<= 60 s)
+        end = time.time() + 60
+        while self.state != 'stand' and time.time() < end:
+            if self.state in ('passive', 'lying'):
+                self.cmd.publish(String(data='stand'))
+            self.spin(0.5)
         self.spin(1.0)
         z = self.height()
         self.check('stand', self.state == 'stand' and 0.14 < z < 0.19 and self.tilt() < self.max_tilt,

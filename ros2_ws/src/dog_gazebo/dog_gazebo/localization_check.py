@@ -43,6 +43,27 @@ from dog_gazebo import terrain
 ROUTE = ((-0.9, -0.5), (1.0, -0.5), (1.2, 0.4), (-0.5, 0.5))
 
 
+def house_route(seed, laps):
+    """Round the house's core from the start, the way the robot faces: the
+    corners in turn, `laps` times, then on past the first corner to half the
+    next side - over ground mapped at the start, where the loop closes."""
+    sx, sy, syaw = terrain.HOUSE_STARTS[seed % len(terrain.HOUSE_STARTS)]
+    corners = terrain.HOUSE_LOOP  # counter-clockwise
+    ccw = sx * math.sin(syaw) - sy * math.cos(syaw) > 0  # heading x position (about the core's centre)
+    a0 = math.atan2(sy, sx)
+
+    def ahead(c):  # angle still to go round the centre to reach corner c
+        d = math.atan2(c[1], c[0]) - a0
+        return (d if ccw else -d) % (2 * math.pi) or 2 * math.pi
+    first = min(range(4), key=lambda k: ahead(corners[k]))
+    step = 1 if ccw else -1
+    order = [corners[(first + step * k) % 4] for k in range(4)]
+    route = order * laps + [order[0]]
+    a, b = order[0], order[1]
+    route.append(((a[0] + b[0]) / 2, (a[1] + b[1]) / 2))
+    return route
+
+
 def _yaw(q):
     return math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z))
 
@@ -75,7 +96,7 @@ def _wrap(a):
 
 
 class LocalizationCheck:
-    def __init__(self, seed, map_seed, phase, speed, laps, survey, map_path=None):
+    def __init__(self, seed, map_seed, phase, speed, laps, survey, map_path=None, world='room'):
         self.seed, self.phase, self.speed, self.laps, self.survey = seed, phase, speed, laps, survey
         self.map_path = map_path
         self.map_offset = None  # map frame -> the mapping run's world frame
@@ -83,7 +104,9 @@ class LocalizationCheck:
             with open(map_path + '.truth.json') as f:
                 self.map_offset = tuple(json.load(f)['map_to_world'])
         # world of this run -> world of the mapping run (the room placed in both)
-        W, M = terrain.room_to_world(seed), terrain.room_to_world(map_seed)
+        self.world = world
+        self.route = [tuple(p) for p in ROUTE] * laps if world == 'room' else house_route(seed, laps)
+        W, M = terrain.room_to_world(seed, world), terrain.room_to_world(map_seed, world)
         self.world_to_map = _compose(M, _inverse(W))
         self.room_to_world = W
         self.node = rclpy.create_node('localization_check', namespace='dog')
@@ -201,11 +224,10 @@ class LocalizationCheck:
         self.phase_name = 'route'
         self.reached = 0
         room = self.room_to_world
-        for _ in range(self.laps):
-            for rx, ry in ROUTE:
-                gx, gy, _ = _compose(room, (rx, ry, 0.0))
-                if self.goto(gx, gy, 60.0):
-                    self.reached += 1
+        for rx, ry in self.route:
+            gx, gy, _ = _compose(room, (rx, ry, 0.0))
+            if self.goto(gx, gy, 120.0):
+                self.reached += 1
         self.phase_name = 'end'
         self.spin_until(lambda: False, 2.0, lambda: self.vel.publish(Twist()))
         if self.phase == 'mapping':
@@ -215,7 +237,7 @@ class LocalizationCheck:
 
     # ------------------------------------------------------------ scores
     def scores(self):
-        out = {'phase': self.phase, 'seed': self.seed, 'route_points': len(ROUTE) * self.laps,
+        out = {'phase': self.phase, 'world': self.world, 'seed': self.seed, 'route_points': len(self.route),
                'reached': self.reached}
         tr = [e for e in self.trace if e['phase'] in ('route', 'end')]
         if self.t_tracking is not None:
@@ -254,12 +276,15 @@ class LocalizationCheck:
             out['walked_m'] = round(walked, 2)
         if self.status:
             out['map_cells'] = self.status.get('cells')
+            out['submaps'] = self.status.get('submaps')
+            out['loops'] = self.status.get('loops')
         return out
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--seed', type=int, default=0, help='start of this run (terrain.ROOM_STARTS)')
+    ap.add_argument('--world', choices=('room', 'house'), default='room')
+    ap.add_argument('--seed', type=int, default=0, help='start of this run (terrain.ROOM_STARTS / HOUSE_STARTS)')
     ap.add_argument('--map-seed', type=int, default=None, help='start of the mapping run (default: --seed)')
     ap.add_argument('--phase', choices=('mapping', 'localize'), default='mapping')
     ap.add_argument('--speed', type=float, default=0.12)
@@ -275,7 +300,7 @@ def main():
     args, ros_args = ap.parse_known_args()
     rclpy.init(args=ros_args)
     chk = LocalizationCheck(args.seed, args.seed if args.map_seed is None else args.map_seed, args.phase,
-                            args.speed, args.laps, not args.no_survey, args.map)
+                            args.speed, args.laps, not args.no_survey, args.map, args.world)
     ok = False
     try:
         ok = chk.run()
@@ -283,7 +308,7 @@ def main():
         print(json.dumps(res, indent=1))
         if ok and args.phase == 'mapping' and args.map and res.get('map_to_world'):
             with open(args.map + '.truth.json', 'w') as f:
-                json.dump({'map_to_world': res['map_to_world'], 'seed': args.seed}, f)
+                json.dump({'map_to_world': res['map_to_world'], 'seed': args.seed, 'world': args.world}, f)
         if args.trace:
             with open(args.trace, 'w') as f:
                 json.dump({'scores': res, 'states': chk.states, 'trace': chk.trace,

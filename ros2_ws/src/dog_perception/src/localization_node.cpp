@@ -15,6 +15,10 @@
 //   localization/map      nav_msgs/OccupancyGrid  the walls (latched, when they change)
 //   tf                    map -> odom
 //
+// The map is made of submaps (a few metres of walking each) joined by a pose
+// graph; a finished submap recognised against an old one closes a loop and
+// the graph straightens the map (dog_perception/submaps.hpp).
+//
 // Modes (localization.mode): mapping - start an empty map where the robot
 // stands, grow it as it walks and save it on exit or on "save";
 // localize - load the map, find the robot in it (best after a survey: the
@@ -33,6 +37,7 @@
 
 #include "dog_perception/core.hpp"
 #include "dog_perception/localization.hpp"
+#include "dog_perception/submaps.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "nav_msgs/msg/occupancy_grid.hpp"
@@ -105,18 +110,24 @@ public:
     save_on_exit_ = declare_parameter("localization.save_on_exit", true);
     const auto mode = declare_parameter("localization.mode", std::string("auto"));
 
-    grid_ = WallGrid(res, min_hits_);
+    sp_.resolution = res;
+    sp_.min_hits = min_hits_;
+    sp_.length = getD("localization.submap_length", sp_.length);
+    sp_.loop_closure = declare_parameter("localization.loop_closure", sp_.loop_closure);
+    sp_.loop_radius = getD("localization.loop_radius", sp_.loop_radius);
+    sp_.loop_min_inliers = getD("localization.loop_min_inliers", sp_.loop_min_inliers);
+    map_ = SubmapMap(sp_);
     const bool have_map = !map_path_.empty() && std::ifstream(map_path_ + ".yaml").good();
     if (mode == "localize" || (mode == "auto" && have_map)) {
-      if (!have_map || !grid_.load(map_path_)) {
-        RCLCPP_ERROR(get_logger(), "cannot load the map %s(.yaml/.pgm) - mapping instead", map_path_.c_str());
-        grid_ = WallGrid(res, min_hits_);
+      if (!have_map || !map_.load(map_path_)) {
+        RCLCPP_ERROR(get_logger(), "cannot load the map %s(.graph/.yaml/.pgm) - mapping instead", map_path_.c_str());
+        map_ = SubmapMap(sp_);
       } else {
         mapping_ = false;
         status_ = "relocalizing";
-        RCLCPP_INFO(get_logger(), "map %s: %d x %d cells, %d walls - finding the robot in it "
-          "(a survey helps: command \"survey\")", map_path_.c_str(), grid_.width(), grid_.height(),
-          grid_.occupiedCount());
+        RCLCPP_INFO(get_logger(), "map %s: %zu submaps, %zu edges, %d walls - finding the robot in it "
+          "(a survey helps: command \"survey\")", map_path_.c_str(), map_.submaps().size(), map_.edges().size(),
+          map_.merged().occupiedCount());
       }
     }
     if (mapping_) {
@@ -156,7 +167,7 @@ public:
 
   ~LocalizationNode() override
   {
-    if (mapping_ && save_on_exit_ && !map_path_.empty() && !grid_.empty()) {save();}
+    if (mapping_ && save_on_exit_ && !map_path_.empty() && !map_.empty()) {save();}
   }
 
 private:
@@ -181,6 +192,9 @@ private:
     const double t = stampSec(m.header.stamp);
     const Pose2 o{p.position.x, p.position.y,
       yawOf(p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w)};
+    if (!odom_hist_.empty()) {
+      walked_ += std::hypot(o.x - odom_hist_.back().pose.x, o.y - odom_hist_.back().pose.y);
+    }
     odom_hist_.push_back({t, o, p.position.z});
     while (!odom_hist_.empty() && odom_hist_.front().t < t - 5.0) {odom_hist_.pop_front();}
     // pose in the map: map <- odom <- base
@@ -262,7 +276,7 @@ private:
     recent_.push_back({t, pts});
     while (!recent_.empty() && recent_.front().first < t - cloud_time_) {recent_.pop_front();}
     if (mapping_) {
-      mapStep(t, pts);
+      mapStep(t, pts, od->pose);
     } else {
       localizeStep(t, pts);
     }
@@ -275,12 +289,12 @@ private:
     return c;
   }
 
-  void mapStep(double t, const std::vector<P2> & pts)
+  void mapStep(double t, const std::vector<P2> & pts, const Pose2 & odom)
   {
-    if (!grid_.empty() && grid_.fieldValid()) {
+    if (!map_.empty() && map_.merged().fieldValid()) {
       const auto cloud = recentCloud();
       if (static_cast<int>(cloud.size()) >= min_points_) {
-        const auto r = match(grid_, cloud, T_, match_);
+        const auto r = match(map_.merged(), cloud, T_, match_);
         last_ = r;
         if (r.ok) {T_ = r.pose;}
       }
@@ -288,9 +302,20 @@ private:
     std::vector<P2> w;
     w.reserve(pts.size());
     for (const auto & p : pts) {w.push_back(T_.apply(p));}
-    grid_.insert(w);
-    if (grid_.dirty() && (t - last_field_ > 0.5 || !grid_.fieldValid())) {
-      grid_.updateField();
+    const size_t loops = map_.loops().size(), subs = map_.submaps().size();
+    const Pose2 corr = map_.insert(w, T_.compose(odom), walked_);
+    T_ = corr.compose(T_);
+    if (map_.loops().size() > loops) {
+      const auto & l = map_.loops().back();
+      RCLCPP_INFO(get_logger(), "loop closed: submap %d is where %d was (%.0f %% of its walls match); "
+        "the map moved the robot %.2f m, %.1f deg", l.to, l.from, 100.0 * l.inliers, l.moved_m,
+        l.moved_yaw * 180.0 / M_PI);
+      map_changed_ = true;
+    } else if (map_.submaps().size() > subs) {
+      RCLCPP_INFO(get_logger(), "submap %zu after %.1f m", map_.submaps().size() - 1, walked_);
+    }
+    if (t - last_field_ > 0.5 || !map_.merged().fieldValid()) {
+      map_.refresh();
       last_field_ = t;
       map_changed_ = true;
     }
@@ -301,7 +326,7 @@ private:
     if (status_ == "tracking") {
       const auto cloud = recentCloud();
       if (static_cast<int>(cloud.size()) < min_points_) {return;}  // nothing but floor in view
-      const auto r = match(grid_, cloud, T_, match_);
+      const auto r = match(map_.merged(), cloud, T_, match_);
       last_ = r;
       if (r.ok && r.inlier_fraction >= min_inliers_) {
         T_ = r.pose;
@@ -324,11 +349,17 @@ private:
     if (!reloc_now_ && !waited) {return;}
     reloc_now_ = false;
     last_try_ = t;
-    const auto cloud = thin(reloc_, grid_.resolution());
-    const auto g = globalSearch(grid_, cloud, global_, match_);
+    // the cloud round the robot as it stands now (places are centred on submap origins)
+    if (odom_hist_.empty()) {return;}
+    const Pose2 odom_now = odom_hist_.back().pose, inv = odom_now.inverse();
+    std::vector<P2> cloud;
+    for (const auto & q : thin(reloc_, sp_.resolution)) {cloud.push_back(inv.apply(q));}
+    auto g = map_.relocalize(cloud, global_, match_);
+    g.best.pose = g.best.pose.compose(inv);  // robot in the map -> map <- odom
+    const Pose2 at = g.best.pose.compose(odom_now);
     RCLCPP_INFO(get_logger(), "relocalization over %zu points: %s (%.0f %% on the walls, next best %.0f %%) "
       "at x %.2f y %.2f yaw %.0f deg", cloud.size(), g.ok ? "found" : "not sure", 100.0 * g.score,
-      100.0 * g.second, g.best.pose.x, g.best.pose.y, g.best.pose.yaw * 180.0 / M_PI);
+      100.0 * g.second, at.x, at.y, at.yaw * 180.0 / M_PI);
     if (g.ok) {
       T_ = g.best.pose;
       last_ = g.best;
@@ -351,7 +382,7 @@ private:
       last_try_ = 0.0;
       RCLCPP_INFO(get_logger(), "relocalizing");
     } else if (c == "reset") {
-      grid_ = WallGrid(grid_.resolution(), min_hits_);
+      map_ = SubmapMap(sp_);
       T_ = Pose2{};
       if (!odom_hist_.empty()) {T_ = odom_hist_.back().pose.inverse();}  // the map starts where the robot is
       mapping_ = true;
@@ -369,8 +400,10 @@ private:
       RCLCPP_ERROR(get_logger(), "no localization.map path - not saved");
       return;
     }
-    if (grid_.save(map_path_)) {
-      RCLCPP_INFO(get_logger(), "map saved: %s.pgm/.yaml/.walls (%d walls)", map_path_.c_str(), grid_.occupiedCount());
+    map_.refresh();
+    if (map_.save(map_path_)) {
+      RCLCPP_INFO(get_logger(), "map saved: %s.graph + %zu submaps, merged %s.pgm/.yaml/.walls (%d walls, %zu loops closed)",
+        map_path_.c_str(), map_.submaps().size(), map_path_.c_str(), map_.merged().occupiedCount(), map_.loops().size());
     } else {
       RCLCPP_ERROR(get_logger(), "cannot write %s", map_path_.c_str());
     }
@@ -384,7 +417,8 @@ private:
     o.precision(4);
     o << "{\"mode\": \"" << (mapping_ ? "mapping" : "localize") << "\", \"status\": \"" << status_
       << "\", \"inliers\": " << last_.inlier_fraction << ", \"points\": " << last_.points
-      << ", \"rms\": " << last_.rms << ", \"cells\": " << grid_.occupiedCount()
+      << ", \"rms\": " << last_.rms << ", \"cells\": " << map_.merged().occupiedCount()
+      << ", \"submaps\": " << map_.submaps().size() << ", \"loops\": " << map_.loops().size()
       << ", \"x\": " << b.x << ", \"y\": " << b.y << ", \"yaw\": " << b.yaw << "}";
     std_msgs::msg::String m;
     m.data = o.str();
@@ -397,18 +431,21 @@ private:
     nav_msgs::msg::OccupancyGrid g;
     g.header.stamp = now();
     g.header.frame_id = "map";
-    g.info.resolution = static_cast<float>(grid_.resolution());
-    g.info.width = static_cast<uint32_t>(grid_.width());
-    g.info.height = static_cast<uint32_t>(grid_.height());
-    g.info.origin.position.x = grid_.origin().x;
-    g.info.origin.position.y = grid_.origin().y;
+    const WallGrid & m = map_.merged();
+    g.info.resolution = static_cast<float>(m.resolution());
+    g.info.width = static_cast<uint32_t>(m.width());
+    g.info.height = static_cast<uint32_t>(m.height());
+    g.info.origin.position.x = m.origin().x;
+    g.info.origin.position.y = m.origin().y;
     g.info.origin.orientation.w = 1.0;
-    g.data = grid_.occupancy();
+    g.data = m.occupancy();
     pub_map_->publish(g);
   }
 
   std::map<std::string, SensorMount> mounts_;
-  WallGrid grid_;
+  SubmapParams sp_;
+  SubmapMap map_;
+  double walked_{0.0};
   MatchParams match_;
   GlobalParams global_;
   Pose2 T_;  // map <- odom

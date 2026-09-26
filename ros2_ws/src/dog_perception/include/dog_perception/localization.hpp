@@ -17,6 +17,7 @@
 #pragma once
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -70,6 +71,8 @@ public:
   /// mean hit of each occupied cell (sub-cell positions). False on I/O error.
   bool save(const std::string & path_no_ext) const;
   bool load(const std::string & path_no_ext);
+  /// The mean hit of every occupied cell (where the walls are).
+  std::vector<P2> walls() const;
   /// Occupancy for nav_msgs/OccupancyGrid: 100 occupied, 0 elsewhere.
   std::vector<int8_t> occupancy() const;
 
@@ -123,6 +126,12 @@ struct GlobalParams
   int max_points{300};       // the cloud is thinned to about this many
   int refine{8};             // best candidates refined by match()
   double ambiguity{0.9};     // a distinct second best scoring above this share of the best: ambiguous
+  // search only round a guess (loop closure, a place recognised): positions
+  // within win_xy of `center`, headings within win_yaw of its yaw
+  bool window{false};
+  Pose2 center;
+  double win_xy{1.0};
+  double win_yaw{M_PI};
 };
 
 struct GlobalResult
