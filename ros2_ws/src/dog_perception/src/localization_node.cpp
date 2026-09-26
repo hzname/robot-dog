@@ -106,6 +106,8 @@ public:
     lost_after_ = getD("localization.lost_after", 3.0);
     reloc_wait_ = getD("localization.reloc_wait", 3.0);
     reloc_radius_ = getD("localization.reloc_radius", 8.0);
+    reloc_clear_ = getD("localization.reloc_clear", 0.7);
+    verify_distance_ = getD("localization.verify_distance", 3.0);
     reloc_min_fit_ = getD("localization.reloc_min_fit", 0.6);
     reloc_ambiguity_ = getD("localization.reloc_ambiguity", 0.85);
     debug_dump_ = declare_parameter("localization.debug_dump", std::string(""));
@@ -376,6 +378,34 @@ private:
       }
       return;
     }
+    if (status_ == "verifying") {
+      // the hypothesis must keep the walls under the robot for verify_distance
+      // of walking: a look-alike corridor turned does not, once past its end
+      const auto cloud = recentCloud();
+      if (static_cast<int>(cloud.size()) >= min_points_) {
+        const auto r = match(map_.merged(), cloud, T_, match_);
+        if (r.ok && r.inlier_fraction >= min_inliers_) {
+          T_ = r.pose;
+          last_ = r;
+          verify_fails_ = 0;
+        } else if (++verify_fails_ >= 10) {
+          RCLCPP_INFO(get_logger(), "that was not it (%.0f %% on the walls after %.1f m) - relocalizing",
+            100.0 * r.inlier_fraction, walked_ - verify_from_);
+          status_ = "relocalizing";
+          tracking_since_ = -1.0;
+          last_try_ = t;
+          return;
+        }
+      }
+      if (walked_ - verify_from_ >= verify_distance_) {
+        RCLCPP_INFO(get_logger(), "relocalization confirmed over %.1f m", walked_ - verify_from_);
+        status_ = "tracking";
+        tracking_since_ = last_scan_t_;
+        last_good_ = t;
+        scratch_.reset();
+      }
+      return;
+    }
     // relocalizing / lost: map what the robot sees as it goes, as mapping does
     // (scans matched to each other, not held together by dead reckoning
     // alone), and look for that little map in the stored one
@@ -429,10 +459,17 @@ private:
     if (g.ok) {
       T_ = g.best.pose;
       last_ = g.best;
-      status_ = "tracking";
-      tracking_since_ = last_scan_t_;
-      last_good_ = t;
-      scratch_.reset();
+      if (g.second < reloc_clear_ * g.score) {  // a clear winner
+        status_ = "tracking";
+        tracking_since_ = last_scan_t_;
+        last_good_ = t;
+        scratch_.reset();
+      } else {  // a narrow one: walk a little with it before believing it
+        status_ = "verifying";
+        tracking_since_ = -1.0;
+        verify_from_ = walked_;
+        verify_fails_ = 0;
+      }
     }
   }
 
@@ -566,7 +603,8 @@ private:
   std::deque<std::pair<double, std::vector<P2>>> recent_;
   std::unique_ptr<SubmapMap> scratch_;  // the little map made while relocalizing
   Pose2 Ts_;                            // its frame <- odom
-  double reloc_radius_{8.0};
+  double reloc_radius_{8.0}, reloc_clear_{0.7}, verify_distance_{3.0}, verify_from_{0.0};
+  int verify_fails_{0};
   int reloc_min_points_{400}, reloc_tries_{0};
   double reloc_min_fit_{0.6}, reloc_ambiguity_{0.85};
   double tracking_since_{-1.0}, last_scan_t_{0.0};

@@ -264,8 +264,8 @@ class LocalizationCheck:
             self.spin_until(lambda: self.state == 'stand', 30.0)
         self.phase_name = 'relocalize'
         self.t_survey_end = self.now()
-        self.spin_until(lambda: self.status is not None and self.status.get('status') == 'tracking', 20.0)
-        self.t_tracking = self.now() if self.status and self.status.get('status') == 'tracking' else None
+        self.spin_until(lambda: self.status is not None and self.status.get('status') in ('tracking', 'verifying'), 20.0)
+        self.t_tracking = None
         self.phase_name = 'route'
         self.reached = 0
         room = self.room_to_world
@@ -285,8 +285,12 @@ class LocalizationCheck:
         out = {'phase': self.phase, 'world': self.world, 'seed': self.seed, 'route_points': len(self.route),
                'reached': self.reached}
         tr = [e for e in self.trace if e['phase'] in ('route', 'end')]
+        # the first moment the node was sure where it was (after the survey,
+        # standing or walking on)
+        self.t_tracking = next((e['t'] for e in self.trace
+                                if e['t'] >= self.t_survey_end - 0.5 and e.get('status') == 'tracking'), None)
         if self.t_tracking is not None:
-            out['relocalized_s'] = round(self.t_tracking - self.t_survey_end, 1)
+            out['relocalized_s'] = round(max(0.0, self.t_tracking - self.t_survey_end), 1)
         else:
             out['relocalized_s'] = None
 
@@ -375,9 +379,13 @@ def main():
             why = []
             if res['reached'] < res['route_points']:
                 why.append(f"reached {res['reached']} of {res['route_points']} route points")
-            if args.phase == 'localize' and (res['relocalized_s'] is None or res['relocalized_s'] > 20):
-                why.append('not relocalized within 20 s after the survey')
-            if res['tracking_share'] < 0.9:
+            # the room: from the survey alone; the house: a narrow winner is walked
+            # 3 m with before it is believed
+            reloc_lim = 20 if args.world == 'room' else 60
+            if args.phase == 'localize' and (res['relocalized_s'] is None or res['relocalized_s'] > reloc_lim):
+                why.append(f'not relocalized within {reloc_lim} s after the survey')
+            share_lim = 0.9 if args.world == 'room' else 0.7  # the house: finding itself may take metres
+            if res['tracking_share'] < share_lim:
                 why.append(f"tracking only {100 * res['tracking_share']:.0f} % of the route")
             lo = res.get('localization') or {}
             mw = res.get('map_walls') or {}

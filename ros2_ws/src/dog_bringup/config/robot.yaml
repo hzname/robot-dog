@@ -162,6 +162,8 @@
       lost_after: 3.0         # [s] without a good match: relocalize
       reloc_wait: 3.0         # [s] between relocalization tries (and right after a survey)
       reloc_radius: 8.0       # [m] of the little map made while relocalizing that is looked for
+      reloc_clear: 0.7        # next best below this share of the best: believed at once;
+      verify_distance: 3.0    #   else walked this far [m] with the walls under it first
       reloc_min_points: 400   # fewer (5 cm cells): not sure, whatever the fit
       prior_xy: 0.10          # [m] trust in the last correction (1 sigma per match)
       prior_yaw_deg: 5.0
