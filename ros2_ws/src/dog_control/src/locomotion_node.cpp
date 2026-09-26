@@ -118,14 +118,16 @@ public:
         gyro_stamp_ = stamp;
         controller_->addYawRate(msg->angular_velocity.z, gdt);
         // the heading for dead reckoning ("gyro"): the rate minus its bias,
-        // refined whenever the robot stands still on its feet (the survey and
-        // the greeting turn the body: not then); imu_node measures the bias
-        // only once, at start, and it wanders with temperature
+        // learnt whenever the robot is still - lying at start (as imu_node
+        // does once) and standing on its feet later (the survey and the
+        // greeting turn the body: not then), as the bias wanders with temperature
         const double wz = msg->angular_velocity.z + odom_gyro_bias_;
-        const bool still = controller_->mode() == Mode::STAND && !controller_->gait().stepping() &&
-          !controller_->crawl().stepping() && std::abs(wz - gyro_bias_est_) < 0.05;
+        const Mode md = controller_->mode();
+        const bool resting = md == Mode::PASSIVE || md == Mode::LYING ||
+          (md == Mode::STAND && !controller_->gait().stepping() && !controller_->crawl().stepping());
+        const bool still = resting && std::abs(wz - gyro_bias_est_) < 0.05;
         still_time_ = still ? still_time_ + gdt : 0.0;
-        if (still_time_ > 1.0) {gyro_bias_est_ += (wz - gyro_bias_est_) * std::min(1.0, gdt / 5.0);}
+        if (still_time_ > 0.5) {gyro_bias_est_ += (wz - gyro_bias_est_) * std::min(1.0, gdt / 2.0);}
         gyro_yaw_ += (wz - gyro_bias_est_) * gdt;
         last_gyro_ = now();
         const auto & q = msg->orientation;

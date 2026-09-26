@@ -106,6 +106,9 @@ public:
     lost_after_ = getD("localization.lost_after", 3.0);
     reloc_wait_ = getD("localization.reloc_wait", 3.0);
     reloc_window_ = getD("localization.reloc_window", 60.0);
+    reloc_min_fit_ = getD("localization.reloc_min_fit", 0.6);
+    reloc_ambiguity_ = getD("localization.reloc_ambiguity", 0.85);
+    debug_dump_ = declare_parameter("localization.debug_dump", std::string(""));
     reloc_min_points_ = getI("localization.reloc_min_points", 400);
     match_.prior_xy = getD("localization.prior_xy", match_.prior_xy);
     match_.prior_yaw = getD("localization.prior_yaw_deg", 5.0) * M_PI / 180.0;
@@ -130,6 +133,7 @@ public:
       } else {
         mapping_ = false;
         status_ = "relocalizing";
+        tracking_since_ = -1.0;
         RCLCPP_INFO(get_logger(), "map %s: %zu submaps, %zu edges, %d walls - finding the robot in it "
           "(a survey helps: command \"survey\")", map_path_.c_str(), map_.submaps().size(), map_.edges().size(),
           map_.merged().occupiedCount());
@@ -137,6 +141,7 @@ public:
     }
     if (mapping_) {
       status_ = "tracking";
+      tracking_since_ = last_scan_t_;
       RCLCPP_INFO(get_logger(), "mapping from here%s", map_path_.empty() ? " (no localization.map: not saved)" :
         (" into " + map_path_).c_str());
     }
@@ -270,6 +275,7 @@ private:
   {
     if (!legsOn()) {return;}
     const double t = stampSec(msg.header.stamp);
+    last_scan_t_ = t;
     const auto R = R_at(t);
     const auto od = odomAt(t);
     if (!R || !od) {return;}
@@ -352,6 +358,7 @@ private:
         last_good_ = t;
       } else if (t - last_good_ > lost_after_) {
         status_ = "lost";
+        tracking_since_ = -1.0;
         RCLCPP_WARN(get_logger(), "lost: %.0f %% of %zu points on the walls for %.1f s - "
           "relocalizing (a survey helps)", 100.0 * r.inlier_fraction, cloud.size(), t - last_good_);
         reloc_.clear();
@@ -377,9 +384,16 @@ private:
     for (const auto & r : reloc_) {all.insert(all.end(), r.second.begin(), r.second.end());}
     std::vector<P2> cloud;
     for (const auto & q : thin(all, sp_.resolution)) {cloud.push_back(inv.apply(q));}
+    if (!debug_dump_.empty()) {  // the cloud (robot frame) of every try, for offline study
+      std::ofstream f(debug_dump_ + "." + std::to_string(reloc_tries_++) + ".txt");
+      f.precision(6);
+      f << "# t " << t << " odom " << odom_now.x << " " << odom_now.y << " " << odom_now.yaw << "\n";
+      for (const auto & q : cloud) {f << q.x << " " << q.y << "\n";}
+    }
     auto g = map_.relocalize(cloud, global_, match_);
     // a few hundred points fit many places a little: not enough to be sure
-    g.ok = g.ok && static_cast<int>(cloud.size()) >= reloc_min_points_;
+    g.ok = g.ok && static_cast<int>(cloud.size()) >= reloc_min_points_ && g.score >= reloc_min_fit_ &&
+      g.second < reloc_ambiguity_ * g.score;
     g.best.pose = g.best.pose.compose(inv);  // robot in the map -> map <- odom
     const Pose2 at = g.best.pose.compose(odom_now);
     RCLCPP_INFO(get_logger(), "relocalization over %zu points: %s (fit %.0f %%, next best %.0f %%) "
@@ -389,6 +403,7 @@ private:
       T_ = g.best.pose;
       last_ = g.best;
       status_ = "tracking";
+      tracking_since_ = last_scan_t_;
       last_good_ = t;
       reloc_.clear();
     }
@@ -399,7 +414,9 @@ private:
   /// one. The walls at both ends were seen, not walked into by reckoning.
   void updateScale(const MatchResult & r)
   {
-    if (!scale_on_ || odom_hist_.empty()) {return;}
+    // only while surely tracking: a wrong place would teach a wrong scale
+    if (!scale_on_ || odom_hist_.empty() || tracking_since_ < 0.0 ||
+      last_scan_t_ - tracking_since_ < 5.0) {return;}
     const Pose2 now = T_.compose(odom_hist_.back().pose);
     auto strong = [](const MatchResult & m, double ux, double uy) {return m.constraint(ux, uy) >= 0.1;};
     if (!anchor_) {
@@ -417,7 +434,7 @@ private:
     if (!strong(r, ux, uy)) {return;}  // wait for walls across the way
     if (strong(anchor_->match, ux, uy)) {
       const double ratio = dist / raw;
-      scale_ = std::clamp(scale_ + 0.3 * (ratio - scale_), 0.7, 1.4);
+      scale_ = std::clamp(scale_ + 0.3 * (ratio - scale_), 0.8, 1.25);
       RCLCPP_DEBUG(get_logger(), "scale %.3f (%.2f m over %.2f m reckoned)", scale_, dist, raw);
     }
     anchor_ = Anchor{now, raw_walked_, walked_, r};
@@ -429,6 +446,7 @@ private:
       save();
     } else if (c == "relocalize" && !mapping_) {
       status_ = "relocalizing";
+      tracking_since_ = -1.0;
       reloc_.clear();
       last_try_ = 0.0;
       RCLCPP_INFO(get_logger(), "relocalizing");
@@ -438,6 +456,7 @@ private:
       if (!odom_hist_.empty()) {T_ = odom_hist_.back().pose.inverse();}  // the map starts where the robot is
       mapping_ = true;
       status_ = "tracking";
+      tracking_since_ = last_scan_t_;
       map_changed_ = true;
       RCLCPP_INFO(get_logger(), "new map from here");
     } else {
@@ -520,7 +539,10 @@ private:
   std::deque<std::pair<double, std::vector<P2>>> recent_;
   std::deque<std::pair<double, std::vector<P2>>> reloc_;
   double reloc_window_{60.0};
-  int reloc_min_points_{400};
+  int reloc_min_points_{400}, reloc_tries_{0};
+  double reloc_min_fit_{0.6}, reloc_ambiguity_{0.85};
+  double tracking_since_{-1.0}, last_scan_t_{0.0};
+  std::string debug_dump_;
   std::vector<rclcpp::SubscriptionBase::SharedPtr> subs_;
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pub_pose_;
