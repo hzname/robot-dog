@@ -667,13 +667,15 @@ private:
         c.state = "stop";
         c.d = o.d_min;
       }
-      // How wide it is, once stopped: taller than the edge rule's climb_max,
-      // no noise margin - an 80 mm wall is under climb_max + the margin, and
-      // its noisy cells alone look like a narrow block to go round
-      const Obstacle extent = tallObstacle(*map_, pos.x, pos.y, yaw, pos.z - stand_height_, climb_max_, -0.35, 1.0, 0.8);
-      const Obstacle & wide = extent.found ? extent : o;
+      // How wide it is, to go round it: by the cells' mean heights, well
+      // above what the crawl climbs. What rises only a little above
+      // climb_max (an 80 mm wall: means 78-84 mm, its highest points noisy)
+      // is mapped too unreliably to size - a fragment of it looked narrow,
+      // its end unmapped looked passed, and the robot walked into it; the
+      // guard just stops at that. A 150 mm block is sized whole.
+      const Obstacle wide = tallObstacle(*map_, pos.x, pos.y, yaw, pos.z - stand_height_, climb_max_ + kAvoidMargin, -0.35, 1.0, 0.8, false);
       const std::string before = avoider_.state();
-      vy = avoider_.update(c.state == "stop" && wide.d_min > feet_x, wide, pos.x, pos.y, yaw);
+      vy = avoider_.update(c.state == "stop" && wide.found && wide.d_min > feet_x, wide, pos.x, pos.y, yaw);
       if (avoider_.state() != before) {
         RCLCPP_INFO(get_logger(), "avoid: %s -> %s (offset %.2f m, needs %.2f m; obstacle %.2f..%.2f m%s%s, %.2f m ahead)",
           before.c_str(), avoider_.state().c_str(), avoider_.offset(), avoider_.needed(), wide.lat_min, wide.lat_max,
@@ -781,6 +783,7 @@ private:
   double guard_stop_dist_{0.30};
   static constexpr double kMapTallMargin = 0.02;
   static constexpr double kMapMeanMargin = 0.005;  // over climb_max, by the cells' mean heights
+  static constexpr double kAvoidMargin = 0.03;  // ... to size an obstacle to go round
 
   std::vector<rclcpp::SubscriptionBase::SharedPtr> subs_;
   std::vector<rclcpp::TimerBase::SharedPtr> timers_;

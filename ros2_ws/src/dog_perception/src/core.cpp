@@ -681,15 +681,17 @@ Obstacle tallObstacle(const ElevationMap & map, double x, double y, double yaw, 
       }
       if (h - low <= height) {continue;}
       // next to it, sideways, unmapped (fewer points than a tall cell needs)
-      // or still raised (a wall's top read a little under `height`): it may
-      // go on there - only the ground within 3 cells closes it (the map
-      // smears a block's sides by 1-2 cells)
+      // or still raised (a top read a little under `height`): it may go on
+      // there - only lower ground within 3 cells closes it (the map smears a
+      // block's sides by 1-2 cells; read the same way as the cell itself)
       auto open = [&](int dir) {
           for (int k = 1; k <= 3; ++k) {
             const double lk = lat + dir * k * r;
             if (lk < -reach - 1e-9 || lk > reach + 1e-9) {return true;}
-            const double hn = map.maxAt(x + cs * d - sn * lk, y + sn * d + cs * lk);
-            if (std::isfinite(hn) && hn - ground_z <= 0.5 * height) {return false;}
+            const double nx = x + cs * d - sn * lk, ny = y + sn * d + cs * lk;
+            const double hn_hi = map.maxAt(nx, ny);
+            const double hn = highest ? hn_hi : map.heightAt(nx, ny);
+            if (std::isfinite(hn_hi) && hn - ground_z <= 0.8 * height) {return false;}
           }
           return true;
         };
@@ -749,10 +751,11 @@ double Avoider::update(bool blocked, const Obstacle & o, double x, double y, dou
     // the whole shift, as the obstacle reads now: walked + still needed that
     // side (an 80 mm wall's end read short from afar, the face's foot taken
     // for the ground: it looked narrow, and grew as the robot went aside)
+    // (by the width read, not the ends: an end's reading flickers open and
+    // closed on the way, a wider obstacle reads wider)
     double still = 0.0;
     if (o.found) {
-      const bool open = side_ > 0 ? o.open_left : o.open_right;
-      still = open ? 1e9 : std::max(0.0, side_ > 0 ? o.lat_max + p_.half_width + p_.margin :
+      still = std::max(0.0, side_ > 0 ? o.lat_max + p_.half_width + p_.margin :
         -(o.lat_min - p_.half_width - p_.margin));
     }
     needed_ = std::abs(offset_) + still;
