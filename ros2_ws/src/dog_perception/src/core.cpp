@@ -672,10 +672,13 @@ Obstacle tallObstacle(const ElevationMap & map, double x, double y, double yaw, 
         }
       }
       if (h - low <= height) {continue;}
-      // unmapped next to it, sideways (fewer points than a tall cell needs):
-      // it may go on there
+      // next to it, sideways, unmapped (fewer points than a tall cell needs)
+      // or still raised (a wall's top read a little under `height`): it may
+      // go on there - only the ground closes it
       auto unknown = [&](double l) {
-          return l < -reach || l > reach || !std::isfinite(map.maxAt(x + cs * d - sn * l, y + sn * d + cs * l));
+          if (l < -reach || l > reach) {return true;}
+          const double hn = map.maxAt(x + cs * d - sn * l, y + sn * d + cs * l);
+          return !std::isfinite(hn) || hn - ground_z > 0.5 * height;
         };
       const bool open_l = unknown(lat + r), open_r = unknown(lat - r);
       if (!o.found) {

@@ -507,6 +507,22 @@ TEST(Core, AWallSeenInPartIsNotNarrow)
   Avoider a;
   EXPECT_DOUBLE_EQ(a.update(true, o, 0.75, 0.0, 0.0), 0.0);
   EXPECT_EQ(a.state(), "idle");
+  // all of it mapped, but its top read under 70 mm towards the ends (the
+  // lidars graze it there): raised, not the ground - still open
+  ElevationMap m1(3.0, 0.02);
+  m1.recenter(1.0, 0.0);
+  pts.clear();
+  for (double x = -0.4; x < 1.3; x += 0.01) {
+    for (double y = -0.6; y < 0.6; y += 0.01) {
+      const bool wall = x > 1.0 && x < 1.1 && std::abs(y) < 0.4;
+      pts.push_back({x, y, wall ? (std::abs(y) < 0.2 ? 0.08 : 0.06) : 0.0});
+    }
+  }
+  m1.insert(pts);
+  const Obstacle w = tallObstacle(m1, 0.75, 0.0, 0.0, 0.0, 0.07, -0.35);
+  ASSERT_TRUE(w.found);
+  EXPECT_TRUE(w.open_left);
+  EXPECT_TRUE(w.open_right);
   // a block with the ground mapped on both sides: closed ends
   ElevationMap m2(3.0, 0.02);
   m2.recenter(1.0, 0.0);

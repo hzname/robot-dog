@@ -638,7 +638,17 @@ private:
       // across (the crawl over a bar) is the crawl's, never a stop or a
       // switch to the trot under it
       const double hw = avoider_.pathHalfWidth(), feet_x = geometry_.hip_x + kFootReach;
-      const bool tall_ahead = o.found && o.d_min > feet_x && o.lat_max > -hw && o.lat_min < hw;
+      const bool tall_now = o.found && o.d_min > feet_x && o.lat_max > -hw && o.lat_min < hw;
+      // and for a while: one noisy peak on a 60 mm bar read as tall for a
+      // tick, the robot stood on four feet, switched to the trot and trotted
+      // onto the bar when the crawl came back
+      const double t_now = now().seconds();
+      if (!tall_now) {
+        tall_since_ = kNaN;
+      } else if (!std::isfinite(tall_since_)) {
+        tall_since_ = t_now;
+      }
+      const bool tall_ahead = tall_now && t_now - tall_since_ >= kTallConfirm;
       if (tall_ahead && o.d_min < 0.6) {c.gait = 0;}
       if (tall_ahead && o.d_min < guard_stop_dist_) {
         c.max_vx = 0.0;
@@ -738,6 +748,8 @@ private:
   // and a swinging leg moving between the joint states and the scan)
   static constexpr double kLegRadius = 0.04;
   static constexpr double kFootReach = 0.05;  // a front foot swings this far ahead of its hip
+  static constexpr double kTallConfirm = 0.6;  // [s] the map's tall obstacle holds this long before it acts
+  double tall_since_{kNaN};
   std::deque<std::pair<double, M3>> imu_hist_;
   std::optional<nav_msgs::msg::Odometry> odom_;
   std::map<std::string, Scan> scans_;
