@@ -143,7 +143,7 @@ public:
     const double map_size = getD("perception.map_size", 3.0);
     const double map_res = getD("perception.map_resolution", 0.02);
     gs2_thr_ = getD("perception.gs2_threshold", 0.012);
-    gs2_confirm_ = getI("perception.gs2_confirm", 3);
+    gs2_confirm_ = getI("perception.gs2_confirm", 8);
     // whole line off the leg plane: 15 mm gave false reports on a flat floor
     gs2_plane_thr_ = getD("perception.gs2_plane_threshold", 0.02);
     // the GS2 line is 0.14 m ahead of the front feet: the leg plane is exact
@@ -754,7 +754,7 @@ private:
   bool avoid_on_{true};
   Avoider avoider_;
   rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr pub_terrain_;
-  int gs2_confirm_{3};
+  int gs2_confirm_{8};
   std::string reference_, gs2_reference_, state_, guard_state_;
   std::map<std::string, TofDetector> tof_;
   std::map<std::string, int> tof_index_;
