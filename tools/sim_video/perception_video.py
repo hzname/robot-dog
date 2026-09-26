@@ -202,9 +202,11 @@ def main():
             g = guard[gk] if gk >= 0 else None
             if g:
                 state, vmax, steps = g[1], g[2], g[3]
-                col = {'stop': ALERT, 'step_over': UP, 'caution': '#c9a227'}.get(state, rv.GOOD)
+                col = {'stop': ALERT, 'step_over': UP, 'caution': '#c9a227', 'crawl': '#7b5cc4',
+                       'avoid': '#2f8fb5'}.get(state, rv.GOOD)
                 label = {'clear': 'путь свободен', 'caution': 'препятствие впереди — медленно',
-                         'step_over': 'перешагивает', 'stop': 'СТОП: препятствие'}.get(state, state)
+                         'step_over': 'перешагивает', 'crawl': 'ступень: медленно, на трёх опорах',
+                         'stop': 'СТОП: препятствие', 'avoid': 'обходит препятствие'}.get(state, state)
                 legs = ', '.join(f'{n} {1e3 * h:.0f} мм' for n, h in zip(('ЛП', 'ПП', 'ЛЗ', 'ПЗ'), steps) if h)
                 speed = '' if vmax is None else f' · до {vmax:.2f} м/с'
                 guard_line = (f'Реакция: {label}{speed}' + (f' · высокий шаг: {legs}' if legs else ''), col)

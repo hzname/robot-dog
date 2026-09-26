@@ -138,6 +138,8 @@ public:
   void recenter(double x, double y);
   void insert(const std::vector<V3> & world_pts);
   std::vector<float> mean() const;  // n*n, row = x index, NaN = unknown
+  /// Mean height of the cell at world (x, y), NaN if unknown or outside.
+  double heightAt(double x, double y) const;
   double originX() const {return ox_;}
   double originY() const {return oy_;}
   double resolution() const {return res_;}
@@ -210,7 +212,13 @@ private:
 struct GuardParams
 {
   double slow_vx{0.08}, near_vx{0.05}, stop_dist{0.30}, pass_dist{0.20}, half_width{0.20};
-  double climb_max{0.04}, descend_max{0.06}, step_margin{0.01}, max_step{0.03}, memory{15.0};
+  // edges: <= trot_climb / trot_descend - the trot (high swing); up to
+  // climb_max / descend_max - the crawl; beyond - stop (and go round)
+  double trot_climb{0.025}, trot_descend{0.035}, climb_max{0.07}, descend_max{0.07};
+  double step_margin{0.01}, max_step{0.03}, memory{15.0};
+  bool crawl{true};           // false: no crawl, edges above trot_climb stop
+  double crawl_dist{0.45};    // switch to the crawl this far (body centre) before the edge
+  double crawl_pass{0.30};    // ... and keep it until the edge is this far behind
   std::array<std::array<double, 2>, 4> feet{{{0.09, 0.115}, {0.09, -0.115}, {-0.09, 0.115}, {-0.09, -0.115}}};
   double leg_width{0.08}, leg_ahead{0.15}, leg_behind{0.06};
   int confirm{2}, stop_confirm{3};
@@ -225,23 +233,63 @@ class HazardGuard
 public:
   static constexpr double kCell = 0.05;
   explicit HazardGuard(const GuardParams & p = GuardParams()) : p_(p) {}
-  /// "stop" or "step" for a hazard of this kind and edge height (NaN = unknown).
+  /// "stop", "crawl" or "step" for a hazard of this kind and edge height (NaN = unknown).
   std::string verdict(const std::string & kind, double edge, bool deep = false) const;
   void add(double t, double x, double y, const std::string & verdict, double lift);
   struct Command
   {
     double max_vx{kInf};
     std::array<double, 4> step{{kNaN, kNaN, kNaN, kNaN}};
-    std::string state{"clear"};
+    std::string state{"clear"};  // clear | caution | step_over | crawl | stop
     double d{kNaN};
+    int gait{0};                  // 0 trot, 1 crawl
   };
   Command command(double t, double x, double y, double yaw);
   size_t size() const {return cells_.size();}
 
 private:
-  struct Cell {double sx{0}, sy{0}; int n{0}, n_stop{0}; double t_last{0}, lift{0};};
+  struct Cell {double sx{0}, sy{0}; int n{0}, n_stop{0}, n_crawl{0}; double t_last{0}, lift{0};};
   GuardParams p_;
   std::map<std::pair<long, long>, Cell> cells_;
+  bool crawling_{false};
+};
+
+/// Something too tall to cross in the robot's way, from the elevation map:
+/// cells more than `height` above the ground under the robot and above the
+/// lowest cell within 10 cm of them (stairs are not tall), ahead within
+/// [d0, d1] and |lateral| < reach, in the body's yaw frame.
+struct Obstacle
+{
+  bool found{false};
+  double lat_min{0.0}, lat_max{0.0};  // lateral extent [m], + left
+  double d_min{0.0};                  // nearest distance ahead [m]
+};
+Obstacle tallObstacle(const ElevationMap & map, double x, double y, double yaw, double ground_z,
+  double height = 0.07, double d0 = 0.05, double d1 = 1.0, double reach = 0.8);
+
+/// Going round an obstacle that cannot be crossed: sideways until the path
+/// (half_width) is clear of it, forward past it, then back onto the line
+/// the robot was on. Sideways velocity to add to the operator's forward walk.
+struct AvoidParams
+{
+  double vy{0.06}, half_width{0.20}, margin{0.06}, max_shift{0.6}, back_tol{0.03};
+};
+
+class Avoider
+{
+public:
+  explicit Avoider(const AvoidParams & p = AvoidParams()) : p_(p) {}
+  /// blocked: the guard stops for it (or the path is still blocked).
+  /// Returns vy [m/s] (+ left) and the state: idle | aside | past | back.
+  double update(bool blocked, const Obstacle & o, double x, double y, double yaw);
+  const std::string & state() const {return state_;}
+  double offset() const {return offset_;}
+
+private:
+  AvoidParams p_;
+  std::string state_{"idle"};
+  int side_{0};
+  double x0_{0}, y0_{0}, yaw0_{0}, offset_{0}, hold_{0};
 };
 
 }  // namespace dog_perception

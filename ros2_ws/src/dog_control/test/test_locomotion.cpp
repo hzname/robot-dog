@@ -9,6 +9,7 @@
 
 using dog_control::BodyPose;
 using dog_control::DeadReckoning;
+using dog_control::GaitType;
 using dog_control::forwardKinematics;
 using dog_control::kNumLegs;
 using dog_control::legSide;
@@ -195,6 +196,26 @@ TEST(Locomotion, SlopeCompensationShiftsFeetDownhill)
   EXPECT_LT(footInBody(c, p, 0).y - c.neutralFoot(0).y, -0.005);
 }
 
+TEST(Locomotion, CrawlPutsItsFeetWithoutTheSlopeShift)
+{
+  // The crawl pitches the body on stairs itself; the IMU reads that as a
+  // slope, and the trot's shift would put every foot a few cm off the
+  // foothold the crawl chose on the map.
+  LocomotionParams p;
+  LocomotionController c(p);
+  c.request("stand");
+  run(c, 2.0);
+  c.request("crawl");
+  run(c, 1.0);
+  ASSERT_EQ(c.gaitType(), GaitType::CRAWL);
+  const Vec3 flat = footInBody(c, p, 0);
+  for (int i = 0; i < 200; ++i) {
+    c.setImuAttitude(0.0, -10.0 * M_PI / 180.0, kDt);
+    c.update(kDt);
+  }
+  EXPECT_NEAR(footInBody(c, p, 0).x, flat.x, 1e-6);
+}
+
 TEST(Locomotion, SlopeCompensationIgnoresFallsAndCanBeDisabled)
 {
   LocomotionParams p;
@@ -316,6 +337,26 @@ TEST(Locomotion, HeadingHoldIdleWithoutImuOrWhenStanding)
   EXPECT_DOUBLE_EQ(c.headingError(), 0.0);
 }
 
+TEST(Locomotion, HeadingHoldCountsEveryGyroSample)
+{
+  // IMU at twice the control rate, the robot jerked round by 0.5 rad/s for
+  // one IMU sample in every two: the latest rate alone would read zero.
+  LocomotionParams p;
+  LocomotionController c(p);
+  c.request("stand");
+  run(c, 2.0);
+  c.setVelocity({0.1, 0.0, 0.0});
+  run(c, 1.0);
+  const double e0 = c.headingError();
+  for (int i = 0; i < 20; ++i) {
+    c.addYawRate(0.5, kDt / 2);
+    c.addYawRate(0.0, kDt / 2);
+    c.update(kDt);
+  }
+  // turned 20 * 0.5 * kDt / 2; the hold has turned it back a little meanwhile
+  EXPECT_LT(c.headingError() - e0, -0.8 * 20 * 0.5 * kDt / 2);
+}
+
 TEST(Locomotion, GuardLimitsForwardSpeedAndRaisesSwingPerLeg)
 {
   LocomotionParams p;
@@ -374,4 +415,44 @@ TEST(DeadReckoning, IntegratesTwistWithImuHeading)
   // IMU gone: integrate the commanded yaw rate
   for (int i = 0; i < 100; ++i) {o.update(0.01, 0.0, 0.0, 0.5);}
   EXPECT_NEAR(o.yaw(), M_PI / 2 + 0.5, 1e-9);
+}
+
+TEST(Locomotion, SwitchesToCrawlOnlyWhenStoppedAndGoesRound)
+{
+  LocomotionParams p;
+  LocomotionController c(p);
+  const double nan = std::nan("");
+  c.request("stand");
+  run(c, 2.0);
+  c.setVelocity({0.12, 0.0, 0.0});
+  run(c, 1.0);
+  ASSERT_EQ(c.gaitType(), GaitType::TROT);
+  // the guard asks for the crawl (a step ahead): stop first, then switch
+  c.setGuard(nan, {nan, nan, nan, nan});
+  c.setGuardGait(GaitType::CRAWL, 0.0);
+  c.update(kDt);
+  EXPECT_EQ(c.gaitType(), GaitType::TROT);
+  run(c, 3.0);
+  EXPECT_EQ(c.gaitType(), GaitType::CRAWL);
+  run(c, 3.0);
+  EXPECT_LE(c.gaitVelocity().vx, c.crawl().maxSpeed() + 1e-9);  // slow
+  EXPECT_GT(c.gaitVelocity().vx, 0.0);
+  // back to the trot once the guard is done (feet level)
+  c.setGuardGait(GaitType::TROT, 0.0);
+  run(c, 8.0);
+  EXPECT_EQ(c.gaitType(), GaitType::TROT);
+  // going round: sideways while the operator asks forward, never on its own
+  c.setGuard(0.0, {nan, nan, nan, nan});
+  c.setGuardGait(GaitType::TROT, 0.05);
+  run(c, 2.0);
+  EXPECT_NEAR(c.velocity().vx, 0.0, 1e-9);
+  EXPECT_NEAR(c.velocity().vy, 0.05, 1e-9);
+  c.setVelocity({});
+  run(c, 1.0);
+  EXPECT_NEAR(c.velocity().vy, 0.0, 1e-9);
+  // the operator's own "crawl" command
+  EXPECT_TRUE(c.request("crawl"));
+  c.clearGuard();
+  run(c, 3.0);
+  EXPECT_EQ(c.gaitType(), GaitType::CRAWL);
 }

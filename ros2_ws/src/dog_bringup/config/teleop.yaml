@@ -28,6 +28,7 @@
     button_turbo: 5     # RB  (hold for full speed)
     button_stand: 0     # A
     button_lie: 1       # B
+    button_greet: 3     # Y (greeting)
     button_estop: 6     # Back / View
     button_release: 7   # Start / Menu
     deadzone: 0.08

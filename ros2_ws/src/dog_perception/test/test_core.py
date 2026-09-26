@@ -181,6 +181,8 @@ def test_hazard_guard():
     assert g.verdict('down', -0.03) == 'step' and g.verdict('down', math.nan, deep=True) == 'step'
     assert core.HazardGuard(deep_stop=True).verdict('down', math.nan, deep=True) == 'stop'
     assert g.verdict('up', math.nan) == 'step' and g.verdict('down', math.nan) == 'step'
+    assert g.verdict('up', 0.05) == 'crawl' and g.verdict('down', -0.05) == 'crawl'
+    assert core.HazardGuard(crawl=False).verdict('up', 0.05) == 'stop'
 
     def add(t, xy, verdict, lift, n):
         for k in range(n):
@@ -221,3 +223,24 @@ def test_hazard_guard():
         g.add(0.01 * k, (2.0, 0.0), 'step', 0.0)
     assert g.command(20.0, (1.75, 0.0), 0.0)[2] == 'stop'
     assert len(g.cells) <= 2  # memory grows with the area, not with the reports
+
+
+def test_hazard_guard_crawl_window_matches_the_cpp_guard():
+    # same as Core.GuardChoosesTheCrawlForStepsAndBars in test_core.cpp
+    g = core.HazardGuard()
+    for k in range(3):
+        g.add(0, (0.6 + 0.01 * k, 0.12), 'crawl', 0.05)
+    assert g.command(0, (0.0, 0.0), 0.0)[2] != 'crawl'   # 0.6 m ahead: not yet
+    vx, _, state, _ = g.command(1, (0.2, 0.0), 0.0)       # 0.4 m: the crawl
+    assert state == 'crawl' and math.isinf(vx)
+    assert g.command(2, (0.85, 0.0), 0.0)[2] == 'crawl'  # under the body
+    assert g.command(3, (0.95, 0.0), 0.0)[2] != 'crawl'  # rear feet past it
+    s = core.HazardGuard()
+    for _ in range(3):
+        s.add(0, (0.8, 0.0), 'crawl', 0.05)
+    assert s.command(0, (0.5, 0.0), 0.0)[2] == 'crawl'
+    for _ in range(3):
+        s.add(1, (1.1, 0.0), 'step', 0.02)
+    assert s.command(2, (1.0, 0.0), 0.0)[2] == 'crawl'   # the next riser keeps it
+    assert s.command(3, (1.45, 0.0), 0.0)[2] != 'crawl'
+    assert s.command(4, (0.8, 0.0), 0.0)[2] != 'crawl'   # a 'step' alone never starts it

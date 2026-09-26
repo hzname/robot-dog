@@ -17,6 +17,8 @@ def test_stop_command_and_estop_zero_the_twist():
     assert protocol.handle_message('{"type":"stop"}', LIM).twist == (0.0, 0.0, 0.0)
     a = protocol.handle_message('{"type":"command","name":"stand"}', LIM)
     assert a.command == 'stand' and a.twist == (0.0, 0.0, 0.0)
+    for name in ('greet', 'crawl', 'trot'):
+        assert protocol.handle_message('{"type":"command","name":"%s"}' % name, LIM).command == name
     a = protocol.handle_message('{"type":"estop","active":true}', LIM)
     assert a.estop is True and a.twist == (0.0, 0.0, 0.0)
     a = protocol.handle_message('{"type":"estop","active":false}', LIM)
@@ -59,5 +61,7 @@ def test_hello_and_state_are_json():
 def test_guard_message():
     m = json.loads(protocol.guard('{"state": "stop", "max_vx": 0.0, "step": [null, null, null, null], "d": 0.2812}'))
     assert m == {'type': 'guard', 'state': 'stop', 'd': 0.28}
+    m = json.loads(protocol.guard('{"state": "crawl", "d": 0.4}'))
+    assert m == {'type': 'guard', 'state': 'crawl', 'd': 0.4}
     m = json.loads(protocol.guard('{"state": "weird", "d": null}'))
     assert m == {'type': 'guard', 'state': 'clear', 'd': None}

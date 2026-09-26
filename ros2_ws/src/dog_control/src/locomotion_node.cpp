@@ -2,13 +2,16 @@
 //
 // Subscribes (relative names, launched in the /dog namespace):
 //   cmd_vel        geometry_msgs/Twist    linear.x/y [m/s], angular.z [rad/s]
-//   command        std_msgs/String        "stand" | "lie"
+//   command        std_msgs/String        "stand" | "lie" | "greet" | "crawl" | "trot"
 //   body_pose      geometry_msgs/Vector3  x=roll [rad], y=pitch [rad], z=height offset [m]
 //   estop          std_msgs/Bool          true = limp, requires "stand" after release
 //   imu/data       sensor_msgs/Imu        optional: slope compensation and heading hold
+//   terrain/profile std_msgs/Float32MultiArray  optional, for the crawl gait: [x0, dx, n,
+//                  n heights on the left foot line, n on the right] (body frame x, odom z)
 //   guard          std_msgs/Float64MultiArray  optional, from perception: [max forward
 //                  speed m/s (inf = none), swing height m per leg LF, RF, LR, RR
-//                  (NaN = default)]; dropped
+//                  (NaN = default), gait (0 trot, 1 crawl), sideways velocity m/s
+//                  to go round an obstacle]; dropped
 //                  after guard_timeout without messages
 // Publishes:
 //   joint_commands sensor_msgs/JointState 12 joint positions [rad]
@@ -34,6 +37,7 @@
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "std_msgs/msg/bool.hpp"
+#include "std_msgs/msg/float32_multi_array.hpp"
 #include "std_msgs/msg/float64_multi_array.hpp"
 #include "std_msgs/msg/string.hpp"
 
@@ -100,7 +104,10 @@ public:
 
     imu_sub_ = create_subscription<sensor_msgs::msg::Imu>(
       "imu/data", rclcpp::SensorDataQoS(), [this](sensor_msgs::msg::Imu::ConstSharedPtr msg) {
-        controller_->setYawRate(msg->angular_velocity.z);
+        const double stamp = rclcpp::Time(msg->header.stamp).seconds();
+        const double gdt = gyro_stamp_ > 0.0 ? std::clamp(stamp - gyro_stamp_, 0.0, 0.1) : 0.0;
+        gyro_stamp_ = stamp;
+        controller_->addYawRate(msg->angular_velocity.z, gdt);
         last_gyro_ = now();
         const auto & q = msg->orientation;
         if (msg->orientation_covariance[0] < 0.0) {return;}  // no orientation in this message
@@ -137,8 +144,29 @@ public:
           last_guard_vx_ = vmax;
         }
         controller_->setGuard(vmax, steps);
+        if (msg->data.size() >= 3 + kNumLegs) {
+          controller_->setGuardGait(msg->data[1 + kNumLegs] > 0.5 ? GaitType::CRAWL : GaitType::TROT,
+            msg->data[2 + kNumLegs]);
+        }
         last_guard_ = now();
         guard_active_ = true;
+      });
+
+    terrain_sub_ = create_subscription<std_msgs::msg::Float32MultiArray>(
+      "terrain/profile", 10, [this](std_msgs::msg::Float32MultiArray::ConstSharedPtr msg) {
+        const auto & d = msg->data;
+        if (d.size() < 3) {return;}
+        const size_t n = static_cast<size_t>(d[2]);
+        if (d.size() < 3 + 2 * n || n == 0) {return;}
+        TerrainProfile t;
+        t.x0 = d[0];
+        t.dx = d[1];
+        t.left.assign(d.begin() + 3, d.begin() + 3 + n);
+        t.right.assign(d.begin() + 3 + n, d.begin() + 3 + 2 * n);
+        t.fillGaps();  // the shadow behind a bar or beyond a drop
+        controller_->setTerrain(t);
+        last_terrain_ = now();
+        terrain_active_ = true;
       });
 
     joint_msg_.name = kJointNames;
@@ -177,6 +205,22 @@ private:
     p.gait.duty = declare_parameter("gait.duty", p.gait.duty);
     p.gait.step_height = declare_parameter("gait.step_height", p.gait.step_height);
     p.gait.max_step = declare_parameter("gait.max_step", p.gait.max_step);
+    p.crawl.shift_time = declare_parameter("crawl.shift_time", p.crawl.shift_time);
+    p.crawl.swing_time = declare_parameter("crawl.swing_time", p.crawl.swing_time);
+    p.crawl.max_stride = declare_parameter("crawl.max_stride", p.crawl.max_stride);
+    p.crawl.clearance = declare_parameter("crawl.clearance", p.crawl.clearance);
+    p.crawl.max_lift = declare_parameter("crawl.max_lift", p.crawl.max_lift);
+    p.crawl.shift_rate = declare_parameter("crawl.shift_rate", p.crawl.shift_rate);
+    p.crawl.max_pitch = declare_parameter("crawl.max_pitch", p.crawl.max_pitch);
+    p.crawl.shift_accel = declare_parameter("crawl.shift_accel", p.crawl.shift_accel);
+    p.greet.rear_x = declare_parameter("greet.rear_x", p.greet.rear_x);
+    p.greet.sit_deg = declare_parameter("greet.sit_deg", p.greet.sit_deg);
+    p.greet.beg_deg = declare_parameter("greet.beg_deg", p.greet.beg_deg);
+    p.greet.margin = declare_parameter("greet.margin", p.greet.margin);
+    p.greet.waves = static_cast<int>(declare_parameter("greet.waves", static_cast<int64_t>(p.greet.waves)));
+    p.greet.speed = declare_parameter("greet.speed", p.greet.speed);
+    // it kneels on the rear knees: knee and foot contacts of the description
+    p.greet.contact_r = declare_parameter("description.foot_radius", p.greet.contact_r);
 
     p.slope_compensation = declare_parameter("slope.compensation", p.slope_compensation);
     p.slope_gain = declare_parameter("slope.gain", p.slope_gain);
@@ -188,6 +232,9 @@ private:
     p.heading_ki = declare_parameter("heading.ki", p.heading_ki);
     p.heading_max_rate = declare_parameter("heading.max_rate", p.heading_max_rate);
     p.heading_max_error = declare_parameter("heading.max_error", p.heading_max_error);
+    p.heading_crawl_kp = declare_parameter("heading.crawl_kp", p.heading_crawl_kp);
+    p.heading_crawl_ki = declare_parameter("heading.crawl_ki", p.heading_crawl_ki);
+    p.heading_crawl_max_rate = declare_parameter("heading.crawl_max_rate", p.heading_crawl_max_rate);
 
     p.max_velocity.vx = declare_parameter("limits.max_vx", p.max_velocity.vx);
     p.max_velocity.vy = declare_parameter("limits.max_vy", p.max_velocity.vy);
@@ -215,6 +262,11 @@ private:
       guard_active_ = false;
       last_guard_vx_ = std::numeric_limits<double>::infinity();
       RCLCPP_WARN(get_logger(), "guard silent for %.1fs - hazard limits dropped", guard_timeout_);
+    }
+
+    if (terrain_active_ && (t - last_terrain_).seconds() > 0.5) {
+      controller_->clearTerrain();  // stale: the crawl walks as on flat ground
+      terrain_active_ = false;
     }
 
     if (last_gyro_.nanoseconds() != 0 && (t - last_gyro_).seconds() > 0.2) {
@@ -252,7 +304,7 @@ private:
     m.child_frame_id = "base_link";
     m.pose.pose.position.x = dead_reckoning_.x();
     m.pose.pose.position.y = dead_reckoning_.y();
-    m.pose.pose.position.z = odom_height_;  // the floor under the robot stays at z = 0
+    m.pose.pose.position.z = odom_height_ + controller_->baseHeight();  // climbs with the crawl
     const double r = imu ? imu_rpy_[0] : 0.0, p = imu ? imu_rpy_[1] : 0.0, y = dead_reckoning_.yaw();
     const double cr = std::cos(r / 2), sr = std::sin(r / 2), cp = std::cos(p / 2), sp = std::sin(p / 2);
     const double cy = std::cos(y / 2), sy = std::sin(y / 2);
@@ -295,6 +347,7 @@ private:
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
   rclcpp::Time last_imu_;
   rclcpp::Time last_gyro_{0, 0, RCL_ROS_TIME};
+  double gyro_stamp_{0.0};
   rclcpp::Time last_tick_;
   rclcpp::Time last_cmd_vel_;
   sensor_msgs::msg::JointState joint_msg_;
@@ -303,6 +356,9 @@ private:
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr state_pub_;
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
   rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr guard_sub_;
+  rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr terrain_sub_;
+  rclcpp::Time last_terrain_;
+  bool terrain_active_{false};
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr command_sub_;
   rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr pose_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr estop_sub_;

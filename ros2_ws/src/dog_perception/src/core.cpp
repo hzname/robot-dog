@@ -499,8 +499,11 @@ std::string HazardGuard::verdict(const std::string & kind, double edge, bool dee
 {
   if (deep) {return p_.deep_stop ? "stop" : "step";}
   if (!std::isfinite(edge)) {return "step";}
-  if (kind == "up") {return edge > p_.climb_max ? "stop" : "step";}
-  return -edge > p_.descend_max ? "stop" : "step";
+  const double h = kind == "up" ? edge : -edge;
+  const double trot = kind == "up" ? p_.trot_climb : p_.trot_descend;
+  const double crawl = kind == "up" ? p_.climb_max : p_.descend_max;
+  if (h <= trot) {return "step";}
+  return (p_.crawl && h <= crawl) ? "crawl" : "stop";
 }
 
 void HazardGuard::add(double t, double x, double y, const std::string & verdict, double lift)
@@ -510,6 +513,7 @@ void HazardGuard::add(double t, double x, double y, const std::string & verdict,
   c.sy += y;
   c.n += 1;
   c.n_stop += verdict == "stop";
+  c.n_crawl += verdict == "crawl";
   c.t_last = t;
   if (std::isfinite(lift) && lift > c.lift) {c.lift = lift;}
 }
@@ -524,27 +528,40 @@ HazardGuard::Command HazardGuard::command(double t, double x, double y, double y
     const Cell & c = it->second;
     const double dx = c.sx / c.n - x, dy = c.sy / c.n - y;
     const double d = cs * dx + sn * dy, lat = -sn * dx + cs * dy;
-    if (t - c.t_last >= p_.memory || (d < -p_.pass_dist - 0.2 && std::abs(lat) < 0.6)) {
+    const double behind = std::max(p_.pass_dist, p_.crawl_pass) + 0.2;
+    if (t - c.t_last >= p_.memory || (d < -behind && std::abs(lat) < 0.6)) {
       it = cells_.erase(it);  // forgotten, or well behind
       continue;
     }
     live[it->first] = {&c, d, lat};
     ++it;
   }
-  double dmin = kInf, dstop = kInf;
+  double dmin = kInf, dstop = kInf, dcrawl = kInf;
+  bool crawl = false;
   for (const auto & [key, l] : live) {
-    if (!(std::abs(l.lat) < p_.half_width && l.d > -p_.pass_dist)) {continue;}
-    int n = 0, n_stop = 0;  // the cell and its 8 neighbours
+    if (!(std::abs(l.lat) < p_.half_width)) {continue;}
+    int n = 0, n_stop = 0, n_crawl = 0;  // the cell and its 8 neighbours
     for (long di = -1; di <= 1; ++di) {
       for (long dj = -1; dj <= 1; ++dj) {
         const auto nb = live.find({key.first + di, key.second + dj});
         if (nb != live.end()) {
           n += nb->second.c->n;
           n_stop += nb->second.c->n_stop;
+          n_crawl += nb->second.c->n_crawl;
         }
       }
     }
     if (n < p_.confirm) {continue;}
+    // an edge for the crawl: from crawl_dist ahead until the rear feet are past it
+    const bool in_window = l.d < p_.crawl_dist && l.d > -p_.crawl_pass;
+    if (in_window && ((n_crawl >= p_.stop_confirm && l.c->n_crawl > 0) || crawling_)) {
+      // once crawling, any edge in the window keeps it: on stairs the next
+      // riser, seen from a tread, may read lower than it is, and the trot
+      // must not come back between two steps
+      crawl = true;
+      dcrawl = std::min(dcrawl, l.d);
+    }
+    if (l.d <= -p_.pass_dist) {continue;}
     dmin = std::min(dmin, l.d);
     if (n_stop >= p_.stop_confirm && l.c->n_stop > 0 && l.d > -0.1) {dstop = std::min(dstop, l.d);}
     if (l.c->lift > 0) {
@@ -557,14 +574,23 @@ HazardGuard::Command HazardGuard::command(double t, double x, double y, double y
       }
     }
   }
-  if (!std::isfinite(dmin)) {
-    out.step = {kNaN, kNaN, kNaN, kNaN};
-    return out;
-  }
+  crawling_ = crawl;
   if (dstop < p_.stop_dist) {
     out.max_vx = 0.0;
     out.state = "stop";
     out.d = dstop;
+    out.step = {kNaN, kNaN, kNaN, kNaN};
+    out.gait = crawl ? 1 : 0;
+    return out;
+  }
+  if (crawl) {  // the crawl is slow by itself and clears the terrain with its own swing
+    out.state = "crawl";
+    out.gait = 1;
+    out.d = dcrawl;
+    out.step = {kNaN, kNaN, kNaN, kNaN};
+    return out;
+  }
+  if (!std::isfinite(dmin)) {
     out.step = {kNaN, kNaN, kNaN, kNaN};
     return out;
   }
@@ -573,6 +599,97 @@ HazardGuard::Command HazardGuard::command(double t, double x, double y, double y
   out.max_vx = lift ? p_.near_vx : p_.slow_vx;
   out.state = lift ? "step_over" : "caution";
   return out;
+}
+
+// ------------------------------------------------------------------ going round
+double ElevationMap::heightAt(double x, double y) const
+{
+  const int i = static_cast<int>(std::floor((x - ox_) / res_));
+  const int j = static_cast<int>(std::floor((y - oy_) / res_));
+  if (i < 0 || j < 0 || i >= n_ || j >= n_) {return kNaN;}
+  const int k = i * n_ + j;
+  return cnt_[k] > 0 ? sum_[k] / cnt_[k] : kNaN;
+}
+
+Obstacle tallObstacle(const ElevationMap & map, double x, double y, double yaw, double ground_z,
+  double height, double d0, double d1, double reach)
+{
+  Obstacle o;
+  const double cs = std::cos(yaw), sn = std::sin(yaw), r = map.resolution();
+  for (double d = d0; d <= d1; d += r) {
+    for (double lat = -reach; lat <= reach; lat += r) {
+      const double cx = x + cs * d - sn * lat, cy = y + sn * d + cs * lat;
+      const double h = map.heightAt(cx, cy);
+      if (!std::isfinite(h) || h - ground_z <= height) {continue;}
+      // tall over its surroundings too (a jump, not a height): a staircase is
+      // high above the floor under the robot, but every riser is a step
+      double low = h;
+      for (double ex = -0.1; ex <= 0.1 + 1e-9; ex += r) {
+        for (double ey = -0.1; ey <= 0.1 + 1e-9; ey += r) {
+          const double hn = map.heightAt(cx + ex, cy + ey);
+          if (std::isfinite(hn)) {low = std::min(low, hn);}
+        }
+      }
+      if (h - low <= height) {continue;}
+      if (!o.found) {
+        o = {true, lat, lat, d};
+      } else {
+        o.lat_min = std::min(o.lat_min, lat);
+        o.lat_max = std::max(o.lat_max, lat);
+        o.d_min = std::min(o.d_min, d);
+      }
+    }
+  }
+  if (o.found) {  // cell edges, not centres
+    o.lat_min -= r / 2;
+    o.lat_max += r / 2;
+  }
+  return o;
+}
+
+double Avoider::update(bool blocked, const Obstacle & o, double x, double y, double yaw)
+{
+  offset_ = state_ == "idle" ? 0.0 : -std::sin(yaw0_) * (x - x0_) + std::cos(yaw0_) * (y - y0_);
+  const double clear = p_.half_width + 0.5 * p_.margin;
+  const bool in_path = o.found && o.lat_max > -clear && o.lat_min < clear;
+  if ((state_ == "idle" || state_ == "back") && blocked && o.found) {
+    const double left = o.lat_max + p_.half_width + p_.margin;     // shift needed to pass on the left
+    const double right = -(o.lat_min - p_.half_width - p_.margin);  // ... on the right
+    if (std::min(left, right) <= p_.max_shift) {
+      if (state_ == "idle") {
+        x0_ = x;
+        y0_ = y;
+        yaw0_ = yaw;
+      }
+      side_ = left <= right ? 1 : -1;
+      state_ = "aside";
+    }
+  }
+  if (state_ == "aside") {
+    if (!in_path) {
+      state_ = "past";
+      hold_ = offset_;
+    } else if (std::abs(offset_) > p_.max_shift + 0.1) {
+      state_ = "idle";  // it goes on further than expected: give up, the guard keeps stopping
+      return 0.0;
+    } else {
+      return side_ * p_.vy;
+    }
+  }
+  if (state_ == "past") {
+    // walk on until it is behind the rear feet, holding the side step: the
+    // heading wanders a few degrees, and a free walk drifts back into it
+    if (o.found) {return std::clamp(1.5 * (hold_ - offset_), -p_.vy, p_.vy);}
+    state_ = "back";
+  }
+  if (state_ == "back") {
+    if (std::abs(offset_) <= p_.back_tol) {
+      state_ = "idle";
+      return 0.0;
+    }
+    return offset_ > 0 ? -p_.vy : p_.vy;
+  }
+  return 0.0;
 }
 
 }  // namespace dog_perception

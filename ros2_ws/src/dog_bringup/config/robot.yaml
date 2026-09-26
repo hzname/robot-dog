@@ -33,6 +33,31 @@
       step_height: 0.02     # swing apex [m]
       max_step: 0.06        # longest stance stroke [m] -> vx cap 0.17 m/s
 
+    # Crawl: three feet down at any time, for steps, stairs and high bars
+    # (25-70 mm); chosen by the perception guard or with the "crawl" command.
+    crawl:
+      shift_time: 0.45      # body over the support triangle before each leg lifts [s]
+      swing_time: 0.65      # one leg in the air [s]
+      max_stride: 0.10      # [m] per cycle of four legs -> 0.011 m/s
+      clearance: 0.03       # [m] swing clears the terrain by this
+      max_lift: 0.10        # [m] highest swing above the higher foothold
+      shift_rate: 0.06      # [m/s] body shift over the support: slow - all four legs move
+      shift_accel: 0.3      # [m/s^2]  together, and a lagging servo drags the others' feet
+      max_pitch: 0.15       # [rad] body pitched along the stairs (legs near their working height)
+
+    # Greeting ("greet" command, from standing): kneels on the rear knees
+    # (calves flat on the ground: knees + rear feet are the support), front
+    # paws up, waves, stands up again (~30 s). Sitting on the rear edge of the
+    # body is impossible with knees that bend backwards (GAITS.md). The knees
+    # touch the ground: nothing on them that must not (a rod end, a horn).
+    greet:
+      rear_x: -0.03         # [m] rear feet step forward to here (from the body centre)
+      sit_deg: 20.0         # nose up when the front paws lift (front feet reach the ground)
+      beg_deg: 30.0         # ... paws up, waving
+      margin: 0.035         # [m] centre of mass inside the support
+      waves: 2
+      speed: 1.0
+
     limits:
       max_vx: 0.15          # [m/s]
       max_vy: 0.08          # [m/s]
@@ -58,6 +83,9 @@
       ki: 1.0               # [1/s^2] integral part: removes the steady drift offset
       max_rate: 0.3         # [rad/s] correction limit
       max_error: 0.5        # [rad] error clamp (robot blocked / held)
+      crawl_kp: 1.0         # the crawl: its cycle is long (~9 s) and every turn of it
+      crawl_ki: 0.2         #   swings the feet sideways (0.08 rad/s -> +-3 cm per step);
+      crawl_max_rate: 0.08  #   the gyro jerks of a slipping foot are caught up slowly
 
     # Perception sensors (docs/HEAD.md). Used by the URDF (frames, Gazebo
     # sensors) and by dog_perception. Angles: pitch = down from horizontal,
@@ -120,8 +148,16 @@
       guard_near_vx: 0.05      # [m/s] while a leg steps over something
       guard_stop_dist: 0.30    # [m] stop this far (body centre) before a stop hazard
       guard_pass_dist: 0.20    # [m] a hazard counts until this far behind the body centre
-      guard_climb_max: 0.04    # [m] taller edges: stop
-      guard_descend_max: 0.06  # [m] deeper drops: stop
+      guard_trot_climb: 0.025  # [m] edges up to this: trot, high swing on the leg that meets it
+      guard_trot_descend: 0.035 # [m] drops up to this: trot
+      guard_crawl: true        # edges above those: the crawl (steps, stairs, high bars) ...
+      guard_climb_max: 0.07    # [m] ... up to this; taller: stop and go round
+      guard_descend_max: 0.07  # [m] deeper drops: stop
+      guard_crawl_dist: 0.45   # [m] switch to the crawl this far (body centre) before the edge
+      guard_crawl_pass: 0.30   # [m] ... back to the trot when it is this far behind
+      guard_avoid: true        # go round what is too tall, if it is narrow (elevation map)
+      guard_avoid_vy: 0.06     # [m/s] sideways while going round
+      guard_avoid_max_shift: 0.6  # [m] wider than that: just stop
       guard_max_step: 0.03     # [m] highest swing: 35-50 mm rocks this trot over (TERRAIN.md, PERCEPTION.md)
       guard_step_margin: 0.01  # [m] swing clears the obstacle by this
       guard_lift_min: 0.018    # [m] lidar edges below this may be noise: no higher swing

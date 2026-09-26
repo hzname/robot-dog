@@ -1,6 +1,8 @@
 // Same cases as test_core.py (the numpy twin), for the C++ core.
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 #include <cmath>
 #include <functional>
 #include <random>
@@ -306,4 +308,109 @@ TEST(Core, HazardGuard)
   for (int k = 0; k < 2000; ++k) {w.add(0.01 * k, 2.0, 0, "step", 0.0);}  // 60/s for 30 s
   EXPECT_EQ(w.command(20, 1.75, 0, 0).state, "stop");
   EXPECT_LE(w.size(), 2u);  // memory grows with the area, not with the reports
+}
+
+TEST(Core, GuardChoosesTheCrawlForStepsAndBars)
+{
+  HazardGuard g;
+  EXPECT_EQ(g.verdict("up", 0.02), "step");     // trot, high swing
+  EXPECT_EQ(g.verdict("up", 0.05), "crawl");    // step / stair / bar
+  EXPECT_EQ(g.verdict("up", 0.09), "stop");     // too tall: go round
+  EXPECT_EQ(g.verdict("down", -0.03), "step");
+  EXPECT_EQ(g.verdict("down", -0.05), "crawl");
+  EXPECT_EQ(g.verdict("down", -0.10), "stop");
+  GuardParams no;
+  no.crawl = false;
+  EXPECT_EQ(HazardGuard(no).verdict("up", 0.05), "stop");
+  for (int k = 0; k < 3; ++k) {g.add(0, 0.6 + 0.01 * k, 0.12, "crawl", 0.05);}
+  EXPECT_EQ(g.command(0, 0.0, 0, 0).gait, 0);  // 0.6 m ahead: not yet
+  auto c = g.command(1, 0.2, 0, 0);            // 0.4 m: stop and switch to the crawl
+  EXPECT_EQ(c.state, "crawl");
+  EXPECT_EQ(c.gait, 1);
+  EXPECT_TRUE(std::isinf(c.max_vx));
+  EXPECT_EQ(g.command(2, 0.85, 0, 0).gait, 1);  // under the body: keep crawling
+  EXPECT_EQ(g.command(3, 0.95, 0, 0).gait, 0);  // rear feet past it: back to the trot
+
+  // stairs: the next riser, seen from a tread, reads as a small step - the
+  // crawl goes on while it is in the window, it does not start on it
+  HazardGuard s;
+  for (int k = 0; k < 3; ++k) {s.add(0, 0.8, 0.0, "crawl", 0.05);}
+  EXPECT_EQ(s.command(0, 0.5, 0, 0).gait, 1);
+  for (int k = 0; k < 3; ++k) {s.add(1, 1.1, 0.0, "step", 0.02);}
+  EXPECT_EQ(s.command(2, 1.0, 0, 0).gait, 1);   // 0.8 behind the rear feet, 1.1 under the body
+  EXPECT_EQ(s.command(3, 1.45, 0, 0).gait, 0);  // both passed
+  EXPECT_EQ(s.command(4, 0.8, 0, 0).gait, 0);   // a 'step' alone never starts it
+}
+
+TEST(Core, GoesRoundAnObstacleAndBackToItsLine)
+{
+  ElevationMap map(3.0, 0.02);
+  map.recenter(1.0, 0.0);
+  std::vector<V3> pts;
+  for (double x = -0.4; x < 2.4; x += 0.01) {
+    for (double y = -1.4; y < 1.4; y += 0.01) {
+      const bool block = x > 1.0 && x < 1.1 && std::abs(y) < 0.1;
+      pts.push_back({x, y, block ? 0.10 : 0.0});
+    }
+  }
+  map.insert(pts);
+  Obstacle o = tallObstacle(map, 0.7, 0.0, 0.0, 0.0, 0.07, -0.35);
+  ASSERT_TRUE(o.found);
+  EXPECT_NEAR(o.lat_min, -0.10, 0.02);
+  EXPECT_NEAR(o.lat_max, 0.10, 0.02);
+  EXPECT_NEAR(o.d_min, 0.30, 0.02);
+  Avoider a;
+  double x = 0.7, y = 0.0, max_y = 0.0;
+  const double dt = 0.05;
+  bool passed = false;
+  for (int k = 0; k < 2000 && !(passed && a.state() == "idle"); ++k) {
+    o = tallObstacle(map, x, y, 0.0, 0.0, 0.07, -0.35);
+    // the guard: no forward motion while the block is in the path and near
+    const bool blocked = o.found && o.lat_max > -0.2 && o.lat_min < 0.2 && o.d_min < 0.35;
+    const double vy = a.update(blocked, o, x, y, 0.0);
+    x += (blocked ? 0.0 : 0.05) * dt;
+    // the walk drifts back towards the block (heading wandering): the side
+    // step is held until the block is behind
+    y += (vy + (a.state() == "past" ? 0.02 : 0.0)) * dt;
+    max_y = std::max(max_y, std::abs(y));
+    passed = passed || x > 1.45;
+    // the robot's body (+-0.15 x, +-0.12 y) never touches the block
+    EXPECT_FALSE(std::abs(x - 1.05) < 0.05 + 0.15 && std::abs(y) < 0.1 + 0.12) << x << " " << y;
+  }
+  EXPECT_TRUE(passed);
+  EXPECT_EQ(a.state(), "idle");
+  EXPECT_NEAR(y, 0.0, 0.035);     // back on its line
+  EXPECT_GT(max_y, 0.33);         // went round by the block's half width + the path + margin
+  EXPECT_LT(max_y, 0.45);
+}
+
+TEST(Core, StairsAreNotTallObstacles)
+{
+  // three 50 mm steps: 150 mm above the floor, but every riser is a step
+  ElevationMap map(3.0, 0.02);
+  map.recenter(1.0, 0.0);
+  std::vector<V3> pts;
+  for (double x = -0.4; x < 2.4; x += 0.01) {
+    for (double y = -1.4; y < 1.4; y += 0.01) {
+      pts.push_back({x, y, 0.05 * std::clamp(std::floor((x - 0.8) / 0.3) + 1.0, 0.0, 3.0)});
+    }
+  }
+  map.insert(pts);
+  EXPECT_FALSE(tallObstacle(map, 0.6, 0.0, 0.0, 0.0, 0.07, -0.35).found);
+  EXPECT_FALSE(tallObstacle(map, 1.2, 0.0, 0.0, 0.10, 0.07, -0.35).found);
+}
+
+TEST(Core, DoesNotTryToGoRoundAWideWall)
+{
+  ElevationMap map(3.0, 0.02);
+  map.recenter(1.0, 0.0);
+  std::vector<V3> pts;
+  for (double x = 1.0; x < 1.1; x += 0.01) {
+    for (double y = -1.4; y < 1.4; y += 0.01) {pts.push_back({x, y, 0.1});}
+  }
+  map.insert(pts);
+  Avoider a;
+  const Obstacle o = tallObstacle(map, 0.75, 0.0, 0.0, 0.0, 0.07, -0.35);
+  EXPECT_DOUBLE_EQ(a.update(true, o, 0.75, 0.0, 0.0), 0.0);
+  EXPECT_EQ(a.state(), "idle");
 }

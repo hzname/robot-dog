@@ -156,10 +156,14 @@ def build_urdf(geometry, description=None, gazebo=False, namespace='dog', initia
             f'<joint name="{name}_calf_joint" type="revolute"><parent link="{name}_thigh"/>'
             f'<child link="{name}_calf"/><origin xyz="0 0 {-L2}"/><axis xyz="0 1 0"/>'
             + _limit(d['calf_limits_deg'], eff, vel) + '</joint>')
+        # the knee is a contact too: the robot kneels on it (the greeting), and
+        # a knee that hits a riser or a bar should not pass through it
+        kr = min(d['foot_radius'], 0.5 * L3)
         out.append(
             f'<link name="{name}_calf"><visual><origin xyz="0 0 {-L3 / 2}"/>'
             f'<geometry><cylinder radius="{r_leg * 0.8:.4f}" length="{L3}"/></geometry>'
             '<material name="leg"/></visual>'
+            f'<collision><geometry><sphere radius="{kr}"/></geometry></collision>'
             + _inertial(d['calf_mass'], _cyl_inertia(d['calf_mass'], r_leg * 0.8, L3), (0, 0, -L3 / 2))
             + '</link>')
         # foot: calf (robot.yaml, measured in DEPLOYMENT.md) runs to the
@@ -219,6 +223,7 @@ def _gazebo_extras(ns, p_gain, vmax, initial=None):
         f'<update_rate>100</update_rate><topic>/{ns}/sim/imu</topic></sensor></gazebo>')
     for leg, _, _ in LEGS:
         parts.append(f'<gazebo reference="{leg}_foot"><mu1>1.2</mu1><mu2>1.2</mu2></gazebo>')
+        parts.append(f'<gazebo reference="{leg}_calf"><mu1>1.2</mu1><mu2>1.2</mu2></gazebo>')
     return '\n'.join(parts)
 
 

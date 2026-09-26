@@ -19,6 +19,8 @@ find_package(std_msgs REQUIRED)
 add_library(dog_control_core
   src/kinematics.cpp
   src/gait.cpp
+  src/crawl.cpp
+  src/greet.cpp
   src/locomotion.cpp)
 target_include_directories(dog_control_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -41,7 +43,7 @@ install(DIRECTORY include/ DESTINATION include)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
-  foreach(t kinematics gait locomotion)
+  foreach(t kinematics gait crawl greet locomotion)
     ament_add_gtest(test_${t} test/test_${t}.cpp)
     target_link_libraries(test_${t} dog_control_core)
   endforeach()

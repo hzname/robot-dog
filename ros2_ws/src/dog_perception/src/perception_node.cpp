@@ -18,9 +18,11 @@
 //                            [origin_x, origin_y, resolution, n, n*n mean heights (NaN = unknown)]
 //   guard                    std_msgs/Float64MultiArray  10 Hz, to locomotion: [max forward
 //                            speed m/s (inf = no limit), swing height m per leg LF, RF, LR, RR
-//                            (NaN = gait default)]
-//   perception/guard         std_msgs/String  JSON {state: clear|caution|step_over|stop,
-//                            max_vx, step, d (nearest hazard ahead of the body centre)}
+//                            (NaN = gait default), gait (0 trot, 1 crawl), sideways m/s (going round)]
+//   perception/guard         std_msgs/String  JSON {state: clear|caution|step_over|crawl|stop|avoid,
+//                            max_vx, step, d (nearest hazard ahead of the body centre), gait, vy, avoid}
+//   terrain/profile          std_msgs/Float32MultiArray  10 Hz, for the crawl gait: [x0, dx, n,
+//                            n ground heights on the left foot line, n on the right] (body x, odom z)
 //   perception/stats         std_msgs/Float64MultiArray  [process CPU s, lidar cycles,
 //                            lidar points, lidar ms total, ToF messages, ToF ms total,
 //                            messages received (all topics), their callback ms total,
@@ -151,6 +153,7 @@ public:
     mounts_ = mountsFromParams(s);
     // where the GS2 line lies on a flat floor in the stand pose (for 'gap' reports)
     const double stand = getD("stance.stand_height", 0.15);
+    stand_height_ = stand;
     if (mounts_.count("gs2")) {
       const auto & g = mounts_.at("gs2");
       const double t = rayToPlane(g.p, g.beam(), Plane{{0.0, 0.0, 1.0}, -stand});
@@ -176,8 +179,13 @@ public:
     g.near_vx = getD("perception.guard_near_vx", g.near_vx);
     g.stop_dist = getD("perception.guard_stop_dist", g.stop_dist);
     g.pass_dist = getD("perception.guard_pass_dist", g.pass_dist);
+    g.trot_climb = getD("perception.guard_trot_climb", g.trot_climb);
+    g.trot_descend = getD("perception.guard_trot_descend", g.trot_descend);
     g.climb_max = getD("perception.guard_climb_max", g.climb_max);
     g.descend_max = getD("perception.guard_descend_max", g.descend_max);
+    g.crawl = getB("perception.guard_crawl", g.crawl);
+    g.crawl_dist = getD("perception.guard_crawl_dist", g.crawl_dist);
+    g.crawl_pass = getD("perception.guard_crawl_pass", g.crawl_pass);
     g.max_step = getD("perception.guard_max_step", g.max_step);
     g.step_margin = getD("perception.guard_step_margin", g.step_margin);
     g.confirm = getI("perception.guard_confirm", g.confirm);
@@ -186,6 +194,16 @@ public:
     const double fy = geometry_.hip_y + geometry_.hip_offset;
     g.feet = {{{geometry_.hip_x, fy}, {geometry_.hip_x, -fy}, {-geometry_.hip_x, fy}, {-geometry_.hip_x, -fy}}};
     guard_ = HazardGuard(g);
+    guard_stop_dist_ = g.stop_dist;
+    guard_half_width_ = g.half_width;
+    climb_max_ = g.climb_max;
+    // going round what is too tall to cross
+    avoid_on_ = getB("perception.guard_avoid", true);
+    AvoidParams ap;
+    ap.vy = getD("perception.guard_avoid_vy", ap.vy);
+    ap.max_shift = getD("perception.guard_avoid_max_shift", ap.max_shift);
+    ap.half_width = g.half_width;
+    avoider_ = Avoider(ap);
     lift_min_ = getD("perception.guard_lift_min", 0.018);
 
     const auto latched = rclcpp::QoS(1).reliable().transient_local();
@@ -226,6 +244,7 @@ public:
     if (guard_on_) {
       pub_guard_ = create_publisher<std_msgs::msg::Float64MultiArray>("guard", 10);
       pub_guard_state_ = create_publisher<std_msgs::msg::String>("perception/guard", 10);
+      pub_terrain_ = create_publisher<std_msgs::msg::Float32MultiArray>("terrain/profile", 10);
       timers_.push_back(create_wall_timer(std::chrono::milliseconds(100), [this]() {publishGuard();}));
     }
     timers_.push_back(create_wall_timer(std::chrono::seconds(1), [this]() {publishSlow();}));
@@ -355,7 +374,19 @@ private:
         if (m.name[i] == kJoints[k]) {q[k] = m.position[i];}
       }
     }
-    feet_.update(feetBody(geometry_, q), R_at(stampSec(m.header.stamp)));
+    const auto feet = feetBody(geometry_, q);
+    const double t = stampSec(m.header.stamp);
+    V3 pos;
+    M3 R;
+    // four feet on one plane (standing, trot's four-leg phases): they are on
+    // the ground - the map learns the ground under the robot, which the
+    // lidars never see (10 Hz is plenty)
+    if (feet_.update(feet, R_at(t)) && t - last_feet_map_ > 0.1 && upright() && odomPose(pos, R)) {
+      std::vector<V3> world;
+      for (const auto & f : feet) {world.push_back(mul(R, f) + pos);}
+      map_->insert(world);
+      last_feet_map_ = t;
+    }
     count(t0, 8);
   }
 
@@ -583,9 +614,35 @@ private:
     const double yaw = std::atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z));
     auto c = guard_.command(now().seconds(), pos.x, pos.y, yaw);
     if (!upright()) {c = HazardGuard::Command();}
+    // too tall to cross: go round it if it is narrow (elevation map), from
+    // behind the rear feet to 1 m ahead
+    double vy = 0.0;
+    if (avoid_on_ && upright()) {
+      const Obstacle o = tallObstacle(*map_, pos.x, pos.y, yaw, pos.z - stand_height_, climb_max_, -0.35, 1.0, 0.8);
+      // The map sees a tall thing in the path: no crawl at it (a lidar jump
+      // on its face, seen from afar, may read under climb_max), and stop at
+      // stop_dist like any too tall edge
+      const bool tall_ahead = o.found && o.d_min > 0.0 && o.lat_max > -guard_half_width_ &&
+        o.lat_min < guard_half_width_;
+      if (tall_ahead && o.d_min < 0.6) {c.gait = 0;}
+      if (tall_ahead && o.d_min < guard_stop_dist_) {
+        c.max_vx = 0.0;
+        c.state = "stop";
+        c.d = o.d_min;
+      }
+      vy = avoider_.update(c.state == "stop", o, pos.x, pos.y, yaw);
+      if (avoider_.state() != "idle") {
+        // going round: in the trot (the crawl sidesteps at ~1 cm/s and turns
+        // away with it), and no forward step while it is still in the way
+        c.gait = 0;
+        if (avoider_.state() == "aside") {c.max_vx = 0.0;}
+        if (c.state != "stop") {c.state = "avoid";}
+      }
+    }
     std_msgs::msg::Float64MultiArray g;
-    g.data = {c.max_vx, c.step[0], c.step[1], c.step[2], c.step[3]};
+    g.data = {c.max_vx, c.step[0], c.step[1], c.step[2], c.step[3], static_cast<double>(c.gait), vy};
     pub_guard_->publish(g);
+    publishTerrain(pos, yaw);
     if (c.state != guard_state_) {
       if (std::isfinite(c.d)) {
         RCLCPP_INFO(get_logger(), "guard: %s (hazard %.2f m ahead)", c.state.c_str(), c.d);
@@ -597,8 +654,27 @@ private:
     std_msgs::msg::String m;
     m.data = "{\"state\": " + str(c.state) + ", \"max_vx\": " + num(c.max_vx) + ", \"step\": [" +
       num(c.step[0]) + ", " + num(c.step[1]) + ", " + num(c.step[2]) + ", " + num(c.step[3]) +
-      "], \"d\": " + num(c.d) + "}";
+      "], \"d\": " + num(c.d) + ", \"gait\": " + std::to_string(c.gait) + ", \"vy\": " + num(vy) +
+      ", \"avoid\": " + str(avoider_.state()) + "}";
     pub_guard_state_->publish(m);
+  }
+
+  /// Ground heights along both foot lines, body frame x from -0.3 to +0.7 m
+  /// (odom z): what the crawl steps on and over.
+  void publishTerrain(const V3 & pos, double yaw)
+  {
+    const double x0 = -0.3, dx = 0.02;
+    const int n = 51;
+    const double fy = geometry_.hip_y + geometry_.hip_offset, cs = std::cos(yaw), sn = std::sin(yaw);
+    std_msgs::msg::Float32MultiArray m;
+    m.data = {static_cast<float>(x0), static_cast<float>(dx), static_cast<float>(n)};
+    for (double side : {1.0, -1.0}) {
+      for (int i = 0; i < n; ++i) {
+        const double xb = x0 + i * dx, yb = side * fy;
+        m.data.push_back(fin(map_->heightAt(pos.x + cs * xb - sn * yb, pos.y + sn * xb + cs * yb)));
+      }
+    }
+    pub_terrain_->publish(m);
   }
 
   void publishSlow()
@@ -626,6 +702,10 @@ private:
   std::map<std::string, SensorMount> mounts_;
   double thr_{0.015}, gs2_thr_{0.012}, gs2_plane_thr_{0.02}, lift_min_{0.018}, gs2_line_x_{0.28};
   bool debug_topics_{false};
+  double stand_height_{0.15}, climb_max_{0.07}, last_feet_map_{0.0};
+  bool avoid_on_{true};
+  Avoider avoider_;
+  rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr pub_terrain_;
   int gs2_confirm_{3};
   std::string reference_, gs2_reference_, state_, guard_state_;
   std::map<std::string, TofDetector> tof_;
@@ -642,6 +722,7 @@ private:
   std::array<double, 17> stats_{};
   bool guard_on_{true};
   HazardGuard guard_;
+  double guard_stop_dist_{0.30}, guard_half_width_{0.20};
 
   std::vector<rclcpp::SubscriptionBase::SharedPtr> subs_;
   std::vector<rclcpp::TimerBase::SharedPtr> timers_;
