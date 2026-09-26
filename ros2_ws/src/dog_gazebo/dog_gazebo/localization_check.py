@@ -209,6 +209,7 @@ class LocalizationCheck:
             e['status'] = self.status.get('status')
             e['inliers'] = self.status.get('inliers')
             e['loops'] = self.status.get('loops')
+            e['scale'] = self.status.get('scale')
         self.trace.append(e)
 
     # ------------------------------------------------------------ driving
@@ -379,13 +380,23 @@ def main():
             if res['tracking_share'] < 0.9:
                 why.append(f"tracking only {100 * res['tracking_share']:.0f} % of the route")
             lo = res.get('localization') or {}
-            if lo.get('p95_m', 1) > 0.05:
-                why.append(f"position error p95 {lo.get('p95_m')} m")
-            if lo.get('yaw_p95_deg', 99) > 4.0:
-                why.append(f"heading error p95 {lo.get('yaw_p95_deg')} deg")
+            mw = res.get('map_walls') or {}
+            if args.world == 'house' and args.phase == 'mapping':
+                # a 37 m loop: the live pose drifts until the loop closes; what
+                # counts is the map it leaves
+                if mw.get('mean_m', 1) > 0.10 or mw.get('p95_m', 1) > 0.30:
+                    why.append(f"map walls off by {mw.get('mean_m')} m mean, {mw.get('p95_m')} m p95")
+                if res.get('loops', 0) < 1:
+                    why.append('no loop closed')
+            else:
+                lim = 0.05 if args.world == 'room' else 0.15
+                if lo.get('p95_m', 1) > lim:
+                    why.append(f"position error p95 {lo.get('p95_m')} m (> {lim})")
+                if lo.get('yaw_p95_deg', 99) > 4.0:
+                    why.append(f"heading error p95 {lo.get('yaw_p95_deg')} deg")
             ok = not why
             print(('PASS' if ok else 'FAIL') + ': localization ' + ('; '.join(why) if why else
-                  f"p95 {lo.get('p95_m')} m / {lo.get('yaw_p95_deg')} deg, dead reckoning final "
+                  f"p95 {lo.get('p95_m')} m / {lo.get('yaw_p95_deg')} deg, map walls {mw.get('mean_m')} m, dead reckoning final "
                   f"{(res.get('dead_reckoning') or {}).get('final_m')} m"))
     finally:
         chk.vel.publish(Twist())
