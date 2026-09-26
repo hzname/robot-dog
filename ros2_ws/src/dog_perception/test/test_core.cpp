@@ -529,7 +529,9 @@ TEST(Core, AWallSeenInPartIsNotNarrow)
   pts.clear();
   for (double x = -0.4; x < 1.3; x += 0.01) {
     for (double y = -0.6; y < 0.6; y += 0.01) {
-      pts.push_back({x, y, x > 1.0 && x < 1.1 && std::abs(y) < 0.1 ? 0.15 : 0.0});
+      // its sides smeared by 2 cm, raised but under the threshold
+      const bool on = x > 1.0 && x < 1.1;
+      pts.push_back({x, y, on && std::abs(y) < 0.1 ? 0.15 : (on && std::abs(y) < 0.14 ? 0.05 : 0.0)});
     }
   }
   m2.insert(pts);
