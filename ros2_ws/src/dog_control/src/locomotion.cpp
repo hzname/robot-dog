@@ -170,7 +170,7 @@ bool LocomotionController::activeGaitStepping() const
   return gait_type_ == GaitType::CRAWL ? crawl_.stepping() : gait_.stepping();
 }
 
-bool LocomotionController::feetLevel() const
+bool LocomotionController::feetLevel(double tol) const
 {
   if (gait_type_ != GaitType::CRAWL) {return true;}
   const auto f = crawl_.feet();
@@ -179,7 +179,7 @@ bool LocomotionController::feetLevel() const
     lo = std::min(lo, p.z);
     hi = std::max(hi, p.z);
   }
-  return hi - lo < 0.01 && std::abs(crawl_.pitch()) < 0.01;
+  return hi - lo < tol && (tol >= 0.02 || std::abs(crawl_.pitch()) < 0.01);
 }
 
 std::array<Vec3, kNumLegs> LocomotionController::activeFeet() const
@@ -265,12 +265,19 @@ bool LocomotionController::update(double dt)
   switching_gait_ = want != gait_type_ && upright;
   if (switching_gait_) {
     target = BodyVelocity{};
-    if (!activeGaitStepping() && feetLevel() &&
+    // Into the trot: feet within 25 mm will do - it walks over that anyway
+    // (the guard's own limit for it); the crawl's footholds follow the map,
+    // and at an obstacle its smeared edge put the front ones 1-2 cm up, and
+    // "within 1 cm" never came. Into the crawl: from the trot's flat stance.
+    const double tol = want == GaitType::TROT ? 0.025 : 0.01;
+    if (!activeGaitStepping() && feetLevel(tol) &&
       std::abs(vel_.vx) < 1e-3 && std::abs(vel_.vy) < 1e-3 && std::abs(vel_.wz) < 1e-3)
     {
       if (want == GaitType::CRAWL) {
         crawl_.reset(gait_.feet());
       } else {
+        // the body's pitch goes on from the crawl's, back to the pose's at its rate
+        pose_.pitch += crawl_.pitch();
         gait_.reset();
       }
       gait_type_ = want;

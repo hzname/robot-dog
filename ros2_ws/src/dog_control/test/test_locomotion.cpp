@@ -486,3 +486,46 @@ TEST(Locomotion, LeavesTheCrawlWhileTheHeadingDrifts)
   }
   EXPECT_EQ(c.gaitType(), GaitType::TROT) << "still crawling after " << i * kDt << " s";
 }
+
+TEST(Locomotion, LeavesTheCrawlWithItsFeetOnALowStep)
+{
+  // the sim: crawling up to the 150 mm block, the front footholds on the
+  // map's smeared edge 15 mm up, the guard asked for the trot to go round;
+  // "feet level" (within 1 cm) never came, and the robot stood there
+  LocomotionParams p;
+  p.heading_hold = false;
+  LocomotionController c(p);
+  const double nan = std::nan("");
+  c.request("stand");
+  run(c, 2.0);
+  ASSERT_TRUE(c.request("crawl"));
+  double X = 0.0;  // walked, world
+  auto step = [&](double dt) {
+      dog_control::TerrainProfile t;
+      t.x0 = -0.3;
+      t.dx = 0.01;
+      for (int i = 0; i < 100; ++i) {
+        const double h = X + t.x0 + i * t.dx > 0.12 ? 0.015 : 0.0;
+        t.left.push_back(h);
+        t.right.push_back(h);
+      }
+      c.setTerrain(t);
+      c.update(dt);
+      X += c.gaitVelocity().vx * dt;
+    };
+  c.setVelocity({0.1, 0.0, 0.0});
+  for (int i = 0; i < static_cast<int>(40.0 / kDt) && X < 0.12; ++i) {step(kDt);}
+  ASSERT_EQ(c.gaitType(), GaitType::CRAWL);
+  ASSERT_GT(X, 0.1);
+  // the front feet up on it, the rear ones not: the guard wants the trot
+  c.request("trot");
+  c.setGuard(0.0, {nan, nan, nan, nan});
+  c.setGuardGait(GaitType::TROT, 0.0);
+  int i = 0;
+  for (; i < static_cast<int>(30.0 / kDt) && c.gaitType() != GaitType::TROT; ++i) {step(kDt);}
+  EXPECT_EQ(c.gaitType(), GaitType::TROT) << "still crawling after " << i * kDt << " s";
+  // and the body does not jerk: its pitch goes on from the crawl's
+  const double pitch = c.bodyPitch();
+  step(kDt);
+  EXPECT_NEAR(c.bodyPitch(), pitch, p.pose_rate * kDt + 1e-9);
+}
