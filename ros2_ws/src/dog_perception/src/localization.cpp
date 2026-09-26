@@ -286,6 +286,16 @@ std::vector<P2> WallGrid::walls() const
   return out;
 }
 
+std::vector<P2> WallGrid::normals() const
+{
+  std::vector<P2> out;
+  if (nx_.size() != hits_.size()) {return out;}
+  for (int k = 0; k < w_ * h_; ++k) {
+    if (hits_[k] >= min_hits_ && (nx_[k] != 0.0f || ny_[k] != 0.0f)) {out.push_back({nx_[k], ny_[k]});}
+  }
+  return out;
+}
+
 std::vector<int8_t> WallGrid::occupancy() const
 {
   std::vector<int8_t> out(hits_.size(), 0);
@@ -440,10 +450,11 @@ MatchResult match(const WallGrid & map, const std::vector<P2> & cloud, const Pos
     if (std::hypot(dx[0], dx[1]) < 1e-4 && std::abs(dx[2]) < 1e-4) {break;}
   }
   int used = 0, inl = 0;
-  double ss = 0.0;
+  double ss = 0.0, fit = 0.0;
   for (const auto & pt : cloud) {
     const P2 q = T.apply(pt);
     const double d = map.distance(q.x, q.y);
+    fit += std::max(0.0, 1.0 - d / 0.1);
     if (d > p.outlier) {continue;}
     ++used;
     ss += d * d;
@@ -452,6 +463,7 @@ MatchResult match(const WallGrid & map, const std::vector<P2> & cloud, const Pos
   r.pose = T;
   r.points = used;
   r.inlier_fraction = static_cast<double>(inl) / static_cast<double>(cloud.size());
+  r.fit = fit / static_cast<double>(cloud.size());
   r.rms = used ? std::sqrt(ss / used) : 0.0;
   r.ok = used >= 10;
   return r;
@@ -559,17 +571,17 @@ GlobalResult globalSearch(const WallGrid & map, const std::vector<P2> & cloud,
   std::vector<MatchResult> refined;
   for (const auto & s : seeds) {refined.push_back(match(map, pts, s, loose));}
   std::sort(refined.begin(), refined.end(),
-    [](const MatchResult & a, const MatchResult & b) {return a.inlier_fraction > b.inlier_fraction;});
+    [](const MatchResult & a, const MatchResult & b) {return a.fit > b.fit;});
   if (refined.empty()) {return g;}
   g.best = refined[0];
-  g.score = refined[0].inlier_fraction;
+  g.score = refined[0].fit;
   for (size_t k = 1; k < refined.size(); ++k) {
     if (distinct(refined[k].pose, g.best.pose)) {
-      g.second = refined[k].inlier_fraction;
+      g.second = refined[k].fit;
       break;
     }
   }
-  g.ok = g.best.ok && g.score >= 0.5 && g.second < gp.ambiguity * g.score;
+  g.ok = g.best.ok && g.best.inlier_fraction >= 0.5 && g.second < gp.ambiguity * g.score;
   return g;
 }
 

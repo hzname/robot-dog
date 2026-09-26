@@ -15,9 +15,11 @@ namespace
 std::array<double, 3> residual(const GraphEdge & e, const Pose2 & a, const Pose2 & b)
 {
   const Pose2 pred = a.inverse().compose(b);
-  const double c = std::cos(e.z.yaw), s = std::sin(e.z.yaw);
-  const double dx = pred.x - e.z.x, dy = pred.y - e.z.y;
-  return {(c * dx + s * dy) / e.sigma_xy, (-s * dx + c * dy) / e.sigma_xy,
+  const double dx = pred.x - e.z.x, dy = pred.y - e.z.y;  // in a's frame
+  const double th = e.sigma_weak > 0.0 ? e.weak_dir : e.z.yaw;
+  const double c = std::cos(th), s = std::sin(th);
+  const double s1 = e.sigma_weak > 0.0 ? e.sigma_weak : e.sigma_xy;
+  return {(c * dx + s * dy) / s1, (-s * dx + c * dy) / e.sigma_xy,
     wrapAngle(pred.yaw - e.z.yaw) / e.sigma_yaw};
 }
 
@@ -51,6 +53,28 @@ bool cholSolve(std::vector<double> H, std::vector<double> & b, int n)
   return true;
 }
 }  // namespace
+
+double weakDirection(const std::vector<P2> & normals, double * ratio)
+{
+  double xx = 0.0, xy = 0.0, yy = 0.0;
+  for (const auto & n : normals) {
+    xx += n.x * n.x;
+    xy += n.x * n.y;
+    yy += n.y * n.y;
+  }
+  const double tr = xx + yy, det = xx * yy - xy * xy;
+  const double disc = std::sqrt(std::max(0.25 * tr * tr - det, 0.0));
+  const double l1 = 0.5 * tr + disc, l2 = 0.5 * tr - disc;
+  if (ratio) {*ratio = l1 > 0.0 ? std::max(l2, 0.0) / l1 : 0.0;}
+  // eigenvector of the smaller eigenvalue
+  double ex = xy, ey = l2 - xx;
+  if (std::hypot(ex, ey) < 1e-12) {
+    ex = l2 - yy;
+    ey = xy;
+  }
+  if (std::hypot(ex, ey) < 1e-12) {return 0.0;}
+  return std::atan2(ey, ex);
+}
 
 double optimizePoseGraph(std::vector<Pose2> & nodes, const std::vector<GraphEdge> & edges, int iterations)
 {
@@ -213,6 +237,15 @@ Pose2 SubmapMap::insert(const std::vector<P2> & pts_map, const Pose2 & robot, do
     e.z = subs_[k].pose.inverse().compose(robot);
     e.sigma_xy = p_.odom_sigma_xy + 0.01 * len;
     e.sigma_yaw = p_.odom_sigma_yaw;
+    // along what the finished submap's walls leave open (a bare corridor), the
+    // edge is dead reckoning's: a loop may stretch or shrink it there
+    double ratio = 1.0;
+    const double dir = weakDirection(subs_[k].grid.normals(), &ratio);
+    const double weak = p_.odom_scale * len * std::max(0.0, 1.0 - 4.0 * ratio);
+    if (weak > e.sigma_xy) {
+      e.weak_dir = dir;
+      e.sigma_weak = std::hypot(e.sigma_xy, weak);
+    }
     edges_.push_back(e);
     if (p_.loop_closure) {
       const Pose2 before = subs_.back().pose;
@@ -291,9 +324,9 @@ std::optional<LoopClosure> SubmapMap::closeLoop(int k)
     gp.step_yaw = 0.026;
     gp.clearance = 0.0;
     const auto r = globalSearch(ref, cloud, gp);
-    if (!r.ok || r.score < p_.loop_min_inliers) {continue;}
-    if (!best || r.score > best->inliers) {
-      best = LoopClosure{c.j, k, r.score, 0.0, 0.0};
+    if (!r.ok || r.best.inlier_fraction < p_.loop_min_inliers) {continue;}
+    if (!best || r.best.inlier_fraction > best->inliers) {
+      best = LoopClosure{c.j, k, r.best.inlier_fraction, 0.0, 0.0};
       best_edge.a = c.j;
       best_edge.b = k;
       best_edge.z = r.best.pose;
@@ -341,7 +374,7 @@ GlobalResult SubmapMap::relocalize(const std::vector<P2> & cloud, const GlobalPa
     res.push_back(globalSearch(merged_, thin_cloud, w, mp));
   }
   std::sort(res.begin(), res.end(), [](const GlobalResult & a, const GlobalResult & b) {return a.score > b.score;});
-  if (!res.empty() && res[0].best.ok && res[0].score >= 0.5) {
+  if (!res.empty() && res[0].best.ok && res[0].best.inlier_fraction >= 0.5) {
     out = res[0];
     for (size_t i = 1; i < res.size(); ++i) {
       const auto & o = res[i].best.pose;
@@ -371,7 +404,7 @@ bool SubmapMap::save(const std::string & path) const
   g << "edges " << edges_.size() << "\n";
   for (const auto & e : edges_) {
     g << e.a << " " << e.b << " " << e.z.x << " " << e.z.y << " " << e.z.yaw << " " << e.sigma_xy << " "
-      << e.sigma_yaw << " " << (e.loop ? 1 : 0) << "\n";
+      << e.sigma_yaw << " " << (e.loop ? 1 : 0) << " " << e.weak_dir << " " << e.sigma_weak << "\n";
   }
   if (!g) {return false;}
   return merged_.save(path);
@@ -397,12 +430,17 @@ bool SubmapMap::load(const std::string & path)
       subs_.push_back(std::move(s));
     }
     g >> word >> n;
-    for (size_t i = 0; i < n; ++i) {
+    std::string line;
+    std::getline(g, line);
+    for (size_t i = 0; i < n && std::getline(g, line); ++i) {
+      std::istringstream in(line);
       GraphEdge e;
       int loop = 0;
-      g >> e.a >> e.b >> e.z.x >> e.z.y >> e.z.yaw >> e.sigma_xy >> e.sigma_yaw >> loop;
+      if (!(in >> e.a >> e.b >> e.z.x >> e.z.y >> e.z.yaw >> e.sigma_xy >> e.sigma_yaw >> loop)) {continue;}
+      in >> e.weak_dir >> e.sigma_weak;  // older maps: none
+      if (!in) {e.sigma_weak = 0.0;}
       e.loop = loop != 0;
-      if (g) {edges_.push_back(e);}
+      edges_.push_back(e);
     }
   } else {
     Submap s;  // a single-grid map

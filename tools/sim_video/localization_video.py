@@ -69,7 +69,7 @@ def main():
         graph_nodes = [compose(off, tuple(float(v) for v in ln.split()[1:4])) for ln in lines[1:1 + n]]
         for ln in lines[2 + n:]:
             f = ln.split()
-            if len(f) == 8 and f[7] == '1':
+            if len(f) >= 8 and f[7] == '1':
                 graph_loops.append((int(f[0]), int(f[1])))
     F = [e for e in rec['trace'] if e['phase'] != 'start']
     ts = np.array([e['t'] for e in F])

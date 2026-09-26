@@ -34,8 +34,16 @@ struct GraphEdge
   Pose2 z;                 // b in a's frame, as measured
   double sigma_xy{0.05};   // [m]
   double sigma_yaw{0.02};  // [rad]
+  // a direction (in a's frame) the walls did not pin down - along a bare
+  // corridor: there the translation is only as good as dead reckoning
+  double weak_dir{0.0};    // [rad]
+  double sigma_weak{0.0};  // [m], 0 = none (sigma_xy both ways)
   bool loop{false};
 };
+
+/// The direction the walls with these normals pin down least (angle), and
+/// how much less (smallest / largest eigenvalue of sum n n^T, 0..1).
+double weakDirection(const std::vector<P2> & normals, double * ratio);
 
 /// Gauss-Newton over the node poses; node 0 stays fixed. Returns the final
 /// sum of squared (whitened) residuals.
@@ -70,6 +78,7 @@ struct SubmapParams
   double loop_win_xy{1.0};        // [m] search window round the graph's guess
   double loop_win_yaw{0.35};      // [rad]
   double odom_sigma_xy{0.03};     // [m] per edge between neighbours, + 1 % of its length
+  double odom_scale{0.15};        // dead reckoning's error share along what the walls do not fix
   double odom_sigma_yaw{0.017};   // [rad]
   double loop_sigma_xy{0.03};
   double loop_sigma_yaw{0.017};

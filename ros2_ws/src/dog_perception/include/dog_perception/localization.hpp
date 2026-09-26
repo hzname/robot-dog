@@ -73,6 +73,8 @@ public:
   bool load(const std::string & path_no_ext);
   /// The mean hit of every occupied cell (where the walls are).
   std::vector<P2> walls() const;
+  /// Wall normals of the occupied cells that have one (corners have none).
+  std::vector<P2> normals() const;
   /// Occupancy for nav_msgs/OccupancyGrid: 100 occupied, 0 elsewhere.
   std::vector<int8_t> occupancy() const;
 
@@ -110,6 +112,7 @@ struct MatchResult
   Pose2 pose;
   int points{0};              // used (within outlier)
   double inlier_fraction{0.0};  // of all points
+  double fit{0.0};            // mean over all points of max(0, 1 - d / 10 cm): finer than the inliers
   double rms{0.0};            // of the used points [m]
   bool ok{false};
 };
@@ -137,8 +140,8 @@ struct GlobalParams
 struct GlobalResult
 {
   MatchResult best;
-  double score{0.0};         // inlier fraction of the best after refinement
-  double second{0.0};        // the best distinct alternative (> 0.3 m or 15 deg away)
+  double score{0.0};         // fit of the best after refinement (MatchResult::fit)
+  double second{0.0};        // fit of the best distinct alternative (> 0.3 m or 15 deg away)
   bool ok{false};
 };
 

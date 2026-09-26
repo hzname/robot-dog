@@ -91,6 +91,49 @@ def _fit(pairs):
     return (float(t[0]), float(t[1]), th)
 
 
+def _true_segments(world, seed):
+    """Footprint edges of the world's walls and furniture (world frame)."""
+    segs = []
+    for b in terrain.obstacles(world, 0, seed):
+        sx, sy = b['size'][:2]
+        c, s = math.cos(b['yaw']), math.sin(b['yaw'])
+        pts = [(b['x'] + c * u - s * v, b['y'] + s * u + c * v)
+               for u, v in ((-sx / 2, -sy / 2), (sx / 2, -sy / 2), (sx / 2, sy / 2), (-sx / 2, sy / 2))]
+        segs += [(pts[k], pts[(k + 1) % 4]) for k in range(4)]
+    a = np.array([p[0] for p in segs])
+    b = np.array([p[1] for p in segs])
+    return a, b
+
+
+def _nearest_on(pts, a, b):
+    """Nearest point on any segment (a[i], b[i]) for each of pts, and the distance."""
+    d = b - a
+    t = np.clip(((pts[:, None, :] - a[None]) * d[None]).sum(-1) / (d * d).sum(-1)[None], 0.0, 1.0)
+    q = a[None] + t[..., None] * d[None]
+    dist = np.linalg.norm(pts[:, None, :] - q, axis=-1)
+    k = dist.argmin(1)
+    return q[np.arange(len(pts)), k], dist[np.arange(len(pts)), k]
+
+
+def map_to_world_icp(walls, world, seed, init, iterations=30):
+    """Place the map's walls on the true ones (ICP, point to segment) from
+    `init`: (map -> world transform, distances of the walls after it)."""
+    a, b = _true_segments(world, seed)
+    off = tuple(init)
+    for _ in range(iterations):
+        c, s = math.cos(off[2]), math.sin(off[2])
+        w = walls @ np.array([[c, s], [-s, c]]) + np.array(off[:2])
+        q, dist = _nearest_on(w, a, b)
+        keep = dist < max(0.3, np.percentile(dist, 80))
+        step = _fit([(tuple(p), tuple(t)) for p, t in zip(w[keep], q[keep])])
+        off = _compose(step, off)
+        if math.hypot(step[0], step[1]) < 1e-4 and abs(step[2]) < 1e-5:
+            break
+    c, s = math.cos(off[2]), math.sin(off[2])
+    w = walls @ np.array([[c, s], [-s, c]]) + np.array(off[:2])
+    return off, _nearest_on(w, a, b)[1]
+
+
 def _wrap(a):
     return (a + math.pi) % (2 * math.pi) - math.pi
 
@@ -165,6 +208,7 @@ class LocalizationCheck:
         if self.status is not None:
             e['status'] = self.status.get('status')
             e['inliers'] = self.status.get('inliers')
+            e['loops'] = self.status.get('loops')
         self.trace.append(e)
 
     # ------------------------------------------------------------ driving
@@ -263,10 +307,23 @@ class LocalizationCheck:
                     'yaw_p95_deg': round(float(np.percentile(yaw, 95)), 2), 'yaw_final_deg': round(yaw[-1], 2),
                     'samples': len(es)}
         if self.phase == 'mapping':
+            # the saved map's walls placed on the true ones: how good the map
+            # is, and where its frame is in the world (for the other runs)
             pairs = [(e['loc'], e['truth']) for e in self.trace
                      if 'loc' in e and e['phase'] in ('survey', 'relocalize', 'route', 'end')]
-            self.map_offset = _fit(pairs) if len(pairs) > 10 else None
-            out['map_to_world'] = [round(v, 4) for v in self.map_offset] if self.map_offset else None
+            init = _fit(pairs) if len(pairs) > 10 else (0.0, 0.0, 0.0)
+            self.map_offset = init
+            walls_file = (self.map_path or '') + '.walls'
+            try:
+                walls = np.loadtxt(walls_file).reshape(-1, 2)
+            except OSError:
+                walls = np.zeros((0, 2))
+            if len(walls) > 50:
+                self.map_offset, dist = map_to_world_icp(walls, self.world, self.seed, init)
+                out['map_walls'] = {'mean_m': round(float(dist.mean()), 3),
+                                    'p95_m': round(float(np.percentile(dist, 95)), 3),
+                                    'within_5cm': round(float((dist < 0.05).mean()), 3), 'cells': len(walls)}
+            out['map_to_world'] = [round(v, 4) for v in self.map_offset]
         out['localization'] = err('loc', self.map_offset)
         out['dead_reckoning'] = err('dr', first_offset('dr'))
         out['tracking_share'] = round(sum(1 for e in tr if e.get('status') == 'tracking') / max(len(tr), 1), 3)

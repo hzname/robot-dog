@@ -8,11 +8,11 @@
   waves  level   cylinders across the path, bump height `level` mm
                  (a curved, washboard-like surface)
   rough  level   scattered stones up to `level` mm high
-  room           localization: a 5 x 4 m room with 1.2 m walls, a cabinet,
+  room           localization: a 5 x 4 m room with 2.5 m walls, a cabinet,
                  a sofa, a table and a chest. `seed` picks where in the room
                  the robot starts (ROOM_STARTS): the room is placed round it
   house          loop closure: a corridor 1.5 m wide round a 7 x 4 m core
-                 (10 x 7 m outside), walls 1.2 m, a few pieces of furniture and
+                 (10 x 7 m outside), walls 2.5 m, a few pieces of furniture and
                  long bare stretches; `seed` picks the start (HOUSE_STARTS)
   steps  level   perception test course, steps of `level` mm: the robot starts
                  on a platform with a 20 mm stone in the left foot corridor
@@ -52,7 +52,7 @@ FOOTER = '''  </world>
 '''
 KINDS = ('flat', 'slope', 'waves', 'rough', 'steps', 'wall', 'stairs', 'bar', 'block', 'room', 'house')
 # room world, in room coordinates (centre of the floor, x along the long side)
-ROOM_SIZE, ROOM_WALL_H = (5.0, 4.0), 1.2
+ROOM_SIZE, ROOM_WALL_H = (5.0, 4.0), 2.5  # walls as high as a flat's
 ROOM_FURNITURE = (  # name, centre x, y, size x, y, z, lifted (table top)
     ('cabinet', 2.30, 1.30, 0.40, 1.00, 1.20, 0.0),
     ('sofa', -0.60, -1.60, 1.80, 0.80, 0.45, 0.0),

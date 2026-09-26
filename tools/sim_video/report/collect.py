@@ -125,7 +125,7 @@ def cmd_localization(args):
             log = os.path.join(args.root, name + '.sim.log')  # the node's word on the relocalization
             if os.path.exists(log):
                 import re
-                m = re.findall(r'relocalization over (\d+) points: found \((\d+) % on the walls, next best (\d+) %\)',
+                m = re.findall(r'relocalization over (\d+) points: found \(fit (\d+) %, next best (\d+) %\)',
                                open(log, encoding='utf-8', errors='replace').read())
                 if m:
                     out[name]['reloc'] = {'points': int(m[-1][0]), 'best': int(m[-1][1]), 'second': int(m[-1][2])}

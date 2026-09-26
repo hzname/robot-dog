@@ -357,7 +357,7 @@ private:
     auto g = map_.relocalize(cloud, global_, match_);
     g.best.pose = g.best.pose.compose(inv);  // robot in the map -> map <- odom
     const Pose2 at = g.best.pose.compose(odom_now);
-    RCLCPP_INFO(get_logger(), "relocalization over %zu points: %s (%.0f %% on the walls, next best %.0f %%) "
+    RCLCPP_INFO(get_logger(), "relocalization over %zu points: %s (fit %.0f %%, next best %.0f %%) "
       "at x %.2f y %.2f yaw %.0f deg", cloud.size(), g.ok ? "found" : "not sure", 100.0 * g.score,
       100.0 * g.second, at.x, at.y, at.yaw * 180.0 / M_PI);
     if (g.ok) {
