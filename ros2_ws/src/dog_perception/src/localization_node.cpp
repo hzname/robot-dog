@@ -105,7 +105,7 @@ public:
     min_inliers_ = getD("localization.min_inliers", 0.5);
     lost_after_ = getD("localization.lost_after", 3.0);
     reloc_wait_ = getD("localization.reloc_wait", 3.0);
-    reloc_window_ = getD("localization.reloc_window", 60.0);
+    reloc_radius_ = getD("localization.reloc_radius", 8.0);
     reloc_min_fit_ = getD("localization.reloc_min_fit", 0.6);
     reloc_ambiguity_ = getD("localization.reloc_ambiguity", 0.85);
     debug_dump_ = declare_parameter("localization.debug_dump", std::string(""));
@@ -370,29 +370,47 @@ private:
         tracking_since_ = -1.0;
         RCLCPP_WARN(get_logger(), "lost: %.0f %% of %zu points on the walls for %.1f s - "
           "relocalizing (a survey helps)", 100.0 * r.inlier_fraction, cloud.size(), t - last_good_);
-        reloc_.clear();
+        scratch_.reset();
         reloc_t0_ = t;
         last_try_ = t;
       }
       return;
     }
-    // relocalizing / lost: collect a cloud (dead reckoning holds it together)
-    // the last reloc_window seconds of scans: standing, the survey; walking,
-    // a few metres of the way - more of the place than one view
-    if (reloc_.empty()) {reloc_t0_ = t;}
-    reloc_.emplace_back(t, pts);
-    while (!reloc_.empty() && reloc_.front().first < t - reloc_window_) {reloc_.pop_front();}
+    // relocalizing / lost: map what the robot sees as it goes, as mapping does
+    // (scans matched to each other, not held together by dead reckoning
+    // alone), and look for that little map in the stored one
+    if (odom_hist_.empty()) {return;}
+    const Pose2 odom_now = odom_hist_.back().pose, inv = odom_now.inverse();
+    if (!scratch_) {
+      SubmapParams sp = sp_;
+      sp.loop_closure = false;
+      scratch_ = std::make_unique<SubmapMap>(sp);
+      Ts_ = Pose2{};
+      reloc_t0_ = t;
+    }
+    if (!scratch_->empty() && scratch_->local().fieldValid()) {
+      const auto cloud = recentCloud();
+      if (static_cast<int>(cloud.size()) >= min_points_) {
+        const auto r = match(scratch_->local(), cloud, Ts_, match_);
+        if (r.ok) {Ts_ = r.pose;}
+      }
+    }
+    std::vector<P2> ws;
+    for (const auto & p : pts) {ws.push_back(Ts_.apply(p));}
+    scratch_->insert(ws, Ts_.compose(odom_now), walked_);
+    scratch_->refresh();
     const bool waited = state_ != "survey" && t - reloc_t0_ > 2.0 && t - last_try_ > reloc_wait_;
     if (!reloc_now_ && !waited) {return;}
     reloc_now_ = false;
     last_try_ = t;
-    // the cloud round the robot as it stands now (places are centred on submap origins)
-    if (odom_hist_.empty()) {return;}
-    const Pose2 odom_now = odom_hist_.back().pose, inv = odom_now.inverse();
-    std::vector<P2> all;
-    for (const auto & r : reloc_) {all.insert(all.end(), r.second.begin(), r.second.end());}
+    // the little map's walls round the robot, in the robot's frame (places
+    // are centred on submap origins)
+    const Pose2 here = Ts_.compose(odom_now).inverse();
     std::vector<P2> cloud;
-    for (const auto & q : thin(all, sp_.resolution)) {cloud.push_back(inv.apply(q));}
+    for (const auto & w : scratch_->merged().walls()) {
+      const P2 q = here.apply(w);
+      if (std::hypot(q.x, q.y) < reloc_radius_) {cloud.push_back(q);}
+    }
     if (!debug_dump_.empty()) {  // the cloud (robot frame) of every try, for offline study
       std::ofstream f(debug_dump_ + "." + std::to_string(reloc_tries_++) + ".txt");
       f.precision(6);
@@ -414,7 +432,7 @@ private:
       status_ = "tracking";
       tracking_since_ = last_scan_t_;
       last_good_ = t;
-      reloc_.clear();
+      scratch_.reset();
     }
   }
 
@@ -456,7 +474,7 @@ private:
     } else if (c == "relocalize" && !mapping_) {
       status_ = "relocalizing";
       tracking_since_ = -1.0;
-      reloc_.clear();
+      scratch_.reset();
       last_try_ = 0.0;
       RCLCPP_INFO(get_logger(), "relocalizing");
     } else if (c == "reset") {
@@ -546,8 +564,9 @@ private:
   std::deque<std::pair<double, M3>> imu_hist_;
   std::deque<OdomSample> odom_hist_;
   std::deque<std::pair<double, std::vector<P2>>> recent_;
-  std::deque<std::pair<double, std::vector<P2>>> reloc_;
-  double reloc_window_{60.0};
+  std::unique_ptr<SubmapMap> scratch_;  // the little map made while relocalizing
+  Pose2 Ts_;                            // its frame <- odom
+  double reloc_radius_{8.0};
   int reloc_min_points_{400}, reloc_tries_{0};
   double reloc_min_fit_{0.6}, reloc_ambiguity_{0.85};
   double tracking_since_{-1.0}, last_scan_t_{0.0};
