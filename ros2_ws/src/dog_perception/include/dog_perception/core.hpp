@@ -140,6 +140,9 @@ public:
   std::vector<float> mean() const;  // n*n, row = x index, NaN = unknown
   /// Mean height of the cell at world (x, y), NaN if unknown or outside.
   double heightAt(double x, double y) const;
+  /// Highest point of the cell (NaN with fewer than 3 points in it): the face
+  /// of a block seen from the side averages to half its height.
+  double maxAt(double x, double y) const;
   double originX() const {return ox_;}
   double originY() const {return oy_;}
   double resolution() const {return res_;}
@@ -151,6 +154,7 @@ private:
   double ox_{0.0}, oy_{0.0};
   std::vector<double> sum_;
   std::vector<int> cnt_;
+  std::vector<double> max_;
 };
 
 // ------------------------------------------------------------------ detectors

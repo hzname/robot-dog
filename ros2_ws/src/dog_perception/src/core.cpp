@@ -297,7 +297,8 @@ std::optional<Plane> FeetPlane::current(const std::optional<M3> & R_imu) const
 // ------------------------------------------------------------------ elevation map
 ElevationMap::ElevationMap(double size, double res)
 : res_(res), n_(static_cast<int>(std::lround(size / res))),
-  sum_(static_cast<size_t>(n_) * n_, 0.0), cnt_(static_cast<size_t>(n_) * n_, 0)
+  sum_(static_cast<size_t>(n_) * n_, 0.0), cnt_(static_cast<size_t>(n_) * n_, 0),
+  max_(static_cast<size_t>(n_) * n_, -kInf)
 {
 }
 
@@ -310,6 +311,7 @@ void ElevationMap::recenter(double x, double y)
   if (dx == 0 && dy == 0) {return;}
   std::vector<double> sum(sum_.size(), 0.0);
   std::vector<int> cnt(cnt_.size(), 0);
+  std::vector<double> mx(max_.size(), -kInf);
   for (int i = 0; i < n_; ++i) {
     const int si = i + dx;
     if (si < 0 || si >= n_) {continue;}
@@ -318,10 +320,12 @@ void ElevationMap::recenter(double x, double y)
       if (sj < 0 || sj >= n_) {continue;}
       sum[i * n_ + j] = sum_[si * n_ + sj];
       cnt[i * n_ + j] = cnt_[si * n_ + sj];
+      mx[i * n_ + j] = max_[si * n_ + sj];
     }
   }
   sum_.swap(sum);
   cnt_.swap(cnt);
+  max_.swap(mx);
   ox_ = nx;
   oy_ = ny;
 }
@@ -334,6 +338,7 @@ void ElevationMap::insert(const std::vector<V3> & pts)
     if (i < 0 || j < 0 || i >= n_ || j >= n_) {continue;}
     sum_[i * n_ + j] += p.z;
     cnt_[i * n_ + j] += 1;
+    max_[i * n_ + j] = std::max(max_[i * n_ + j], p.z);
   }
 }
 
@@ -602,6 +607,15 @@ HazardGuard::Command HazardGuard::command(double t, double x, double y, double y
 }
 
 // ------------------------------------------------------------------ going round
+double ElevationMap::maxAt(double x, double y) const
+{
+  const int i = static_cast<int>(std::floor((x - ox_) / res_));
+  const int j = static_cast<int>(std::floor((y - oy_) / res_));
+  if (i < 0 || j < 0 || i >= n_ || j >= n_) {return kNaN;}
+  const int k = i * n_ + j;
+  return cnt_[k] >= 3 ? max_[k] : kNaN;
+}
+
 double ElevationMap::heightAt(double x, double y) const
 {
   const int i = static_cast<int>(std::floor((x - ox_) / res_));
@@ -619,7 +633,7 @@ Obstacle tallObstacle(const ElevationMap & map, double x, double y, double yaw, 
   for (double d = d0; d <= d1; d += r) {
     for (double lat = -reach; lat <= reach; lat += r) {
       const double cx = x + cs * d - sn * lat, cy = y + sn * d + cs * lat;
-      const double h = map.heightAt(cx, cy);
+      const double h = map.maxAt(cx, cy);
       if (!std::isfinite(h) || h - ground_z <= height) {continue;}
       // tall over its surroundings too (a jump, not a height): a staircase is
       // high above the floor under the robot, but every riser is a step

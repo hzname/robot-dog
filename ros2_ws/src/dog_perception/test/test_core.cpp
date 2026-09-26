@@ -384,6 +384,26 @@ TEST(Core, GoesRoundAnObstacleAndBackToItsLine)
   EXPECT_LT(max_y, 0.45);
 }
 
+TEST(Core, ABlockSeenFromTheSideIsTall)
+{
+  // lidar points on the near face of a 150 mm block only: the mean of the
+  // face cell is half the height, its highest point the height
+  ElevationMap map(3.0, 0.02);
+  map.recenter(1.0, 0.0);
+  std::vector<V3> pts;
+  for (double x = 0.2; x < 1.0; x += 0.01) {
+    for (double y = -0.5; y < 0.5; y += 0.01) {pts.push_back({x, y, 0.0});}
+  }
+  for (double z = 0.0; z <= 0.15; z += 0.01) {
+    for (double y = -0.1; y < 0.1; y += 0.01) {pts.push_back({1.005, y, z});}
+  }
+  map.insert(pts);
+  EXPECT_LT(map.heightAt(1.005, 0.0), 0.08);
+  const Obstacle o = tallObstacle(map, 0.5, 0.0, 0.0, 0.0, 0.07, -0.35);
+  ASSERT_TRUE(o.found);
+  EXPECT_NEAR(o.d_min, 0.51, 0.02);
+}
+
 TEST(Core, StairsAreNotTallObstacles)
 {
   // three 50 mm steps: 150 mm above the floor, but every riser is a step
