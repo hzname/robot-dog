@@ -105,6 +105,8 @@ public:
     min_inliers_ = getD("localization.min_inliers", 0.5);
     lost_after_ = getD("localization.lost_after", 3.0);
     reloc_wait_ = getD("localization.reloc_wait", 3.0);
+    reloc_window_ = getD("localization.reloc_window", 60.0);
+    reloc_min_points_ = getI("localization.reloc_min_points", 400);
     match_.prior_xy = getD("localization.prior_xy", match_.prior_xy);
     match_.prior_yaw = getD("localization.prior_yaw_deg", 5.0) * M_PI / 180.0;
     scale_on_ = declare_parameter("localization.scale_estimation", true);
@@ -359,9 +361,11 @@ private:
       return;
     }
     // relocalizing / lost: collect a cloud (dead reckoning holds it together)
+    // the last reloc_window seconds of scans: standing, the survey; walking,
+    // a few metres of the way - more of the place than one view
     if (reloc_.empty()) {reloc_t0_ = t;}
-    reloc_.insert(reloc_.end(), pts.begin(), pts.end());
-    if (reloc_.size() > 20000) {reloc_ = thin(reloc_, 0.03);}
+    reloc_.emplace_back(t, pts);
+    while (!reloc_.empty() && reloc_.front().first < t - reloc_window_) {reloc_.pop_front();}
     const bool waited = state_ != "survey" && t - reloc_t0_ > 2.0 && t - last_try_ > reloc_wait_;
     if (!reloc_now_ && !waited) {return;}
     reloc_now_ = false;
@@ -369,9 +373,13 @@ private:
     // the cloud round the robot as it stands now (places are centred on submap origins)
     if (odom_hist_.empty()) {return;}
     const Pose2 odom_now = odom_hist_.back().pose, inv = odom_now.inverse();
+    std::vector<P2> all;
+    for (const auto & r : reloc_) {all.insert(all.end(), r.second.begin(), r.second.end());}
     std::vector<P2> cloud;
-    for (const auto & q : thin(reloc_, sp_.resolution)) {cloud.push_back(inv.apply(q));}
+    for (const auto & q : thin(all, sp_.resolution)) {cloud.push_back(inv.apply(q));}
     auto g = map_.relocalize(cloud, global_, match_);
+    // a few hundred points fit many places a little: not enough to be sure
+    g.ok = g.ok && static_cast<int>(cloud.size()) >= reloc_min_points_;
     g.best.pose = g.best.pose.compose(inv);  // robot in the map -> map <- odom
     const Pose2 at = g.best.pose.compose(odom_now);
     RCLCPP_INFO(get_logger(), "relocalization over %zu points: %s (fit %.0f %%, next best %.0f %%) "
@@ -383,9 +391,6 @@ private:
       status_ = "tracking";
       last_good_ = t;
       reloc_.clear();
-    } else if (t - reloc_t0_ > 30.0) {
-      reloc_ = thin(recentCloud(), 0.03);  // start collecting afresh
-      reloc_t0_ = t;
     }
   }
 
@@ -513,7 +518,9 @@ private:
   std::deque<std::pair<double, M3>> imu_hist_;
   std::deque<OdomSample> odom_hist_;
   std::deque<std::pair<double, std::vector<P2>>> recent_;
-  std::vector<P2> reloc_;
+  std::deque<std::pair<double, std::vector<P2>>> reloc_;
+  double reloc_window_{60.0};
+  int reloc_min_points_{400};
   std::vector<rclcpp::SubscriptionBase::SharedPtr> subs_;
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pub_pose_;

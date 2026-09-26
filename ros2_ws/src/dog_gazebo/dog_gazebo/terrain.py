@@ -67,7 +67,9 @@ HOUSE_FURNITURE = (  # name, x0, y0, x1, y1, height
     ('cabinet', -1.0, 3.1, 0.2, 3.5, 1.2),
     ('shelf', 4.6, -1.0, 5.0, 0.2, 1.0),
     ('chest', -5.0, -3.5, -4.4, -2.9, 0.6),
-    ('bench', 1.0, -2.3, 1.6, -2.0, 0.45))
+    ('bench', 1.0, -2.3, 1.6, -2.0, 0.45),
+    ('wardrobe', -3.9, 0.4, -3.5, 1.6, 2.0),   # against the core's west face
+    ('pillar', 4.6, -3.5, 5.0, -3.1, 2.5))     # in the south-east corner
 HOUSE_STARTS = ((-4.25, -1.5, 1.5708), (4.25, 1.0, -1.5708), (0.5, 2.75, 3.1416))
 # the loop round the core along the corridors' middle
 HOUSE_LOOP = ((-4.25, -2.75), (4.25, -2.75), (4.25, 2.75), (-4.25, 2.75))
