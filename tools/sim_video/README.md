@@ -52,12 +52,28 @@ python3 tools/sim_video/perception_video.py steps20.json steps20.mp4 --title "С
 
 ## HTML-отчёты (`report/`)
 
-Сборщики лежат в [report/](report): `build_report.py` делает `report/index.html`, `build_perception_report.py` — `report/perception.html`. Им нужны только маленькие файлы из `report/data/` и ролики, которые уже лежат в `report/videos/`. Сырые записи прогонов (мегабайты на прогон) в git не хранятся.
+Сборщики лежат в [report/](report): `build_report.py` делает `report/index.html`, `build_perception_report.py` — `report/perception.html`, `build_gaits_report.py` — `report/gaits.html` (ползание, объезд, приветствие; оценки — `collect.py gaits`). Им нужны только маленькие файлы из `report/data/` и ролики, которые уже лежат в `report/videos/`. Сырые записи прогонов (мегабайты на прогон) в git не хранятся.
 
 ```bash
 pip install opencv-python-headless imageio-ffmpeg
 python3 tools/sim_video/report/build_report.py --out report
 python3 tools/sim_video/report/build_perception_report.py --out report
+python3 tools/sim_video/report/build_gaits_report.py --out report
+```
+
+Ролики страницы походок рендерятся по списку `report/data/gaits_runs.json` (длинные прогоны ползания — ускоренно, `--speed`, и обрезанные после препятствия, `--end`):
+
+```bash
+python3 - <<'PY'
+import json, subprocess
+for r in json.load(open('tools/sim_video/report/data/gaits_runs.json')):
+    cmd = ['python3', 'tools/sim_video/perception_video.py', f"rec/{r['dir']}/{r['name']}.json", f"raw/{r['name']}.mp4",
+           '--title', r['setup'], '--speed', str(r.get('speed', 1))] + \
+          (['--start', str(r['start'])] if 'start' in r else []) + (['--end', str(r['end'])] if 'end' in r else [])
+    subprocess.run(cmd, check=True)
+PY
+python3 tools/sim_video/report/collect.py gaits --root rec
+python3 tools/sim_video/report/build_gaits_report.py --out report --raw raw
 ```
 
 После новых прогонов:

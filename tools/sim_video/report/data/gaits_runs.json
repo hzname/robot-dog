@@ -1,0 +1,9 @@
+[
+  {"dir": "rep", "name": "stairs50", "world": "stairs", "setup": "Лестница 50 мм · ползание · удачный прогон (1 из 3)", "speed": 6, "end": 385},
+  {"dir": "rep", "name": "stairs50b", "world": "stairs", "setup": "Лестница 50 мм · спуск: срыв со ступени", "speed": 3, "start": 150, "end": 265},
+  {"dir": "rep", "name": "bar60", "world": "bar", "setup": "Брус 60 мм · ползание · удачный прогон (1 из 3)", "speed": 4, "end": 220},
+  {"dir": "rep", "name": "steps30", "world": "steps", "setup": "Ступени 30 мм · рысь, высокий шаг, ползание", "speed": 1},
+  {"dir": "g26", "name": "block150", "world": "block", "setup": "Блок 150 мм · объезд", "speed": 1, "end": 57},
+  {"dir": "g26", "name": "wall80", "world": "wall", "setup": "Стена 80 мм · стоп", "speed": 1},
+  {"dir": "rep", "name": "greet", "world": "flat", "setup": "Приветствие", "speed": 1}
+]

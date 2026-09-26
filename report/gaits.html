@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Походки RobotDog 2.0</title>
+<style>
+:root {
+  --bg: #f4f6f8; --surface: #ffffff; --ink: #12161b; --ink-2: #48515e; --muted: #737d8a;
+  --grid: #e3e7ec; --line: #d3d9e0; --soft: #eef1f5; --accent: #2a78d6;
+  --good: #1d7a1d; --good-bg: #e5f4e5; --bad: #b3282a; --bad-bg: #fbe6e6; --warn: #8a5a00; --warn-bg: #fdf1d8;
+  --fall-bg: #d03b3b;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0f1216; --surface: #171b21; --ink: #e8ebef; --ink-2: #b4bbc6; --muted: #8791a0;
+    --grid: #252b34; --line: #333a45; --soft: #1e232a; --accent: #5b9df0;
+    --good: #6fd46f; --good-bg: #173017; --bad: #f28b8b; --bad-bg: #3a1a1a; --warn: #e8b64c; --warn-bg: #3a2c10;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1216; --surface: #171b21; --ink: #e8ebef; --ink-2: #b4bbc6; --muted: #8791a0;
+  --grid: #252b34; --line: #333a45; --soft: #1e232a; --accent: #5b9df0;
+  --good: #6fd46f; --good-bg: #173017; --bad: #f28b8b; --bad-bg: #3a1a1a; --warn: #e8b64c; --warn-bg: #3a2c10;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--sans); padding: 28px 16px 64px; }
+main { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 48px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1 { font-size: 30px; font-weight: 650; line-height: 1.2; }
+h2 { font-size: 22px; font-weight: 650; }
+h3 { font-size: 15px; font-weight: 600; }
+p { margin: 0; max-width: 72ch; color: var(--ink-2); }
+.eyebrow { font: 500 12px/1.4 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.mono { font-family: var(--mono); }
+header { display: flex; flex-direction: column; gap: 10px; }
+section { display: flex; flex-direction: column; gap: 18px; scroll-margin-top: 16px; }
+.sec-head { display: flex; flex-direction: column; gap: 6px; }
+.sec-head h2 { display: flex; gap: 12px; align-items: baseline; }
+.num-badge { font: 600 13px var(--mono); color: var(--surface); background: var(--accent); border-radius: 999px; padding: 2px 9px; }
+
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.stat .v { font: 600 26px/1.15 var(--mono); }
+.stat .v small { font-size: 14px; color: var(--muted); font-weight: 500; }
+.stat .k { font-size: 13px; color: var(--ink-2); }
+
+.steps { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; list-style: none; margin: 0; padding: 0; counter-reset: s; }
+.steps a { display: flex; flex-direction: column; gap: 2px; text-decoration: none; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; height: 100%; }
+.steps a:hover { border-color: var(--accent); }
+.steps a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.steps li { counter-increment: s; }
+.steps a::before { content: counter(s); font: 600 12px var(--mono); color: var(--accent); }
+.steps b { font-size: 14px; font-weight: 600; }
+.steps span { font-size: 12px; color: var(--muted); }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.note { font-size: 13px; color: var(--muted); max-width: none; }
+.callout { background: var(--soft); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.callout p { max-width: none; }
+
+figure.vid { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+figure.vid figcaption { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.player { position: relative; aspect-ratio: 16 / 9; background: #f7f8fa; border-radius: 6px; overflow: hidden; }
+.player video { width: 100%; height: 100%; display: block; }
+.player .err { position: absolute; inset: auto 0 0 0; background: rgba(18,22,27,.85); color: #fff; font-size: 13px; padding: 8px 12px; }
+.badge { font: 600 13px var(--mono); border-radius: 999px; padding: 2px 10px; }
+.badge.ok { color: var(--good); background: var(--good-bg); }
+.badge.warn { color: var(--warn); background: var(--warn-bg); }
+.badge.bad { color: var(--bad); background: var(--bad-bg); }
+.chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: flex; gap: 6px; align-items: baseline; font-size: 12.5px; padding: 3px 9px; border-radius: 6px; }
+.chip b { font: 600 12px var(--mono); }
+.chip.ok { background: var(--good-bg); color: var(--good); }
+.chip.bad { background: var(--bad-bg); color: var(--bad); }
+.chip.skip { background: var(--soft); color: var(--muted); }
+
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; vertical-align: top; }
+th { font-weight: 500; color: var(--muted); font-size: 12px; }
+td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+td.r-ok { color: var(--good); } td.r-bad { color: var(--bad); font-weight: 600; } td.r-warn { color: var(--warn); }
+td.r-fall { color: #fff; background: var(--fall-bg); font-weight: 600; }
+td .sub { font-size: 12px; color: var(--muted); white-space: normal; }
+.tag { font-size: 11.5px; color: var(--good); background: var(--good-bg); border-radius: 4px; padding: 1px 6px; margin-left: 6px; white-space: normal; }
+ul.list { margin: 0; padding-left: 20px; color: var(--ink-2); display: flex; flex-direction: column; gap: 6px; }
+ul.list b { color: var(--ink); }
+.legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 18px; font-size: 13px; color: var(--ink-2); }
+.legend b { color: var(--ink); font-weight: 600; }
+details summary { cursor: pointer; font-size: 14px; color: var(--ink-2); }
+
+@media (max-width: 860px) {
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pair, .legend { grid-template-columns: 1fr; }
+  h1 { font-size: 25px; }
+}
+
+</style></head>
+<body><main>
+<header>
+  <div class="eyebrow">RobotDog 2.0 · Gazebo Harmonic · dog_control + dog_perception · 26.09.2026</div>
+  <h1>Походки: ползание, объезд, приветствие</h1>
+  <p>Рысь с высоким шагом проходит уступы до 25 мм. Всё, что выше, требует другой походки или обхода. Здесь прогоны в физической симуляции с тем же кодом, что и на роботе: ползание на трёх опорах через ступени, брус и лестницу; остановка у стены; объезд узкого блока; поза «сидит, лапы вверх». Подробности — <a href="../docs/GAITS.md">docs/GAITS.md</a>.</p>
+</header>
+<div class="stats">
+  <div class="stat"><div class="v">~1.1<small> см/с</small></div><div class="k">скорость ползания: шаг 10 см за цикл из четырёх ног, уступы до 70 мм</div></div>
+  <div class="stat"><div class="v">0.21<small> м</small></div><div class="k">стопы до стены 80 мм при остановке</div></div>
+  <div class="stat"><div class="v">0.09<small> м</small></div><div class="k">наименьший зазор до блока 150 мм при объезде</div></div>
+  <div class="stat"><div class="v">30<small>°</small></div><div class="k">нос вверх в приветствии, лапы в воздухе, опора — колени и задние стопы</div></div>
+</div>
+<div class="callout"><h3>Как читать ролики</h3>
+  <div class="legend">
+    <div><b>Внизу слева</b> — состояние охранника: свободно, медленно, высокий шаг, ползком, стоп, объезд.</div>
+    <div><b>Точки</b> — лидары, <b>зелёные лучи</b> — ToF, <b>фиолетовая линия</b> — GS2. Кольцо над стопой — нога с высоким шагом.</div>
+    <div><b>×N</b> в заголовке — ролик ускорен: ползание медленное.</div>
+  </div>
+  <p class="note">Другие отчёты: <a href="index.html">ходьба и рельеф</a>, <a href="perception.html">датчики</a>. Ролики лежат в папке videos/.</p></div>
+
+<section><div class="sec-head"><div class="eyebrow">охранник выбирает походку по высоте уступа</div>
+  <h2><span class="num-badge">1</span>Какая походка когда</h2>
+  <p>Решение принимается по скачку профиля за 3–6 см пути, а не по высоте над полом. Походка меняется только на месте: скорость обнуляется, переключение — когда шаг закончен.</p></div>
+  <div class="panel"><div class="tbl-wrap"><table><thead><tr><th>Уступ вверх / вниз</th><th class="num">Что делает робот</th></tr></thead><tbody><tr><td>до 15 мм</td><td class="num r-">ничего: шум</td></tr><tr><td>до 25 / 35 мм</td><td class="num r-">рысь; высокий шаг (до 30 мм) только у ноги, перед которой уступ</td></tr><tr><td>до 70 мм</td><td class="num r-ok">ползание: одна нога в воздухе, корпус заранее над тремя другими</td></tr><tr><td>выше 70 мм</td><td class="num r-warn">стоп; узкое (объезд ≤ 0,6 м, верх выше 100 мм по карте) — объезд, иначе ждёт оператора</td></tr></tbody></table></div></div>
+</section>
+
+<section><div class="sec-head"><div class="eyebrow">одна нога в воздухе, опоры выбираются по профилю рельефа</div>
+  <h2><span class="num-badge">2</span>Ползание</h2>
+  <p>Перед подъёмом ноги корпус смещается так, чтобы центр масс был внутри треугольника трёх других ног с запасом 3,5 см. Стопа ставится туда, где в окне ±4,5 см перепад меньше 8 мм. Нога идёт вверх, потом вперёд, потом вниз, на 3 см выше самой высокой точки на пути.</p></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Ступени 30 мм · рысь, высокий шаг, ползание</h3></figcaption>
+  <div class="player"><video data-key="steps30" src="videos/gaits_steps30.mp4" controls playsinline muted preload="none" poster="posters/gaits_steps30.jpg"></video></div>
+  <ul class="chips"><li class="chip skip"><span>свободно</span><b>3 %</b></li><li class="chip skip"><span>медленно</span><b>14 %</b></li><li class="chip skip"><span>высокий шаг</span><b>13 %</b></li><li class="chip skip"><span>ползком</span><b>71 %</b></li><li class="chip ok"><span>падение</span><b>нет</b></li><li class="chip skip"><span>прошёл</span><b>1.31 м</b></li></ul>
+</figure><figure class="vid">
+  <figcaption><h3>Брус 60 мм · ползание · удачный прогон (1 из 3)</h3><span class="badge">×4</span></figcaption>
+  <div class="player"><video data-key="bar60" src="videos/gaits_bar60.mp4" controls playsinline muted preload="none" poster="posters/gaits_bar60.jpg"></video></div>
+  <ul class="chips"><li class="chip skip"><span>свободно</span><b>56 %</b></li><li class="chip skip"><span>медленно</span><b>7 %</b></li><li class="chip skip"><span>ползком</span><b>22 %</b></li><li class="chip skip"><span>стоп</span><b>15 %</b></li><li class="chip ok"><span>прошёл препятствие</span><b>да</b></li><li class="chip ok"><span>падение</span><b>нет</b></li><li class="chip skip"><span>прошёл</span><b>13.21 м</b></li></ul>
+</figure></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Лестница 50 мм · ползание · удачный прогон (1 из 3)</h3><span class="badge">×6</span></figcaption>
+  <div class="player"><video data-key="stairs50" src="videos/gaits_stairs50.mp4" controls playsinline muted preload="none" poster="posters/gaits_stairs50.jpg"></video></div>
+  <ul class="chips"><li class="chip skip"><span>свободно</span><b>33 %</b></li><li class="chip skip"><span>медленно</span><b>2 %</b></li><li class="chip skip"><span>ползком</span><b>65 %</b></li><li class="chip ok"><span>подъём</span><b>да</b></li><li class="chip ok"><span>спуск</span><b>да</b></li><li class="chip ok"><span>падение</span><b>нет</b></li><li class="chip skip"><span>прошёл</span><b>17.89 м</b></li></ul>
+</figure><figure class="vid">
+  <figcaption><h3>Лестница 50 мм · спуск: срыв со ступени</h3><span class="badge">×3</span><span class="badge bad">упал</span></figcaption>
+  <div class="player"><video data-key="stairs50b" src="videos/gaits_stairs50b.mp4" controls playsinline muted preload="none" poster="posters/gaits_stairs50b.jpg"></video></div>
+  <ul class="chips"><li class="chip skip"><span>медленно</span><b>1 %</b></li><li class="chip skip"><span>ползком</span><b>99 %</b></li><li class="chip ok"><span>подъём</span><b>да</b></li><li class="chip bad"><span>спуск</span><b>нет</b></li><li class="chip bad"><span>падение</span><b>да</b></li><li class="chip skip"><span>прошёл</span><b>2.44 м</b></li></ul>
+</figure></div>
+  <div class="panel"><h3>Где ползание пока ненадёжно</h3><ul class="list">
+    <li><b>Лестница 50 мм:</b> подъём и верхняя площадка — 3 из 3, спуск — 1 из 3. На спуске опорные стопы понемногу сползают к кромке, и робот срывается со ступени (второй ролик).</li>
+    <li><b>Брус 60 мм:</b> 1 из 3. Передние ноги переходят, задние цепляют брус или корпус садится на него.</li>
+    <li>Обе задачи — в <code>dog_control</code>, в CI их нет. Ступени 30 мм, стена и приветствие проверяются в CI на каждый коммит.</li>
+  </ul></div>
+</section>
+
+<section><div class="sec-head"><div class="eyebrow">выше 70 мм: стоп или объезд по карте высот</div>
+  <h2><span class="num-badge">3</span>Стоп и объезд</h2>
+  <p>Объезжается только то, что карта уверенно видит высоким: средние высоты клеток выше 100 мм. Ширину даёт передняя грань. Робот отходит вбок так, чтобы коридор 0,2 м был свободен, идёт мимо, держа смещение, и возвращается на линию, по которой шёл. Стена 80 мм едва выше предела ползания и видна картой ненадёжно: у неё робот просто стоит.</p></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Стена 80 мм · стоп</h3></figcaption>
+  <div class="player"><video data-key="wall80" src="videos/gaits_wall80.mp4" controls playsinline muted preload="none" poster="posters/gaits_wall80.jpg"></video></div>
+  <ul class="chips"><li class="chip skip"><span>свободно</span><b>12 %</b></li><li class="chip skip"><span>медленно</span><b>4 %</b></li><li class="chip skip"><span>ползком</span><b>5 %</b></li><li class="chip skip"><span>стоп</span><b>79 %</b></li><li class="chip ok"><span>стопы до стены</span><b>0.21 м</b></li><li class="chip ok"><span>падение</span><b>нет</b></li><li class="chip skip"><span>прошёл</span><b>0.84 м</b></li></ul>
+</figure><figure class="vid">
+  <figcaption><h3>Блок 150 мм · объезд</h3></figcaption>
+  <div class="player"><video data-key="block150" src="videos/gaits_block150.mp4" controls playsinline muted preload="none" poster="posters/gaits_block150.jpg"></video></div>
+  <ul class="chips"><li class="chip skip"><span>свободно</span><b>89 %</b></li><li class="chip skip"><span>медленно</span><b>1 %</b></li><li class="chip skip"><span>ползком</span><b>2 %</b></li><li class="chip skip"><span>объезд</span><b>6 %</b></li><li class="chip skip"><span>стоп</span><b>2 %</b></li><li class="chip ok"><span>прошёл препятствие</span><b>да</b></li><li class="chip ok"><span>вернулся на линию</span><b>да</b></li><li class="chip ok"><span>зазор до блока</span><b>0.09 м</b></li><li class="chip ok"><span>падение</span><b>нет</b></li><li class="chip skip"><span>прошёл</span><b>16.28 м</b></li></ul>
+</figure></div>
+</section>
+
+<section><div class="sec-head"><div class="eyebrow">команда greet: кнопка «Привет», клавиша 3, Y / Triangle</div>
+  <h2><span class="num-badge">4</span>Приветствие</h2>
+  <p>Две задние стопы — линия, а не опора, поэтому робот садится на колени задних ног: голени лежат на полу, колени и стопы образуют опору 9 см. Задние лапы по одной переставляются вперёд, корпус откидывается на 20°, передние лапы поднимаются, нос уходит до 30°, левая лапа машет два раза, потом всё в обратном порядке.</p></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Приветствие</h3></figcaption>
+  <div class="player"><video data-key="greet" src="videos/gaits_greet.mp4" controls playsinline muted preload="none" poster="posters/gaits_greet.jpg"></video></div>
+  <ul class="chips"><li class="chip skip"><span>свободно</span><b>100 %</b></li><li class="chip ok"><span>встал обратно</span><b>да</b></li><li class="chip ok"><span>нос вверх</span><b>30°</b></li><li class="chip skip"><span>длительность</span><b>36 с</b></li><li class="chip skip"><span>сдвиг</span><b>0.19 м</b></li><li class="chip ok"><span>падение</span><b>нет</b></li></ul>
+</figure><div class="panel"><h3>На роботе</h3><ul class="list">
+    <li>Колени касаются пола. Перед первым запуском проверьте, что у колена нет деталей, которые упрутся в пол; при необходимости наклейте резиновую накладку.</li>
+    <li>Сначала на подставке, потом на полу со страховкой рукой (docs/DEPLOYMENT.md, этап 14).</li>
+    <li>Сдвиг за приветствие ~0,2 м и разворот до 30° — от перестановки задних лап; на ковре меньше, на гладком полу больше.</li>
+  </ul></div></div>
+</section>
+
+<section><div class="sec-head"><div class="eyebrow">по прогонам</div><h2><span class="num-badge">5</span>Итог</h2></div>
+  <div class="panel"><div class="tbl-wrap"><table><thead><tr><th>Мир</th><th class="num">Итог</th><th class="num">Почему</th></tr></thead><tbody><tr><td>Ступени 30 мм</td><td class="num r-ok">проходит</td><td class="num r-">рысь с высоким шагом и ползание на кромках</td></tr><tr><td>Стена 80 мм</td><td class="num r-ok">стоп, объезда нет</td><td class="num r-">стопы в ~0,2 м от стены</td></tr><tr><td>Блок 150 мм</td><td class="num r-ok">объезд и возврат на линию</td><td class="num r-">в сторону → мимо → назад на линию</td></tr><tr><td>Брус 60 мм</td><td class="num r-warn">1 из 3</td><td class="num r-">ползание: задние ноги цепляют брус, корпус садится на него</td></tr><tr><td>Лестница 50 мм</td><td class="num r-warn">подъём 3 из 3, спуск 1 из 3</td><td class="num r-">на спуске опорные стопы сползают к кромке, робот срывается</td></tr><tr><td>Приветствие</td><td class="num r-ok">проходит</td><td class="num r-">на коленях, нос вверх до 30°, ~34 с, сдвиг ~0,2 м</td></tr></tbody></table></div></div>
+  <div class="panel"><h3>Что нашли и исправили по ходу</h3><ul class="list">
+    <li><b>Лидар видел собственную ногу</b>, поднятую над брусом, и клал её в карту как высокое препятствие. Точки у бедра и голени каждой ноги теперь выбрасываются по кинематике.</li>
+    <li><b>Смена походки зависала:</b> удержание курса поворачивало ползание, и оно не вставало на месте; опоры у блока на смазанном крае карты не были «на одном уровне» в пределах 1 см. Теперь на время смены курс не держится, а в рысь можно при разбросе до 25 мм.</li>
+    <li><b>Объезд стены:</b> шумные клетки 80-мм стены выглядели узким блоком. Теперь объезжается только уверенно высокое, а ширина пересчитывается по ходу.</li>
+    <li><b>GS2 на ровном полу</b> давал ложный «провал» в первые полсекунды ходьбы (корпус качается на 3–4°). Подтверждение — 8 сканов вместо 3.</li>
+    <li><b>Проверки в CI</b> считали настенное время и делили ROS-домен; теперь время симуляции и свой домен на шаг.</li>
+  </ul></div>
+</section>
+</main>
+<script>
+(function () {
+  const probe = document.createElement('video');
+  const canMp4 = !!probe.canPlayType('video/mp4; codecs="avc1.4d401f"');
+  function load(v) {
+    if (v.dataset.loaded || v.getAttribute('src')) return;  // separate file: the browser loads it
+    v.dataset.loaded = '1';
+    const holder = document.getElementById('v-' + v.dataset.key);
+    if (!canMp4 || !holder) { fail(v); return; }
+    try {
+      const bin = atob(holder.textContent.trim());
+      const a = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+      v.src = URL.createObjectURL(new Blob([a], { type: 'video/mp4' }));
+      v.addEventListener('error', () => fail(v), { once: true });
+    } catch (e) { fail(v); }
+  }
+  function fail(v) {
+    const d = document.createElement('div');
+    d.className = 'err';
+    d.textContent = 'Этот браузер не воспроизводит MP4 (H.264). Откройте файл в Chrome, Edge или Safari.';
+    v.parentElement.appendChild(d);
+  }
+  const vids = [...document.querySelectorAll('video[data-key]')];
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { load(e.target); io.unobserve(e.target); } }), { rootMargin: '400px' });
+    vids.forEach(v => io.observe(v));
+  } else vids.forEach(load);
+  vids.forEach(v => v.addEventListener('play', () => load(v)));
+})();
+</script>
+</body></html>

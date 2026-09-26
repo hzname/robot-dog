@@ -1,0 +1,559 @@
+{
+ "stairs50": {
+  "terrain": "stairs",
+  "level": 50.0,
+  "walked_m": 17.894,
+  "max_tilt_deg": 17.6,
+  "fell": false,
+  "guard": {
+   "clear": 0.334,
+   "caution": 0.016,
+   "crawl": 0.65,
+   "high_steps": 0
+  },
+  "crossing": {
+   "x_max": 17.954,
+   "goal_x": 1.75,
+   "crossed": true,
+   "final_y": -2.51,
+   "max_abs_y": 2.515,
+   "top_reached": true,
+   "down_reached": true
+  },
+  "detection": {
+   "stair_up1": {
+    "lidar": {
+     "ahead_m": 0.493,
+     "where_err_mm": 1,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.384,
+     "where_err_mm": 63,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "ahead_m": 0.133,
+     "where_err_mm": 2,
+     "by": "right/plane"
+    }
+   },
+   "stair_up2": {
+    "lidar": {
+     "ahead_m": 0.365,
+     "where_err_mm": -145,
+     "by": "centre"
+    },
+    "tof": {
+     "ahead_m": 0.61,
+     "where_err_mm": -148,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "ahead_m": 0.244,
+     "where_err_mm": -150,
+     "by": "right/plane"
+    }
+   },
+   "stair_up3": {
+    "lidar": {
+     "ahead_m": 0.32,
+     "where_err_mm": -10,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.552,
+     "where_err_mm": -149,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "ahead_m": 0.291,
+     "where_err_mm": -144,
+     "by": "right/plane"
+    }
+   },
+   "stair_down1": {
+    "lidar": {
+     "ahead_m": 0.685,
+     "where_err_mm": -132,
+     "by": "centre"
+    },
+    "tof": {
+     "ahead_m": 0.727,
+     "where_err_mm": -53,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "ahead_m": 0.131,
+     "where_err_mm": 13,
+     "by": "centre/gap"
+    }
+   },
+   "stair_down2": {
+    "lidar": {
+     "ahead_m": 0.915,
+     "where_err_mm": -112,
+     "by": "right"
+    },
+    "tof": {
+     "ahead_m": 0.926,
+     "where_err_mm": -24,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "ahead_m": 0.292,
+     "where_err_mm": -148,
+     "by": "centre/gap"
+    }
+   },
+   "stair_down3": {
+    "lidar": {
+     "ahead_m": 0.694,
+     "where_err_mm": -149,
+     "by": "centre"
+    },
+    "tof": {
+     "ahead_m": 0.557,
+     "where_err_mm": -148,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "ahead_m": 0.342,
+     "where_err_mm": -150,
+     "by": "left/plane"
+    }
+   }
+  },
+  "reports": {
+   "lidar": {
+    "reports": 14152,
+    "unexplained": 643,
+    "unexplained_per_m": 35.93
+   },
+   "tof": {
+    "reports": 35105,
+    "unexplained": 1416,
+    "unexplained_per_m": 79.13
+   },
+   "gs2": {
+    "reports": 10153,
+    "unexplained": 516,
+    "unexplained_per_m": 28.84
+   }
+  }
+ },
+ "stairs50b": {
+  "terrain": "stairs",
+  "level": 50.0,
+  "walked_m": 2.435,
+  "max_tilt_deg": 180.0,
+  "fell": true,
+  "guard": {
+   "clear": 0.002,
+   "caution": 0.008,
+   "crawl": 0.99,
+   "high_steps": 0
+  },
+  "crossing": {
+   "x_max": 2.618,
+   "goal_x": 1.75,
+   "crossed": true,
+   "final_y": -0.107,
+   "max_abs_y": 0.321,
+   "top_reached": true,
+   "down_reached": false
+  },
+  "detection": {
+   "stair_up1": {
+    "lidar": {
+     "ahead_m": 0.58,
+     "where_err_mm": -27,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.413,
+     "where_err_mm": 82,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "ahead_m": 0.104,
+     "where_err_mm": 2,
+     "by": "left/plane"
+    }
+   },
+   "stair_up2": {
+    "lidar": {
+     "ahead_m": 0.371,
+     "where_err_mm": -143,
+     "by": "centre"
+    },
+    "tof": {
+     "ahead_m": 0.606,
+     "where_err_mm": -141,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "ahead_m": 0.307,
+     "where_err_mm": -147,
+     "by": "left/plane"
+    }
+   },
+   "stair_up3": {
+    "lidar": {
+     "ahead_m": 0.371,
+     "where_err_mm": 15,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.618,
+     "where_err_mm": -145,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "ahead_m": 0.289,
+     "where_err_mm": -149,
+     "by": "left/plane"
+    }
+   },
+   "stair_down1": {
+    "lidar": {
+     "ahead_m": 0.714,
+     "where_err_mm": -143,
+     "by": "centre"
+    },
+    "tof": {
+     "ahead_m": 0.73,
+     "where_err_mm": 34,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "ahead_m": 0.137,
+     "where_err_mm": 6,
+     "by": "centre/gap"
+    }
+   },
+   "stair_down2": {
+    "lidar": {
+     "ahead_m": 0.893,
+     "where_err_mm": -66,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.563,
+     "where_err_mm": -149,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "ahead_m": 0.291,
+     "where_err_mm": -149,
+     "by": "centre/gap"
+    }
+   },
+   "stair_down3": {
+    "lidar": {
+     "ahead_m": 0.73,
+     "where_err_mm": -142,
+     "by": "centre"
+    },
+    "tof": {
+     "ahead_m": 0.567,
+     "where_err_mm": -150,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "ahead_m": 0.281,
+     "where_err_mm": -150,
+     "by": "centre/gap"
+    }
+   }
+  },
+  "reports": {
+   "lidar": {
+    "reports": 10903,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 65698,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "gs2": {
+    "reports": 10623,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  }
+ },
+ "bar60": {
+  "terrain": "bar",
+  "level": 60.0,
+  "walked_m": 13.214,
+  "max_tilt_deg": 27.6,
+  "fell": false,
+  "guard": {
+   "clear": 0.562,
+   "caution": 0.07,
+   "crawl": 0.219,
+   "stop": 0.149,
+   "step_over": 0.0,
+   "high_steps": 1
+  },
+  "crossing": {
+   "x_max": 13.276,
+   "goal_x": 1.3900000000000001,
+   "crossed": true,
+   "final_y": 10.521,
+   "max_abs_y": 10.521
+  },
+  "detection": {
+   "bar": {
+    "lidar": {
+     "ahead_m": 0.581,
+     "where_err_mm": -17,
+     "by": "right"
+    },
+    "tof": {
+     "ahead_m": 0.352,
+     "where_err_mm": 63,
+     "by": "tof_fc"
+    },
+    "gs2": {
+     "ahead_m": 0.144,
+     "where_err_mm": 3,
+     "by": "right/plane"
+    }
+   }
+  },
+  "reports": {
+   "lidar": {
+    "reports": 1688,
+    "unexplained": 417,
+    "unexplained_per_m": 31.56
+   },
+   "tof": {
+    "reports": 3380,
+    "unexplained": 1306,
+    "unexplained_per_m": 98.83
+   },
+   "gs2": {
+    "reports": 1726,
+    "unexplained": 300,
+    "unexplained_per_m": 22.7
+   }
+  }
+ },
+ "steps30": {
+  "terrain": "steps",
+  "level": 30.0,
+  "walked_m": 1.31,
+  "max_tilt_deg": 12.0,
+  "fell": false,
+  "guard": {
+   "clear": 0.027,
+   "caution": 0.135,
+   "step_over": 0.132,
+   "crawl": 0.707,
+   "high_steps": 93
+  },
+  "detection": {
+   "stone_left": {
+    "lidar": {
+     "ahead_m": 0.497,
+     "where_err_mm": 18,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.112,
+     "where_err_mm": 13,
+     "by": "tof_fl"
+    },
+    "gs2": null
+   },
+   "stone_right": {
+    "lidar": {
+     "ahead_m": 0.685,
+     "where_err_mm": -22,
+     "by": "right"
+    },
+    "tof": {
+     "ahead_m": 0.069,
+     "where_err_mm": 66,
+     "by": "tof_fr"
+    },
+    "gs2": {
+     "ahead_m": 0.258,
+     "where_err_mm": -105,
+     "by": "right/plane"
+    }
+   },
+   "step_down": {
+    "not_reached": true
+   },
+   "step_up": {
+    "not_reached": true
+   }
+  },
+  "reports": {
+   "lidar": {
+    "reports": 200,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 147,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "gs2": {
+    "reports": 194,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  }
+ },
+ "block150": {
+  "terrain": "block",
+  "level": 150.0,
+  "walked_m": 16.284,
+  "max_tilt_deg": 6.3,
+  "fell": false,
+  "guard": {
+   "clear": 0.891,
+   "caution": 0.008,
+   "crawl": 0.016,
+   "stop": 0.024,
+   "avoid": 0.061,
+   "high_steps": 0
+  },
+  "crossing": {
+   "x_max": 16.314,
+   "goal_x": 1.5499999999999998,
+   "crossed": true,
+   "final_y": -11.11,
+   "max_abs_y": 11.122,
+   "min_gap_m": 0.093,
+   "back_on_line": true,
+   "line_heading_deg": -9.3,
+   "touched": false
+  },
+  "detection": {
+   "block": {
+    "lidar": {
+     "ahead_m": 0.507,
+     "where_err_mm": -14,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.395,
+     "where_err_mm": 73,
+     "by": "tof_fc"
+    },
+    "gs2": null
+   }
+  },
+  "reports": {
+   "lidar": {
+    "reports": 221,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 36,
+    "unexplained": 5,
+    "unexplained_per_m": 0.31
+   },
+   "gs2": {
+    "reports": 0,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  }
+ },
+ "wall80": {
+  "terrain": "wall",
+  "level": 80.0,
+  "walked_m": 0.84,
+  "max_tilt_deg": 5.2,
+  "fell": false,
+  "guard": {
+   "clear": 0.12,
+   "caution": 0.04,
+   "crawl": 0.052,
+   "stop": 0.788,
+   "high_steps": 0
+  },
+  "wall": {
+   "body_to_wall_m": 0.303,
+   "front_feet_to_wall_m": 0.213,
+   "touched": false
+  },
+  "detection": {
+   "wall": {
+    "lidar": {
+     "ahead_m": 0.504,
+     "where_err_mm": -20,
+     "by": "left"
+    },
+    "tof": {
+     "ahead_m": 0.345,
+     "where_err_mm": 71,
+     "by": "tof_fc"
+    },
+    "gs2": null
+   }
+  },
+  "reports": {
+   "lidar": {
+    "reports": 2089,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 1684,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "gs2": {
+    "reports": 0,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  }
+ },
+ "greet": {
+  "terrain": "flat",
+  "level": 0.0,
+  "walked_m": 0.15,
+  "greet": {
+   "started": true,
+   "finished": true,
+   "seconds": 35.9,
+   "max_nose_up_deg": 30.1,
+   "drift_m": 0.189
+  },
+  "max_tilt_deg": 30.1,
+  "fell": false,
+  "guard": {
+   "clear": 1.0,
+   "high_steps": 0
+  },
+  "reports": {
+   "lidar": {
+    "reports": 0,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 0,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "gs2": {
+    "reports": 0,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  }
+ }
+}

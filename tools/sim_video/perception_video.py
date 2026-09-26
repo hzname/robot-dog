@@ -59,7 +59,10 @@ def main():
     ap.add_argument('--tof-threshold', default='0.02,0.02,0.05,0.02')
     ap.add_argument('--start', type=float, default=0.0)
     ap.add_argument('--end', type=float, default=1e9)
+    ap.add_argument('--speed', type=float, default=1.0, help='play the run this many times faster (long crawls)')
     args = ap.parse_args()
+    if args.speed != 1.0:
+        args.subtitle = (args.subtitle + ' · ' if args.subtitle else '') + f'ускорено ×{args.speed:g}'
     thr = [float(v) for v in args.tof_threshold.split(',')]
 
     rec = json.load(open(args.recording))
@@ -118,7 +121,7 @@ def main():
                                          output_params=['-profile:v', 'main', '-movflags', '+faststart'])
     writer.send(None)
     r = 0.42
-    t_out = np.arange(max(ts[0], t0 + args.start), min(ts[-1], t0 + args.end), 1.0 / args.fps)
+    t_out = np.arange(max(ts[0], t0 + args.start), min(ts[-1], t0 + args.end), args.speed / args.fps)
     gt = np.array([g['t'] for g in ground]) if ground else np.zeros(0)
     for n_out, t in enumerate(t_out):
         f = F[nearest(ts, t)]

@@ -10,6 +10,9 @@
   # perception_check recordings listed in data/perception_runs.json
   collect.py perception --root /path/with/recordings
 
+  # perception_check recordings listed in data/gaits_runs.json (crawl, going round, greeting)
+  collect.py gaits --root /path/with/recordings
+
 The raw recordings are large (MB per run) and stay out of git; the report
 builders only need what this script extracts.
 """
@@ -93,6 +96,22 @@ def cmd_perception(args):
     save('perception.json', out)
 
 
+def cmd_gaits(args):
+    """data/gaits.json: the scores of the runs in data/gaits_runs.json (crawl,
+    going round, greeting), without the per-message statistics."""
+    runs = load('gaits_runs.json', [])
+    out = load('gaits.json', {})
+    for r in runs:
+        path = os.path.join(args.root, r['dir'], r['name'] + '.json')
+        if not os.path.exists(path):
+            if r['name'] not in out:
+                print(f'missing {path}')
+            continue
+        s = json.load(open(path, encoding='utf-8'))['scores']
+        out[r['name']] = {k: v for k, v in s.items() if k not in ('cpu', 'map', 'ground_lidar', 'ground_feet')}
+    save('gaits.json', out)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -104,8 +123,10 @@ def main():
     w.add_argument('files', nargs='+')
     p = sub.add_parser('perception')
     p.add_argument('--root', required=True, help='folder holding <dir>/<name>.json of each run')
+    g = sub.add_parser('gaits')
+    g.add_argument('--root', required=True, help='folder holding <dir>/<name>.json of each run')
     args = ap.parse_args()
-    {'tests': cmd_tests, 'walk': cmd_walk, 'perception': cmd_perception}[args.cmd](args)
+    {'tests': cmd_tests, 'walk': cmd_walk, 'perception': cmd_perception, 'gaits': cmd_gaits}[args.cmd](args)
 
 
 if __name__ == '__main__':
