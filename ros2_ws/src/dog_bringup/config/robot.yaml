@@ -61,6 +61,11 @@
     # Survey ("survey" command, from standing): the feet stay, the body looks
     # up and down, then left and right (~18 s) - the tilted lidars sweep the
     # walls and furniture round the robot for the localization map.
+    # dead reckoning (locomotion, odom.publish on the robot): the gait walks a
+    # little less than its twist (slip). Walk 2 m forward on the floor, measure,
+    # scale = measured / reported (DEPLOYMENT.md, stage 10); the simulated trot: 0.89
+    odom:
+      scale: 1.0
     survey:
       pitch_up_deg: 12.0
       pitch_down_deg: 10.0
@@ -164,7 +169,7 @@
       loop_closure: true      # recognise old submaps and straighten the map
       loop_radius: 3.0        # [m] (+10 % of the way since) old submaps this near are loop candidates
       loop_min_inliers: 0.55  # share of a submap's walls that must land on the old ones
-      scale_estimation: true  # learn dead reckoning's scale where walls across the way pin it down
+      scale_estimation: false # experimental: learn dead reckoning's scale online (calibrate odom.scale instead)
       scale_min_move: 1.0     # [m] reckoned between two such places
 
     # dog_perception (docs/PERCEPTION.md): hazard thresholds, ToF offsets.

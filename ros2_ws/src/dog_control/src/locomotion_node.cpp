@@ -72,6 +72,9 @@ public:
     // plus gyro_bias_dps - a drifting gyro for the simulation, whose IMU yaw is true
     odom_gyro_ = declare_parameter("odom.yaw_source", std::string("imu")) == "gyro";
     odom_gyro_bias_ = declare_parameter("odom.gyro_bias_dps", 0.0) * M_PI / 180.0;
+    // the gait walks a little less than it steps for (slip): measured once by
+    // walking a known distance (DEPLOYMENT.md), the walked twist is scaled by it
+    odom_scale_ = declare_parameter("odom.scale", 1.0);
     odom_height_ = p.stand_height;
 
     const auto latched = rclcpp::QoS(1).reliable().transient_local();
@@ -323,7 +326,8 @@ private:
     // trot or crawl: gaitVelocity is what the stepping gait walks
     const bool moving = controller_->gait().stepping() || controller_->crawl().stepping();
     const double yaw_in = !imu ? std::nan("") : odom_gyro_ ? gyro_yaw_ : imu_rpy_[2];
-    dead_reckoning_.update(dt, moving ? v.vx : 0.0, moving ? v.vy : 0.0, moving ? v.wz : 0.0, yaw_in);
+    dead_reckoning_.update(dt, moving ? odom_scale_ * v.vx : 0.0, moving ? odom_scale_ * v.vy : 0.0,
+      moving ? v.wz : 0.0, yaw_in);
     if (++odom_div_ % 2) {return;}  // 25 Hz at the 50 Hz control rate
     nav_msgs::msg::Odometry m;
     m.header.stamp = t;
@@ -368,7 +372,7 @@ private:
   bool imu_seen_{false};
   bool odom_publish_{false};
   bool odom_gyro_{false};
-  double odom_gyro_bias_{0.0};
+  double odom_gyro_bias_{0.0}, odom_scale_{1.0};
   double gyro_yaw_{0.0}, gyro_bias_est_{0.0}, still_time_{0.0};
   double odom_height_{0.15};
   int odom_div_{0};

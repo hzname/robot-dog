@@ -112,7 +112,7 @@ public:
     reloc_min_points_ = getI("localization.reloc_min_points", 400);
     match_.prior_xy = getD("localization.prior_xy", match_.prior_xy);
     match_.prior_yaw = getD("localization.prior_yaw_deg", 5.0) * M_PI / 180.0;
-    scale_on_ = declare_parameter("localization.scale_estimation", true);
+    scale_on_ = declare_parameter("localization.scale_estimation", false);
     scale_min_move_ = getD("localization.scale_min_move", 1.0);
     map_path_ = expandHome(declare_parameter("localization.map", std::string("")));
     save_on_exit_ = declare_parameter("localization.save_on_exit", true);

@@ -85,7 +85,7 @@ def _setup(context):
         # the robot's own odometry beside Gazebo's true pose ("odom"), with a
         # heading from the gyro (plus a bias: a real gyro drifts)
         overrides.update({'odom.publish': True, 'odom.topic': 'odom_dr', 'odom.yaw_source': 'gyro',
-                          'odom.gyro_bias_dps': float(cfg('gyro_bias'))})
+                          'odom.gyro_bias_dps': float(cfg('gyro_bias')), 'odom.scale': float(cfg('odom_scale'))})
     if cfg('step_height'):
         overrides['gait.step_height'] = float(cfg('step_height'))
 
@@ -175,11 +175,13 @@ def generate_launch_description():
         DeclareLaunchArgument('dead_reckoning', default_value='false',
                               description="locomotion's odometry on odom_dr (the true pose stays on odom)"),
         DeclareLaunchArgument('gyro_bias', default_value='0.0', description='dead reckoning gyro bias [deg/s]'),
+        DeclareLaunchArgument('odom_scale', default_value='0.89',
+                              description='dead reckoning scale, calibrated: the simulated trot walks ~89 % of its twist'),
         DeclareLaunchArgument('localization', default_value='false', description='start localization_node'),
         DeclareLaunchArgument('localization_mode', default_value='auto', description='auto | mapping | localize'),
         DeclareLaunchArgument('map', default_value='/tmp/dog_sim_map', description='map file without extension'),
         DeclareLaunchArgument('loop_closure', default_value='true', description='localization: close loops'),
-        DeclareLaunchArgument('loc_scale', default_value='true',
+        DeclareLaunchArgument('loc_scale', default_value='false',
                               description="localization: learn dead reckoning's scale"),
         DeclareLaunchArgument('loc_debug_dump', default_value='',
                               description='localization: write each relocalization cloud to <this>.<n>.txt'),
