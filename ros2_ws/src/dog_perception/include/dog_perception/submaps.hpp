@@ -91,6 +91,7 @@ struct Submap
   Pose2 pose;                  // its frame in the map (the graph node)
   std::vector<float> place;    // scan context of the walls round its origin
   double walked{0.0};          // [m] of walking when it was started
+  int scans{0}, unpinned{0};   // scans inserted, those the walls did not fix along the way
   bool finished{false};
 };
 
@@ -124,7 +125,10 @@ public:
   /// among the old ones (loop closure). Returns the correction to apply to
   /// the robot's pose (new = correction * old) - identity unless a loop moved
   /// the current submap.
-  Pose2 insert(const std::vector<P2> & pts_map, const Pose2 & robot, double walked);
+  /// `pinned`: did the walls fix the robot along its way in this scan's
+  /// match (false along a bare corridor) - how much the edge to the next
+  /// submap may stretch.
+  Pose2 insert(const std::vector<P2> & pts_map, const Pose2 & robot, double walked, bool pinned = true);
 
   /// Where is a robot whose recent points (in its own frame, centred on it)
   /// are `cloud`? Places first (Scan Context), then a windowed search round

@@ -212,7 +212,7 @@ void SubmapMap::refresh()
   }
 }
 
-Pose2 SubmapMap::insert(const std::vector<P2> & pts_map, const Pose2 & robot, double walked)
+Pose2 SubmapMap::insert(const std::vector<P2> & pts_map, const Pose2 & robot, double walked, bool pinned)
 {
   Pose2 correction;
   if (subs_.empty()) {
@@ -237,13 +237,14 @@ Pose2 SubmapMap::insert(const std::vector<P2> & pts_map, const Pose2 & robot, do
     e.z = subs_[k].pose.inverse().compose(robot);
     e.sigma_xy = p_.odom_sigma_xy + 0.01 * len;
     e.sigma_yaw = p_.odom_sigma_yaw;
-    // along what the finished submap's walls leave open (a bare corridor), the
-    // edge is dead reckoning's: a loop may stretch or shrink it there
-    double ratio = 1.0;
-    const double dir = weakDirection(subs_[k].grid.normals(), &ratio);
-    const double weak = p_.odom_scale * len * std::max(0.0, 1.0 - 4.0 * ratio);
-    if (weak > e.sigma_xy) {
-      e.weak_dir = dir;
+    // along the way, where the walls did not fix the robot (a bare corridor),
+    // the edge is dead reckoning's: a loop may stretch or shrink it there.
+    // The share of such scans says how much; the way is from one origin to the next.
+    const auto & sk = subs_[k];
+    const double share = sk.scans > 0 ? static_cast<double>(sk.unpinned) / sk.scans : 0.0;
+    const double weak = p_.odom_scale * len * share;
+    if (weak > e.sigma_xy && std::hypot(e.z.x, e.z.y) > 0.3) {
+      e.weak_dir = std::atan2(e.z.y, e.z.x);  // in a's frame
       e.sigma_weak = std::hypot(e.sigma_xy, weak);
     }
     edges_.push_back(e);
@@ -260,6 +261,8 @@ Pose2 SubmapMap::insert(const std::vector<P2> & pts_map, const Pose2 & robot, do
     }
   }
   Submap & cur = subs_.back();
+  ++cur.scans;
+  if (!pinned) {++cur.unpinned;}
   const Pose2 inv = cur.pose.inverse();
   std::vector<P2> local;
   local.reserve(pts_map.size());

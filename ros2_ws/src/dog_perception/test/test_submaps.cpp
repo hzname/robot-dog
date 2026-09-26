@@ -108,15 +108,17 @@ MapRun mapRing(bool loop_closure)
       est = est.compose(dr);
     }
     const auto cloud = view(segs, truth, 3.0, static_cast<int>(i), 0.02);
+    bool pinned = true;
     if (!run.map.empty() && run.map.merged().fieldValid()) {
       dog_perception::MatchParams mp;
       mp.prior_xy = 0.05;
       const auto r = dog_perception::match(run.map.merged(), cloud, est, mp);
       if (r.ok && r.inlier_fraction > 0.5) {est = r.pose;}
+      pinned = r.ok && r.constraint(std::cos(est.yaw), std::sin(est.yaw)) >= 0.1;
     }
     std::vector<P2> pts;
     for (const auto & q : cloud) {pts.push_back(est.apply(q));}
-    const Pose2 corr = run.map.insert(pts, est, walked);
+    const Pose2 corr = run.map.insert(pts, est, walked, pinned);
     est = corr.compose(est);
     run.map.refresh();
     run.truth = truth;

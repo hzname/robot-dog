@@ -327,7 +327,10 @@ private:
     w.reserve(pts.size());
     for (const auto & p : pts) {w.push_back(T_.apply(p));}
     const size_t loops = map_.loops().size(), subs = map_.submaps().size();
-    const Pose2 corr = map_.insert(w, T_.compose(odom), walked_);
+    // pinned along the way? (the heading stands for the way: the trot walks forward)
+    const Pose2 robot = T_.compose(odom);
+    const bool pinned = last_.ok && last_.constraint(std::cos(robot.yaw), std::sin(robot.yaw)) >= 0.1;
+    const Pose2 corr = map_.insert(w, robot, walked_, pinned);
     T_ = corr.compose(T_);
     if (map_.loops().size() > loops) {
       const auto & l = map_.loops().back();
