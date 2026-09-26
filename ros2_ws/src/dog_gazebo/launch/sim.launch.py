@@ -131,7 +131,8 @@ def _setup(context):
                             parameters=[robot_yaml, sim_time,
                                         {'localization.map': cfg('map'), 'localization.mode': cfg('localization_mode'),
                                          'localization.loop_closure': on('loop_closure'),
-                                         'localization.debug_dump': cfg('loc_debug_dump')}],
+                                         'localization.debug_dump': cfg('loc_debug_dump'),
+                                         'localization.scale_estimation': on('loc_scale')}],
                             remappings=[('odom', 'odom_dr')] if on('dead_reckoning') else []))
     if on('gamepad'):
         actions += [
@@ -178,6 +179,8 @@ def generate_launch_description():
         DeclareLaunchArgument('localization_mode', default_value='auto', description='auto | mapping | localize'),
         DeclareLaunchArgument('map', default_value='/tmp/dog_sim_map', description='map file without extension'),
         DeclareLaunchArgument('loop_closure', default_value='true', description='localization: close loops'),
+        DeclareLaunchArgument('loc_scale', default_value='true',
+                              description="localization: learn dead reckoning's scale"),
         DeclareLaunchArgument('loc_debug_dump', default_value='',
                               description='localization: write each relocalization cloud to <this>.<n>.txt'),
         DeclareLaunchArgument('web', default_value='true'),
