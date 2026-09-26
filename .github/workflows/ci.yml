@@ -176,6 +176,14 @@ jobs:
           ros2 launch dog_gazebo sim.launch.py headless:=true web:=false perception:=true > greet.log 2>&1 &
           ros2 run dog_gazebo perception_check --terrain flat --seconds 40 --greet --expect-guard | tee perception_greet.txt | tail -n 25 || { echo '--- full report'; grep -v '^\[' perception_greet.txt | head -n 200; echo '--- guard'; grep -E 'guard:|avoid:|tof|gs2' greet.log | sed 's/.*\]: //' | head -n 60; exit 1; }
           kill %1; sleep 3; pkill -f "gz sim" || true
+      - name: Survey - looks up-down and left-right on the spot, ends standing
+        timeout-minutes: 6
+        run: |
+          source install/setup.bash
+          export ROS_DOMAIN_ID=75 GZ_PARTITION=perception5
+          ros2 launch dog_gazebo sim.launch.py headless:=true web:=false perception:=true > survey.log 2>&1 &
+          ros2 run dog_gazebo perception_check --terrain flat --seconds 16 --survey --expect-guard | tee perception_survey.txt | tail -n 25 || { echo '--- full report'; grep -v '^\[' perception_survey.txt | head -n 200; exit 1; }
+          kill %1; sleep 3; pkill -f "gz sim" || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -103,7 +103,7 @@ details summary { cursor: pointer; font-size: 14px; color: var(--ink-2); }
 <body><main>
 <header>
   <div class="eyebrow">RobotDog 2.0 · Gazebo Harmonic · dog_control + dog_perception · 26.09.2026</div>
-  <h1>Походки: ползание, объезд, приветствие</h1>
+  <h1>Походки: ползание, объезд, приветствие, осмотр</h1>
   <p>Рысь с высоким шагом проходит уступы до 25 мм. Всё, что выше, требует другой походки или обхода. Здесь прогоны в физической симуляции с тем же кодом, что и на роботе: ползание на трёх опорах через ступени, брус и лестницу; остановка у стены; объезд узкого блока; поза «сидит, лапы вверх». Подробности — <a href="../docs/GAITS.md">docs/GAITS.md</a>.</p>
 </header>
 <div class="stats">
@@ -150,7 +150,7 @@ details summary { cursor: pointer; font-size: 14px; color: var(--ink-2); }
   <div class="panel"><h3>Где ползание пока ненадёжно</h3><ul class="list">
     <li><b>Лестница 50 мм:</b> подъём и верхняя площадка — 3 из 3, спуск — 1 из 3. На спуске опорные стопы понемногу сползают к кромке, и робот срывается со ступени (второй ролик).</li>
     <li><b>Брус 60 мм:</b> 1 из 3. Передние ноги переходят, задние цепляют брус или корпус садится на него.</li>
-    <li>Обе задачи — в <code>dog_control</code>, в CI их нет. Ступени 30 мм, стена и приветствие проверяются в CI на каждый коммит.</li>
+    <li>Обе задачи — в <code>dog_control</code>, в CI их нет. Ступени 30 мм, стена, приветствие и осмотр проверяются в CI на каждый коммит.</li>
   </ul></div>
 </section>
 
@@ -182,8 +182,22 @@ details summary { cursor: pointer; font-size: 14px; color: var(--ink-2); }
   </ul></div></div>
 </section>
 
-<section><div class="sec-head"><div class="eyebrow">по прогонам</div><h2><span class="num-badge">5</span>Итог</h2></div>
-  <div class="panel"><div class="tbl-wrap"><table><thead><tr><th>Мир</th><th class="num">Итог</th><th class="num">Почему</th></tr></thead><tbody><tr><td>Ступени 30 мм</td><td class="num r-ok">проходит</td><td class="num r-">рысь с высоким шагом и ползание на кромках</td></tr><tr><td>Стена 80 мм</td><td class="num r-ok">стоп, объезда нет</td><td class="num r-">стопы в ~0,2 м от стены</td></tr><tr><td>Блок 150 мм</td><td class="num r-ok">объезд и возврат на линию</td><td class="num r-">в сторону → мимо → назад на линию</td></tr><tr><td>Брус 60 мм</td><td class="num r-warn">1 из 3</td><td class="num r-">ползание: задние ноги цепляют брус, корпус садится на него</td></tr><tr><td>Лестница 50 мм</td><td class="num r-warn">подъём 3 из 3, спуск 1 из 3</td><td class="num r-">на спуске опорные стопы сползают к кромке, робот срывается</td></tr><tr><td>Приветствие</td><td class="num r-ok">проходит</td><td class="num r-">на коленях, нос вверх до 30°, ~34 с, сдвиг ~0,2 м</td></tr></tbody></table></div></div>
+<section><div class="sec-head"><div class="eyebrow">команда survey: кнопка «Осмотр», клавиша 4</div>
+  <h2><span class="num-badge">5</span>Осмотр для карты</h2>
+  <p>Робот стоит на месте, стопы не двигаются. Корпус дважды наклоняется носом вверх на 12° и вниз на 10°, потом дважды поворачивается на ±15° и возвращается в стойку; всего ~12 с. Лидары наклонены на 30° крестом: неподвижный корпус видит две косые линии, а качание проводит их по стенам и мебели выше, ниже и по сторонам. Так заполняется карта для локализации, и на старте робот находит себя в сохранённой карте.</p></div>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Осмотр: вверх-вниз, влево-вправо</h3></figcaption>
+  <div class="player"><video data-key="survey" src="videos/gaits_survey.mp4" controls playsinline muted preload="none" poster="posters/gaits_survey.jpg"></video></div>
+  <ul class="chips"><li class="chip skip"><span>свободно</span><b>100 %</b></li><li class="chip ok"><span>встал обратно</span><b>да</b></li><li class="chip skip"><span>нос вверх / вниз</span><b>11° / 9°</b></li><li class="chip skip"><span>рыскание</span><b>-12°…+8°</b></li><li class="chip skip"><span>сдвиг</span><b>0.13 м</b></li><li class="chip ok"><span>падение</span><b>нет</b></li></ul>
+</figure><div class="panel"><h3>Что видно в симуляции</h3><ul class="list">
+    <li>Тангаж отрабатывается как задан: −11°…+9° по IMU.</li>
+    <li>Рыскание — около ±9° из ±15°, и за осмотр робот уползает на ~0,13 м. Кинематика точна (стопы неподвижны до 1 мм в тесте, команды суставов согласованы), но в Gazebo четыре опоры с жёсткими суставами и мягким контактом DART проскальзывают. Приветствие сдвигается так же.</li>
+    <li>Для локализации сдвиг не страшен: она сама отслеживает положение. На роботе с резиновыми стопами и податливыми сервоприводами скольжение должно быть меньше — проверить на полу.</li>
+  </ul></div></div>
+</section>
+
+<section><div class="sec-head"><div class="eyebrow">по прогонам</div><h2><span class="num-badge">6</span>Итог</h2></div>
+  <div class="panel"><div class="tbl-wrap"><table><thead><tr><th>Мир</th><th class="num">Итог</th><th class="num">Почему</th></tr></thead><tbody><tr><td>Ступени 30 мм</td><td class="num r-ok">проходит</td><td class="num r-">рысь с высоким шагом и ползание на кромках</td></tr><tr><td>Стена 80 мм</td><td class="num r-ok">стоп, объезда нет</td><td class="num r-">стопы в ~0,2 м от стены</td></tr><tr><td>Блок 150 мм</td><td class="num r-ok">объезд и возврат на линию</td><td class="num r-">в сторону → мимо → назад на линию</td></tr><tr><td>Брус 60 мм</td><td class="num r-warn">1 из 3</td><td class="num r-">ползание: задние ноги цепляют брус, корпус садится на него</td></tr><tr><td>Лестница 50 мм</td><td class="num r-warn">подъём 3 из 3, спуск 1 из 3</td><td class="num r-">на спуске опорные стопы сползают к кромке, робот срывается</td></tr><tr><td>Приветствие</td><td class="num r-ok">проходит</td><td class="num r-">на коленях, нос вверх до 30°, ~34 с, сдвиг ~0,2 м</td></tr><tr><td>Осмотр</td><td class="num r-ok">проходит</td><td class="num r-">тангаж −11°…+9° как задано; рыскание ±9° из ±15° — стопы в симуляции проскальзывают</td></tr></tbody></table></div></div>
   <div class="panel"><h3>Что нашли и исправили по ходу</h3><ul class="list">
     <li><b>Лидар видел собственную ногу</b>, поднятую над брусом, и клал её в карту как высокое препятствие. Точки у бедра и голени каждой ноги теперь выбрасываются по кинематике.</li>
     <li><b>Смена походки зависала:</b> удержание курса поворачивало ползание, и оно не вставало на месте; опоры у блока на смазанном крае карты не были «на одном уровне» в пределах 1 см. Теперь на время смены курс не держится, а в рысь можно при разбросе до 25 мм.</li>

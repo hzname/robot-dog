@@ -148,9 +148,9 @@ def score_detection(kind, level, hazards, trace):
 
 
 class PerceptionCheck:
-    def __init__(self, kind, level, seconds, speed, greet=False):
+    def __init__(self, kind, level, seconds, speed, action=None):
         self.kind, self.level, self.seconds, self.speed = kind, level, seconds, speed
-        self.greet = greet
+        self.action = action  # None: walk; 'greet' or 'survey': that command on the spot
         self.states = []  # [t, locomotion state] on every change
         self.node = rclpy.create_node('perception_check', namespace='dog')
         latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
@@ -313,11 +313,11 @@ class PerceptionCheck:
         self.stats_start = (time.time(), self.stats)
         self.phase = 'walk'
         tw = Twist()
-        tw.linear.x = 0.0 if self.greet else self.speed
+        tw.linear.x = 0.0 if self.action else self.speed
         x0 = float(self.pose()[0][0])
-        if self.greet:  # standing still: sit, paws up, wave, stand up again
+        if self.action:  # standing still: greet (sit, paws up, wave) or survey (look around)
             self.spin(0.5, lambda: self.vel.publish(tw))
-            self.cmd.publish(String(data='greet'))
+            self.cmd.publish(String(data=self.action))
         self.spin_sim(self.seconds, lambda: self.vel.publish(tw))
         self.phase = 'stop'
         self.spin(1.5, lambda: self.vel.publish(Twist()))
@@ -329,16 +329,20 @@ class PerceptionCheck:
     # ------------------------------------------------------------ scores
     def scores(self):
         out = {'terrain': self.kind, 'level': self.level, 'walked_m': round(self.walked, 3)}
-        if self.greet:
+        if self.action:
             walk = [e for e in self.trace if e['phase'] == 'walk' and 'imu' in e]
             seen = [st for _, st in self.states]
-            i = seen.index('greeting') if 'greeting' in seen else -1
-            out['greet'] = {
+            busy = {'greet': 'greeting', 'survey': 'survey'}[self.action]
+            i = seen.index(busy) if busy in seen else -1
+            out[self.action] = {
                 'started': i >= 0,
                 'finished': i >= 0 and 'stand' in seen[i + 1:],
                 'seconds': round(next((t for t, st in self.states[i + 1:] if st == 'stand'), math.nan)
                                  - self.states[i][0], 1) if i >= 0 else None,
                 'max_nose_up_deg': round(-min((e['imu'][1] for e in walk), default=0.0), 1),
+                'max_nose_down_deg': round(max((e['imu'][1] for e in walk), default=0.0), 1),
+                'yaw_range_deg': [round(min((e['yaw'] for e in walk), default=0.0), 1),
+                                  round(max((e['yaw'] for e in walk), default=0.0), 1)],
                 'drift_m': round(float(np.hypot(*(self.pose()[0][:2]))), 3)}
         # ground
         for src in ('lidar', 'feet'):
@@ -488,6 +492,8 @@ def main():
     ap.add_argument('--trace', help='write scores + full recording to this JSON file')
     ap.add_argument('--greet', action='store_true',
                     help='instead of walking: the greeting (sit, paws up, wave, stand up) on the spot')
+    ap.add_argument('--survey', action='store_true',
+                    help='instead of walking: the survey (body looks up-down, left-right) on the spot')
     ap.add_argument('--expect', action='store_true',
                     help='exit 1 unless the lidars found every hazard in the path (steps) '
                          'and gave no unexplained report (other terrains)')
@@ -496,7 +502,8 @@ def main():
                          'slowed < 10 %% of the time; wall - stopped without touching it; any - no fall')
     args, ros_args = ap.parse_known_args()
     rclpy.init(args=ros_args)
-    chk = PerceptionCheck(args.terrain, args.level, args.seconds, args.speed, args.greet)
+    action = 'greet' if args.greet else 'survey' if args.survey else None
+    chk = PerceptionCheck(args.terrain, args.level, args.seconds, args.speed, action)
     try:
         ok = chk.run()
         res = chk.scores() if ok else {'error': 'no simulation'}
@@ -535,6 +542,22 @@ def main():
                     why.append('the greeting did not start or did not end standing')
                 if gr.get('max_nose_up_deg', 0) < 25:
                     why.append(f"did not sit up (nose up {gr.get('max_nose_up_deg')} deg)")
+            elif args.survey:
+                sv = res.get('survey') or {}
+                if not sv.get('finished'):
+                    why.append('the survey did not start or did not end standing')
+                if sv.get('max_nose_up_deg', 0) < 8 or sv.get('max_nose_down_deg', 0) < 6:
+                    why.append(f"did not look up and down ({sv.get('max_nose_up_deg')} / "
+                               f"{sv.get('max_nose_down_deg')} deg)")
+                # In the simulation the four planted feet slip (hard velocity-mode
+                # joints on a closed chain, soft DART contact): the body turns
+                # ~+-9 deg of the commanded +-15 and creeps ~1 cm per sway -
+                # the greeting drifts the same way. Hence the loose limits.
+                lo, hi = sv.get('yaw_range_deg') or (0, 0)
+                if hi - lo < 12:
+                    why.append(f'did not look left and right (yaw {lo}..{hi} deg)')
+                if sv.get('drift_m', 1) > 0.25:
+                    why.append(f"moved {sv.get('drift_m')} m")
             elif args.terrain == 'wall':
                 w = res.get('wall') or {}
                 if not g.get('stop'):

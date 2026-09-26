@@ -5,5 +5,6 @@
   {"dir": "rep", "name": "steps30", "world": "steps", "setup": "Ступени 30 мм · рысь, высокий шаг, ползание", "speed": 1},
   {"dir": "g26", "name": "block150", "world": "block", "setup": "Блок 150 мм · объезд", "speed": 1, "end": 57},
   {"dir": "g26", "name": "wall80", "world": "wall", "setup": "Стена 80 мм · стоп", "speed": 1},
-  {"dir": "rep", "name": "greet", "world": "flat", "setup": "Приветствие", "speed": 1}
+  {"dir": "rep", "name": "greet", "world": "flat", "setup": "Приветствие", "speed": 1},
+  {"dir": "sv", "name": "survey", "world": "flat", "setup": "Осмотр: вверх-вниз, влево-вправо", "speed": 1}
 ]

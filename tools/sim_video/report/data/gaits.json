@@ -555,5 +555,45 @@
     "unexplained_per_m": 0.0
    }
   }
+ },
+ "survey": {
+  "terrain": "flat",
+  "level": 0.0,
+  "walked_m": 0.102,
+  "survey": {
+   "started": true,
+   "finished": true,
+   "seconds": 14.6,
+   "max_nose_up_deg": 11.4,
+   "max_nose_down_deg": 9.4,
+   "yaw_range_deg": [
+    -11.7,
+    7.5
+   ],
+   "drift_m": 0.127
+  },
+  "max_tilt_deg": 11.4,
+  "fell": false,
+  "guard": {
+   "clear": 1.0,
+   "high_steps": 0
+  },
+  "reports": {
+   "lidar": {
+    "reports": 0,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "tof": {
+    "reports": 0,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   },
+   "gs2": {
+    "reports": 0,
+    "unexplained": 0,
+    "unexplained_per_m": 0.0
+   }
+  }
  }
 }
