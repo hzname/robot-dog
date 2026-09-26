@@ -107,6 +107,7 @@ public:
     reloc_wait_ = getD("localization.reloc_wait", 3.0);
     reloc_radius_ = getD("localization.reloc_radius", 8.0);
     reloc_clear_ = getD("localization.reloc_clear", 0.7);
+    reloc_clear_fit_ = getD("localization.reloc_clear_fit", 0.72);
     verify_distance_ = getD("localization.verify_distance", 3.0);
     reloc_min_fit_ = getD("localization.reloc_min_fit", 0.6);
     reloc_ambiguity_ = getD("localization.reloc_ambiguity", 0.92);
@@ -459,7 +460,7 @@ private:
     if (g.ok) {
       T_ = g.best.pose;
       last_ = g.best;
-      if (g.second < reloc_clear_ * g.score) {  // a clear winner
+      if (g.second < reloc_clear_ * g.score && g.score >= reloc_clear_fit_) {  // a clear, good winner
         status_ = "tracking";
         tracking_since_ = last_scan_t_;
         last_good_ = t;
@@ -603,7 +604,7 @@ private:
   std::deque<std::pair<double, std::vector<P2>>> recent_;
   std::unique_ptr<SubmapMap> scratch_;  // the little map made while relocalizing
   Pose2 Ts_;                            // its frame <- odom
-  double reloc_radius_{8.0}, reloc_clear_{0.7}, verify_distance_{3.0}, verify_from_{0.0};
+  double reloc_radius_{8.0}, reloc_clear_{0.7}, reloc_clear_fit_{0.72}, verify_distance_{3.0}, verify_from_{0.0};
   int verify_fails_{0};
   int reloc_min_points_{400}, reloc_tries_{0};
   double reloc_min_fit_{0.6}, reloc_ambiguity_{0.92};
