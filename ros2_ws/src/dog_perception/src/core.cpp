@@ -723,11 +723,20 @@ double Avoider::update(bool blocked, const Obstacle & o, double x, double y, dou
     }
   }
   if (state_ == "aside") {
+    // the whole shift, as the obstacle reads now: walked + still needed that
+    // side (an 80 mm wall's end read short from afar, the face's foot taken
+    // for the ground: it looked narrow, and grew as the robot went aside)
+    double still = 0.0;
+    if (o.found) {
+      const bool open = side_ > 0 ? o.open_left : o.open_right;
+      still = open ? 1e9 : std::max(0.0, side_ > 0 ? o.lat_max + p_.half_width + p_.margin :
+        -(o.lat_min - p_.half_width - p_.margin));
+    }
     if (!in_path) {
       state_ = "past";
       hold_ = offset_;
-    } else if (std::abs(offset_) > p_.max_shift + 0.1) {
-      state_ = "idle";  // it goes on further than expected: give up, the guard keeps stopping
+    } else if (std::abs(offset_) > p_.max_shift + 0.1 || std::abs(offset_) + still > p_.max_shift + 0.02) {
+      state_ = "idle";  // wider than it looked: give up, the guard keeps stopping
       return 0.0;
     } else {
       return side_ * p_.vy;

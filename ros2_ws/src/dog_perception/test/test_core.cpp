@@ -565,3 +565,36 @@ TEST(Core, ATopAboveTheCrawlByItsMeanHeight)
   EXPECT_TRUE(tallObstacle(wall, 0.6, 0.0, 0.0, 0.0, 0.09).found);
   EXPECT_FALSE(tallObstacle(bar, 0.6, 0.0, 0.0, 0.0, 0.09).found);
 }
+
+TEST(Core, GivesUpGoingRoundWhatGrowsWider)
+{
+  // from afar a 0.8 m wall's left end read short (0.30 m): narrow enough to
+  // go round on the left; going aside the map reads it to 0.38 m
+  auto mapWith = [](double left_end) {
+      ElevationMap map(3.0, 0.02);
+      map.recenter(1.0, 0.0);
+      std::vector<V3> pts;
+      for (double x = -0.4; x < 1.3; x += 0.01) {
+        for (double y = -0.9; y < 0.9; y += 0.01) {
+          const bool wall = x > 1.0 && x < 1.1 && y > -0.40 && y < left_end;
+          pts.push_back({x, y, wall ? 0.10 : 0.0});
+        }
+      }
+      map.insert(pts);
+      return map;
+    };
+  const auto first = mapWith(0.30), later = mapWith(0.38);
+  Avoider a;
+  double y = 0.0;
+  Obstacle o = tallObstacle(first, 0.72, y, 0.0, 0.0, 0.07, -0.35);
+  ASSERT_TRUE(o.found);
+  EXPECT_GT(a.update(true, o, 0.72, y, 0.0), 0.0);  // left
+  EXPECT_EQ(a.state(), "aside");
+  for (int k = 0; k < 20 && a.state() == "aside"; ++k) {
+    y += 0.01;
+    o = tallObstacle(later, 0.72, y, 0.0, 0.0, 0.07, -0.35);
+    a.update(true, o, 0.72, y, 0.0);
+  }
+  EXPECT_EQ(a.state(), "idle");
+  EXPECT_LT(y, 0.05);  // gave up at once
+}
