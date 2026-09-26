@@ -18,7 +18,8 @@
 //   state          std_msgs/String        current mode, or "estop" (latched)
 //   odom           nav_msgs/Odometry      only with odom.publish (the real robot): pose
 //                  dead-reckoned from the walked twist and the IMU heading, 25 Hz.
-//                  In simulation Gazebo publishes the true pose on it instead.
+//                  In simulation Gazebo publishes the true pose on it instead
+//                  (odom.topic moves dead reckoning elsewhere to compare).
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -63,12 +64,20 @@ public:
     cmd_timeout_ = declare_parameter("cmd_vel_timeout", 0.5);
     guard_timeout_ = declare_parameter("guard_timeout", 1.0);
     odom_publish_ = declare_parameter("odom.publish", false);
+    // the simulation publishes the true pose on "odom": dead reckoning goes
+    // elsewhere there (localization tests compare the two)
+    const auto odom_topic = declare_parameter("odom.topic", std::string("odom"));
+    // heading: "imu" = the IMU orientation's yaw (on the robot imu_node
+    // integrates the gyro itself), "gyro" = integrate angular_velocity.z here,
+    // plus gyro_bias_dps - a drifting gyro for the simulation, whose IMU yaw is true
+    odom_gyro_ = declare_parameter("odom.yaw_source", std::string("imu")) == "gyro";
+    odom_gyro_bias_ = declare_parameter("odom.gyro_bias_dps", 0.0) * M_PI / 180.0;
     odom_height_ = p.stand_height;
 
     const auto latched = rclcpp::QoS(1).reliable().transient_local();
     joint_pub_ = create_publisher<sensor_msgs::msg::JointState>("joint_commands", 10);
     if (odom_publish_) {
-      odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("odom", 10);
+      odom_pub_ = create_publisher<nav_msgs::msg::Odometry>(odom_topic, 10);
     }
     state_pub_ = create_publisher<std_msgs::msg::String>("state", latched);
 
@@ -108,6 +117,7 @@ public:
         const double gdt = gyro_stamp_ > 0.0 ? std::clamp(stamp - gyro_stamp_, 0.0, 0.1) : 0.0;
         gyro_stamp_ = stamp;
         controller_->addYawRate(msg->angular_velocity.z, gdt);
+        gyro_yaw_ += (msg->angular_velocity.z + odom_gyro_bias_) * gdt;
         last_gyro_ = now();
         const auto & q = msg->orientation;
         if (msg->orientation_covariance[0] < 0.0) {return;}  // no orientation in this message
@@ -299,9 +309,10 @@ private:
   {
     const bool imu = imu_seen_ && (t - last_imu_).seconds() < 0.2;
     const auto & v = controller_->gaitVelocity();
-    if (controller_->gait().stepping()) {
-      dead_reckoning_.update(dt, v.vx, v.vy, v.wz, imu ? imu_rpy_[2] : std::nan(""));
-    }
+    // trot or crawl: gaitVelocity is what the stepping gait walks
+    const bool moving = controller_->gait().stepping() || controller_->crawl().stepping();
+    const double yaw_in = !imu ? std::nan("") : odom_gyro_ ? gyro_yaw_ : imu_rpy_[2];
+    dead_reckoning_.update(dt, moving ? v.vx : 0.0, moving ? v.vy : 0.0, moving ? v.wz : 0.0, yaw_in);
     if (++odom_div_ % 2) {return;}  // 25 Hz at the 50 Hz control rate
     nav_msgs::msg::Odometry m;
     m.header.stamp = t;
@@ -317,9 +328,9 @@ private:
     m.pose.pose.orientation.x = sr * cp * cy - cr * sp * sy;
     m.pose.pose.orientation.y = cr * sp * cy + sr * cp * sy;
     m.pose.pose.orientation.z = cr * cp * sy - sr * sp * cy;
-    m.twist.twist.linear.x = controller_->gait().stepping() ? v.vx : 0.0;
-    m.twist.twist.linear.y = controller_->gait().stepping() ? v.vy : 0.0;
-    m.twist.twist.angular.z = controller_->gait().stepping() ? v.wz : 0.0;
+    m.twist.twist.linear.x = moving ? v.vx : 0.0;
+    m.twist.twist.linear.y = moving ? v.vy : 0.0;
+    m.twist.twist.angular.z = moving ? v.wz : 0.0;
     odom_pub_->publish(m);
   }
 
@@ -345,6 +356,9 @@ private:
   bool last_estop_{false};
   bool imu_seen_{false};
   bool odom_publish_{false};
+  bool odom_gyro_{false};
+  double odom_gyro_bias_{0.0};
+  double gyro_yaw_{0.0};
   double odom_height_{0.15};
   int odom_div_{0};
   std::array<double, 3> imu_rpy_{};

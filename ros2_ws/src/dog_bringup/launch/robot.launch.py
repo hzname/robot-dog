@@ -68,6 +68,12 @@ def _setup(context):
         actions.append(
             Node(package='dog_perception', executable='perception_node', name='perception',
                  namespace=NS, parameters=[robot_yaml], output='screen'))
+    if on('localization'):
+        # map of the room from the lidars; where the robot is in it (LOCALIZATION.md)
+        actions.append(
+            Node(package='dog_perception', executable='localization_node', name='localization',
+                 namespace=NS, parameters=[robot_yaml]
+                 + ([{'localization.map': cfg('map')}] if cfg('map') else []), output='screen'))
     if on('gamepad'):
         actions += [
             Node(package='dog_teleop', executable='gamepad_node', name='gamepad',
@@ -98,6 +104,10 @@ def generate_launch_description():
         DeclareLaunchArgument('web', default_value='true', description='start the web teleop page'),
         DeclareLaunchArgument('web_port', default_value='8080'),
         DeclareLaunchArgument('rviz', default_value='false', description='start RViz (PC only)'),
+        DeclareLaunchArgument('localization', default_value='false',
+                              description='map of the walls from the lidars and localization in it'),
+        DeclareLaunchArgument('map', default_value='',
+                              description='map file without extension (default: localization.map)'),
         DeclareLaunchArgument('power', default_value='',
                               description='current sensor: auto (probe I2C), mock or off; '
                                           'default auto on the robot, off with backend:=mock'),

@@ -26,5 +26,6 @@ setup(
         'terrain_sweep = dog_gazebo.terrain_sweep:main',
         'tof_bridge = dog_gazebo.tof_bridge:main',
         'perception_check = dog_gazebo.perception_check:main',
+        'localization_check = dog_gazebo.localization_check:main',
     ]},
 )

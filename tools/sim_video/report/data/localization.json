@@ -1,0 +1,134 @@
+{
+ "map0": {
+  "phase": "mapping",
+  "seed": 0,
+  "route_points": 4,
+  "reached": 4,
+  "relocalized_s": 0.0,
+  "map_to_world": [
+   0.0482,
+   0.028,
+   -0.0498
+  ],
+  "localization": {
+   "mean_m": 0.008,
+   "p95_m": 0.019,
+   "max_m": 0.024,
+   "final_m": 0.005,
+   "yaw_p95_deg": 2.86,
+   "yaw_final_deg": 0.36,
+   "samples": 277
+  },
+  "dead_reckoning": {
+   "mean_m": 0.304,
+   "p95_m": 0.485,
+   "max_m": 0.498,
+   "final_m": 0.467,
+   "yaw_p95_deg": 25.15,
+   "yaw_final_deg": 2.21,
+   "samples": 277
+  },
+  "tracking_share": 1.0,
+  "walked_m": 5.17,
+  "map_cells": 1836
+ },
+ "loc1": {
+  "phase": "localize",
+  "seed": 1,
+  "route_points": 4,
+  "reached": 4,
+  "relocalized_s": 1.5,
+  "localization": {
+   "mean_m": 0.008,
+   "p95_m": 0.017,
+   "max_m": 0.029,
+   "final_m": 0.003,
+   "yaw_p95_deg": 2.09,
+   "yaw_final_deg": 0.29,
+   "samples": 330
+  },
+  "dead_reckoning": {
+   "mean_m": 0.555,
+   "p95_m": 1.156,
+   "max_m": 1.183,
+   "final_m": 0.976,
+   "yaw_p95_deg": 43.28,
+   "yaw_final_deg": 40.56,
+   "samples": 330
+  },
+  "tracking_share": 1.0,
+  "walked_m": 6.35,
+  "map_cells": 1836,
+  "reloc": {
+   "points": 1168,
+   "best": 91,
+   "second": 66
+  }
+ },
+ "loc2": {
+  "phase": "localize",
+  "seed": 2,
+  "route_points": 4,
+  "reached": 4,
+  "relocalized_s": 1.5,
+  "localization": {
+   "mean_m": 0.008,
+   "p95_m": 0.018,
+   "max_m": 0.028,
+   "final_m": 0.006,
+   "yaw_p95_deg": 2.13,
+   "yaw_final_deg": 0.2,
+   "samples": 298
+  },
+  "dead_reckoning": {
+   "mean_m": 0.488,
+   "p95_m": 0.862,
+   "max_m": 0.921,
+   "final_m": 0.921,
+   "yaw_p95_deg": 37.61,
+   "yaw_final_deg": 31.42,
+   "samples": 298
+  },
+  "tracking_share": 1.0,
+  "walked_m": 6.07,
+  "map_cells": 1836,
+  "reloc": {
+   "points": 1591,
+   "best": 78,
+   "second": 58
+  }
+ },
+ "loc1ns": {
+  "phase": "localize",
+  "seed": 1,
+  "route_points": 4,
+  "reached": 4,
+  "relocalized_s": 1.5,
+  "localization": {
+   "mean_m": 0.008,
+   "p95_m": 0.016,
+   "max_m": 0.027,
+   "final_m": 0.005,
+   "yaw_p95_deg": 2.24,
+   "yaw_final_deg": 0.28,
+   "samples": 334
+  },
+  "dead_reckoning": {
+   "mean_m": 0.448,
+   "p95_m": 0.826,
+   "max_m": 0.907,
+   "final_m": 0.907,
+   "yaw_p95_deg": 46.65,
+   "yaw_final_deg": 45.32,
+   "samples": 334
+  },
+  "tracking_share": 1.0,
+  "walked_m": 6.38,
+  "map_cells": 1836,
+  "reloc": {
+   "points": 367,
+   "best": 100,
+   "second": 81
+  }
+ }
+}

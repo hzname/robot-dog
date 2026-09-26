@@ -81,6 +81,11 @@ def _setup(context):
     urdf = build_urdf(geometry, description, gazebo=True, namespace=NS, initial=initial)
     sim_time = {'use_sim_time': True}
     overrides = {'slope.compensation': on('slope_compensation'), 'heading.hold': on('heading_hold')}
+    if on('dead_reckoning'):
+        # the robot's own odometry beside Gazebo's true pose ("odom"), with a
+        # heading from the gyro (plus a bias: a real gyro drifts)
+        overrides.update({'odom.publish': True, 'odom.topic': 'odom_dr', 'odom.yaw_source': 'gyro',
+                          'odom.gyro_bias_dps': float(cfg('gyro_bias'))})
     if cfg('step_height'):
         overrides['gait.step_height'] = float(cfg('step_height'))
 
@@ -120,6 +125,12 @@ def _setup(context):
                                if cfg('perception_threshold') else [])
                             + ([{'perception.tof_threshold': [float(v) for v in cfg('tof_threshold').split(',')]}]
                                if cfg('tof_threshold') else [])))
+    if on('localization'):
+        actions.append(Node(package='dog_perception', executable='localization_node', name='localization',
+                            namespace=NS, output='screen',
+                            parameters=[robot_yaml, sim_time,
+                                        {'localization.map': cfg('map'), 'localization.mode': cfg('localization_mode')}],
+                            remappings=[('odom', 'odom_dr')] if on('dead_reckoning') else []))
     if on('gamepad'):
         actions += [
             Node(package='dog_teleop', executable='gamepad_node', name='gamepad', namespace=NS,
@@ -158,6 +169,12 @@ def generate_launch_description():
                               description='ToF thresholds [m], comma separated per sensor (fl,fr,fc,rc)'),
         DeclareLaunchArgument('guard', default_value='true',
                               description='with perception: slow down / step high / stop at hazards'),
+        DeclareLaunchArgument('dead_reckoning', default_value='false',
+                              description="locomotion's odometry on odom_dr (the true pose stays on odom)"),
+        DeclareLaunchArgument('gyro_bias', default_value='0.0', description='dead reckoning gyro bias [deg/s]'),
+        DeclareLaunchArgument('localization', default_value='false', description='start localization_node'),
+        DeclareLaunchArgument('localization_mode', default_value='auto', description='auto | mapping | localize'),
+        DeclareLaunchArgument('map', default_value='/tmp/dog_sim_map', description='map file without extension'),
         DeclareLaunchArgument('web', default_value='true'),
         DeclareLaunchArgument('gamepad', default_value='false'),
         OpaqueFunction(function=_setup),

@@ -13,6 +13,9 @@
   # perception_check recordings listed in data/gaits_runs.json (crawl, going round, greeting)
   collect.py gaits --root /path/with/recordings
 
+  # localization_check recordings: <name>.json in ROOT (map0, loc1, loc2, loc1ns)
+  collect.py localization --root /path/with/recordings
+
 The raw recordings are large (MB per run) and stay out of git; the report
 builders only need what this script extracts.
 """
@@ -112,6 +115,25 @@ def cmd_gaits(args):
     save('gaits.json', out)
 
 
+def cmd_localization(args):
+    """data/localization.json: scores of the localization_check runs."""
+    out = load('localization.json', {})
+    for name in ('map0', 'loc1', 'loc2', 'loc1ns'):
+        path = os.path.join(args.root, name + '.json')
+        if os.path.exists(path):
+            out[name] = json.load(open(path, encoding='utf-8'))['scores']
+            log = os.path.join(args.root, name + '.sim.log')  # the node's word on the relocalization
+            if os.path.exists(log):
+                import re
+                m = re.findall(r'relocalization over (\d+) points: found \((\d+) % on the walls, next best (\d+) %\)',
+                               open(log, encoding='utf-8', errors='replace').read())
+                if m:
+                    out[name]['reloc'] = {'points': int(m[-1][0]), 'best': int(m[-1][1]), 'second': int(m[-1][2])}
+        elif name not in out:
+            print(f'missing {path}')
+    save('localization.json', out)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -125,8 +147,11 @@ def main():
     p.add_argument('--root', required=True, help='folder holding <dir>/<name>.json of each run')
     g = sub.add_parser('gaits')
     g.add_argument('--root', required=True, help='folder holding <dir>/<name>.json of each run')
+    lo = sub.add_parser('localization')
+    lo.add_argument('--root', required=True, help='folder holding <name>.json of each run')
     args = ap.parse_args()
-    {'tests': cmd_tests, 'walk': cmd_walk, 'perception': cmd_perception, 'gaits': cmd_gaits}[args.cmd](args)
+    {'tests': cmd_tests, 'walk': cmd_walk, 'perception': cmd_perception, 'gaits': cmd_gaits,
+     'localization': cmd_localization}[args.cmd](args)
 
 
 if __name__ == '__main__':

@@ -15,10 +15,11 @@ find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
 
 # ROS-independent core: geometry, planes, detectors, guard (no Eigen: the
 # robot image is ros-base without extra packages).
-add_library(dog_perception_core src/core.cpp)
+add_library(dog_perception_core src/core.cpp src/localization.cpp)
 target_include_directories(dog_perception_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
@@ -33,9 +34,20 @@ target_link_libraries(perception_node
   ${sensor_msgs_TARGETS}
   ${std_msgs_TARGETS})
 
+# map of the walls from the lidars, and where the robot is in it
+add_executable(localization_node src/localization_node.cpp)
+target_link_libraries(localization_node
+  dog_perception_core
+  rclcpp::rclcpp
+  tf2_ros::tf2_ros
+  ${geometry_msgs_TARGETS}
+  ${nav_msgs_TARGETS}
+  ${sensor_msgs_TARGETS}
+  ${std_msgs_TARGETS})
+
 install(TARGETS dog_perception_core EXPORT export_dog_perception
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
-install(TARGETS perception_node DESTINATION lib/${PROJECT_NAME})
+install(TARGETS perception_node localization_node DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
 
 # Python twin of the core (numpy): used offline by dog_gazebo's
@@ -47,6 +59,8 @@ if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_gtest(test_core test/test_core.cpp)
   target_link_libraries(test_core dog_perception_core)
+  ament_add_gtest(test_localization test/test_localization.cpp)
+  target_link_libraries(test_localization dog_perception_core)
   ament_add_pytest_test(test_core_py test/test_core.py
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}

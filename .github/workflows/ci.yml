@@ -184,6 +184,22 @@ jobs:
           ros2 launch dog_gazebo sim.launch.py headless:=true web:=false perception:=true > survey.log 2>&1 &
           ros2 run dog_gazebo perception_check --terrain flat --seconds 16 --survey --expect-guard | tee perception_survey.txt | tail -n 25 || { echo '--- full report'; grep -v '^\[' perception_survey.txt | head -n 200; exit 1; }
           kill %1; sleep 3; pkill -f "gz sim" || true
+      - name: Localization - map the room, then find the robot in the map from another start
+        timeout-minutes: 16
+        run: |
+          source install/setup.bash
+          # dead reckoning with a drifting gyro (0.3 deg/s) is what the map corrects
+          sim() { ros2 launch dog_gazebo sim.launch.py headless:=true web:=false terrain:=room seed:=$1 \
+                    dead_reckoning:=true gyro_bias:=0.3 localization:=true localization_mode:=$2 map:=$PWD/room_map > loc_$2.log 2>&1 & }
+          report() { grep -v '^\[' $1 | head -n 80; grep -E 'localization|relocaliz|lost' $2 | sed 's/.*\]: //' | head -n 40; }
+          export ROS_DOMAIN_ID=76 GZ_PARTITION=localization1
+          sim 0 mapping
+          ros2 run dog_gazebo localization_check --seed 0 --phase mapping --map $PWD/room_map --trace localization_mapping.json --expect | tee perception_loc_mapping.txt | tail -n 30 || { report perception_loc_mapping.txt loc_mapping.log; exit 1; }
+          kill -INT %1; sleep 5; pkill -f "gz sim" || true
+          export ROS_DOMAIN_ID=77 GZ_PARTITION=localization2
+          sim 1 localize
+          ros2 run dog_gazebo localization_check --seed 1 --map-seed 0 --phase localize --map $PWD/room_map --trace localization_localize.json --expect | tee perception_loc_localize.txt | tail -n 30 || { report perception_loc_localize.txt loc_localize.log; exit 1; }
+          kill -INT %1; sleep 5; pkill -f "gz sim" || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:

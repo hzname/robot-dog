@@ -8,6 +8,9 @@
   waves  level   cylinders across the path, bump height `level` mm
                  (a curved, washboard-like surface)
   rough  level   scattered stones up to `level` mm high
+  room           localization: a 5 x 4 m room with 1.2 m walls, a cabinet,
+                 a sofa, a table and a chest. `seed` picks where in the room
+                 the robot starts (ROOM_STARTS): the room is placed round it
   steps  level   perception test course, steps of `level` mm: the robot starts
                  on a platform with a 20 mm stone in the left foot corridor
                  (x 0.8 m) and one in the right (x 1.4 m), steps down at
@@ -44,7 +47,17 @@ HEADER = '''<?xml version="1.0"?>
 FOOTER = '''  </world>
 </sdf>
 '''
-KINDS = ('flat', 'slope', 'waves', 'rough', 'steps', 'wall', 'stairs', 'bar', 'block')
+KINDS = ('flat', 'slope', 'waves', 'rough', 'steps', 'wall', 'stairs', 'bar', 'block', 'room')
+# room world, in room coordinates (centre of the floor, x along the long side)
+ROOM_SIZE, ROOM_WALL_H = (5.0, 4.0), 1.2
+ROOM_FURNITURE = (  # name, centre x, y, size x, y, z, lifted (table top)
+    ('cabinet', 2.30, 1.30, 0.40, 1.00, 1.20, 0.0),
+    ('sofa', -0.60, -1.60, 1.80, 0.80, 0.45, 0.0),
+    ('table', -1.40, 1.20, 1.20, 0.70, 0.03, 0.70),
+    ('chest', 1.65, -1.45, 0.50, 0.50, 0.50, 0.0))
+TABLE_LEGS = ((-0.55, -0.30), (0.55, -0.30), (-0.55, 0.30), (0.55, 0.30))
+# where the robot starts (room x, y, yaw) for each seed
+ROOM_STARTS = ((-0.8, 0.0, 0.0), (0.9, -0.4, 2.2), (0.3, 0.6, -1.9))
 RAMP_START = 0.25  # [m] start of the ramp in the slope world
 RAMP_LENGTH = 3.0
 STEP_DOWN_X, STEP_UP_X = 2.2, 3.0  # steps world
@@ -91,6 +104,37 @@ def _ground():
     return _box('ground', (0, 0, -0.05, 0, 0, 0), (40, 40, 0.1), '0.7 0.7 0.7 1')
 
 
+def room_to_world(seed=0):
+    """(x, y, yaw) of the room frame in the world: the robot spawns at the
+    world origin facing +x, so the room is its start pose inverted."""
+    sx, sy, syaw = ROOM_STARTS[seed % len(ROOM_STARTS)]
+    c, s_ = math.cos(syaw), math.sin(syaw)
+    return -(c * sx + s_ * sy), -(-s_ * sx + c * sy), -syaw
+
+
+def room_boxes(seed=0):
+    """Walls and furniture of the room world as world-frame boxes."""
+    ox, oy, oyaw = room_to_world(seed)
+    c, s_ = math.cos(oyaw), math.sin(oyaw)
+    L, W = ROOM_SIZE
+    t = 0.10
+    boxes = [  # name, room x, y, z, size
+        ('wall_s', 0.0, -(W + t) / 2, ROOM_WALL_H / 2, (L + 2 * t, t, ROOM_WALL_H)),
+        ('wall_n', 0.0, (W + t) / 2, ROOM_WALL_H / 2, (L + 2 * t, t, ROOM_WALL_H)),
+        ('wall_w', -(L + t) / 2, 0.0, ROOM_WALL_H / 2, (t, W, ROOM_WALL_H)),
+        ('wall_e', (L + t) / 2, 0.0, ROOM_WALL_H / 2, (t, W, ROOM_WALL_H))]
+    for name, x, y, sx, sy, sz, lift in ROOM_FURNITURE:
+        boxes.append((name, x, y, lift + sz / 2, (sx, sy, sz)))
+        if lift > 0:
+            for k, (lx, ly) in enumerate(TABLE_LEGS):
+                boxes.append((f'{name}_leg{k}', x + lx, y + ly, lift / 2, (0.05, 0.05, lift)))
+    out = []
+    for name, x, y, z, size in boxes:
+        out.append({'shape': 'box', 'name': name, 'x': ox + c * x - s_ * y, 'y': oy + s_ * x + c * y, 'z': z,
+                    'size': size, 'yaw': oyaw})
+    return out
+
+
 def obstacles(kind, level, seed=0):
     """Obstacles of the waves / rough worlds as plain shapes (also used to
     draw the terrain in videos):
@@ -98,6 +142,8 @@ def obstacles(kind, level, seed=0):
       {'shape': 'cyl_x', 'x', 'y', 'z', 'r', 'length'}     cylinder along x
       {'shape': 'box', 'x', 'y', 'z', 'size': (sx, sy, sz), 'yaw'}"""
     out = []
+    if kind == 'room':
+        return room_boxes(seed)
     h = level / 1000.0
     if h <= 0:
         return out
@@ -170,6 +216,10 @@ def world(kind='flat', level=0.0, seed=0):
             parts.append(_cylinder(f'wave{k}', (o['x'], 0, o['z'], math.pi / 2, 0, 0), o['r'], o['length']))
         elif o['shape'] == 'cyl_x':
             parts.append(_cylinder(f'ridge{k}', (o['x'], o['y'], o['z'], 0, math.pi / 2, 0), o['r'], o['length']))
+        elif kind == 'room':
+            wall = o['name'].startswith('wall')
+            parts.append(_box(o['name'], (o['x'], o['y'], o['z'], 0, 0, o['yaw']), o['size'],
+                              '0.82 0.80 0.76 1' if wall else '0.55 0.42 0.30 1'))
         else:
             parts.append(_box(f'stone{k}', (o['x'], o['y'], o['z'], 0, 0, o['yaw']), o['size'],
                               '0.5 0.47 0.42 1'))

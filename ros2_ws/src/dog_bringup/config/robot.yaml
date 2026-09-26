@@ -140,6 +140,25 @@
       gs2_range_max: 0.30
       gs2_noise: 0.003        # [m] 1 sigma (assumed; check the datasheet)
 
+    # localization_node (docs/LOCALIZATION.md): map of the walls from the lidars
+    localization:
+      map: "~/.ros/dog_map"   # <map>.pgm / .yaml / .walls
+      mode: auto              # auto: localize if the map exists, else mapping
+      save_on_exit: true      # mapping: write the map when the node stops
+      resolution: 0.05        # [m] grid cell
+      min_hits: 2             # hits for a cell to be a wall
+      z_min: 0.10             # [m] points this high above the floor and up to
+      z_max: 2.0              #     z_max are walls and furniture (below: the floor)
+      range_min: 0.30         # [m] horizontal, from the body centre (own legs inside)
+      range_max: 8.0
+      cloud_time: 0.3         # [s] of scans matched together
+      min_points: 30          # fewer wall points: dead reckoning alone
+      min_inliers: 0.5        # share of points on the map's walls to accept a match
+      lost_after: 3.0         # [s] without a good match: relocalize
+      reloc_wait: 3.0         # [s] between relocalization tries (and right after a survey)
+      prior_xy: 0.10          # [m] trust in the last correction (1 sigma per match)
+      prior_yaw_deg: 5.0
+
     # dog_perception (docs/PERCEPTION.md): hazard thresholds, ToF offsets.
     perception:
       reference: auto          # ground reference: auto (lidar plane, legs as fallback) | feet

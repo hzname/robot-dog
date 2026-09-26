@@ -49,8 +49,8 @@
 | `dog_web` | Python | `web_teleop`: HTTP и WebSocket на стандартной библиотеке, страница с виртуальными стиками, клавиатурой и Gamepad API |
 | `dog_description` | Python | генератор URDF из `robot.yaml` (xacro не нужен) |
 | `dog_bringup` | launch | `robot.launch.py`, конфиги (`robot.yaml`, `servos.yaml`, `teleop*.yaml`), `calib_pose` |
-| `dog_perception` | C++ (+ Python) | `perception_node` (C++): лидары «крестом», GS2 и VL53L1X — плоскость пола, карта высот, препятствия в коридорах стоп, реакция на них (guard) ([PERCEPTION.md](PERCEPTION.md)); тот же алгоритм на numpy (`dog_perception.core`) для проверок и видео |
-| `dog_gazebo` | Python | `sim.launch.py`, миры (ровный, уклон, волны, камни, ступеньки, стенка, лестница, брус, блок), мост команд в Gazebo, `walk_check`, `terrain_sweep`, `perception_check` (в том числе `--greet`) |
+| `dog_perception` | C++ (+ Python) | `perception_node` (C++): лидары «крестом», GS2 и VL53L1X — плоскость пола, карта высот, препятствия в коридорах стоп, реакция на них (guard) ([PERCEPTION.md](PERCEPTION.md)); тот же алгоритм на numpy (`dog_perception.core`) для проверок и видео; `localization_node` (C++): карта стен по лидарам и поза робота в ней ([LOCALIZATION.md](LOCALIZATION.md)) |
+| `dog_gazebo` | Python | `sim.launch.py`, миры (ровный, уклон, волны, камни, ступеньки, стенка, лестница, брус, блок, комната), мост команд в Gazebo, `walk_check`, `terrain_sweep`, `perception_check` (в том числе `--greet`, `--survey`), `localization_check` |
 
 Внешние зависимости — только `ros-base`: rclcpp, rclpy, стандартные сообщения, robot_state_publisher, launch. Для симуляции нужен ещё ros_gz.
 
