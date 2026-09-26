@@ -280,6 +280,21 @@ class PerceptionCheck:
                 publish()
             rclpy.spin_once(self.node, timeout_sec=0.01)
 
+    def sim_time(self):
+        s = self.odom.header.stamp
+        return s.sec + s.nanosec * 1e-9
+
+    def spin_sim(self, seconds, publish=None):
+        """Like spin, for `seconds` of simulated time (odom stamps): a slow CI
+        runner simulates less than real time, and the walk must not be cut
+        short there. At most 4x as long by the wall clock."""
+        t_end = self.sim_time() + seconds
+        end = time.time() + 4 * seconds
+        while self.sim_time() < t_end and time.time() < end:
+            if publish:
+                publish()
+            rclpy.spin_once(self.node, timeout_sec=0.01)
+
     def run(self):
         end = time.time() + 90
         while (self.odom is None or self.state is None) and time.time() < end:
@@ -299,7 +314,7 @@ class PerceptionCheck:
         if self.greet:  # standing still: sit, paws up, wave, stand up again
             self.spin(0.5, lambda: self.vel.publish(tw))
             self.cmd.publish(String(data='greet'))
-        self.spin(self.seconds, lambda: self.vel.publish(tw))
+        self.spin_sim(self.seconds, lambda: self.vel.publish(tw))
         self.phase = 'stop'
         self.spin(1.5, lambda: self.vel.publish(Twist()))
         self.walked = float(self.pose()[0][0]) - x0
@@ -451,7 +466,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--terrain', default='flat', choices=list(terrain.KINDS))
     ap.add_argument('--level', type=float, default=0.0)
-    ap.add_argument('--seconds', type=float, default=10.0)
+    ap.add_argument('--seconds', type=float, default=10.0, help='walk this long (simulated time)')
     ap.add_argument('--speed', type=float, default=0.12)
     ap.add_argument('--trace', help='write scores + full recording to this JSON file')
     ap.add_argument('--greet', action='store_true',
