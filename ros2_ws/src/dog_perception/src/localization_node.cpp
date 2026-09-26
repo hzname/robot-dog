@@ -312,10 +312,10 @@ private:
 
   void mapStep(double t, const std::vector<P2> & pts, const Pose2 & odom)
   {
-    if (!map_.empty() && map_.merged().fieldValid()) {
+    if (!map_.empty() && map_.local().fieldValid()) {
       const auto cloud = recentCloud();
       if (static_cast<int>(cloud.size()) >= min_points_) {
-        const auto r = match(map_.merged(), cloud, T_, match_);
+        const auto r = match(map_.local(), cloud, T_, match_);
         last_ = r;
         if (r.ok) {
           T_ = r.pose;
@@ -341,7 +341,7 @@ private:
     } else if (map_.submaps().size() > subs) {
       RCLCPP_INFO(get_logger(), "submap %zu after %.1f m", map_.submaps().size() - 1, walked_);
     }
-    if (t - last_field_ > 0.5 || !map_.merged().fieldValid()) {
+    if (t - last_field_ > 0.5 || !map_.local().fieldValid()) {
       map_.refresh();
       last_field_ = t;
       map_changed_ = true;

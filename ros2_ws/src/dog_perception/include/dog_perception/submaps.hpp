@@ -74,6 +74,7 @@ struct SubmapParams
   bool loop_closure{true};
   double loop_radius{3.0};        // [m] + 10 % of the way walked since: old submaps this near are candidates
   int loop_skip{2};               // the last submaps before this one are its neighbours, not loops
+  int local_submaps{3};           // mapping matches against this many latest submaps
   double loop_min_inliers{0.55};  // share of the submap's walls that must fall on the old one's
   double loop_win_xy{1.0};        // [m] search window round the graph's guess
   double loop_win_yaw{0.35};      // [rad]
@@ -114,8 +115,12 @@ public:
   const std::vector<LoopClosure> & loops() const {return loops_;}
   bool empty() const {return subs_.empty();}
 
-  /// The grid to match against: every submap's walls at its current pose.
+  /// Every submap's walls at its current pose: to localize in a stored map.
   const WallGrid & merged() const {return merged_;}
+  /// The last few submaps only: what mapping matches against. Coming back
+  /// to old ground with the drift of a loop, the old walls would catch the
+  /// robot in the wrong place; going back is the loop closure's job.
+  const WallGrid & local() const {return local_;}
   /// Rebuild merged() if walls were added since (cheap: call it at a few Hz).
   void refresh();
 
@@ -147,12 +152,13 @@ private:
   std::optional<LoopClosure> closeLoop(int k);
   std::vector<P2> wallsOf(const Submap & s) const;  // occupied cell means, submap frame
   void rebuildMerged();
+  void rebuildLocal();
 
   SubmapParams p_;
   std::vector<Submap> subs_;
   std::vector<GraphEdge> edges_;
   std::vector<LoopClosure> loops_;
-  WallGrid merged_;
+  WallGrid merged_, local_;
   bool merged_dirty_{false};
 };
 

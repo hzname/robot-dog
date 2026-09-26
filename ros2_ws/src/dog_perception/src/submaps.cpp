@@ -188,7 +188,7 @@ double scanContextDistance(const std::vector<float> & a, const std::vector<float
 
 // ------------------------------------------------------------------ submaps
 SubmapMap::SubmapMap(const SubmapParams & p)
-: p_(p), merged_(p.resolution, p.min_hits) {}
+: p_(p), merged_(p.resolution, p.min_hits), local_(p.resolution, p.min_hits) {}
 
 std::vector<P2> SubmapMap::wallsOf(const Submap & s) const {return s.grid.walls();}
 
@@ -204,18 +204,33 @@ void SubmapMap::rebuildMerged()
   merged_dirty_ = false;
 }
 
+void SubmapMap::rebuildLocal()
+{
+  local_ = WallGrid(p_.resolution, p_.min_hits);
+  std::vector<P2> all;
+  const int n = static_cast<int>(subs_.size());
+  for (int k = std::max(0, n - p_.local_submaps); k < n; ++k) {
+    for (const auto & w : wallsOf(subs_[k])) {all.push_back(subs_[k].pose.apply(w));}
+  }
+  for (int k = 0; k < p_.min_hits; ++k) {local_.insert(all);}
+  local_.updateField();
+}
+
 void SubmapMap::refresh()
 {
   if (merged_dirty_ || merged_.dirty() || !merged_.fieldValid()) {
     merged_.updateField();
     merged_dirty_ = false;
   }
+  if (local_.dirty() || !local_.fieldValid()) {local_.updateField();}
 }
 
 Pose2 SubmapMap::insert(const std::vector<P2> & pts_map, const Pose2 & robot, double walked, bool pinned)
 {
   Pose2 correction;
+  bool started = false;
   if (subs_.empty()) {
+    started = true;
     Submap s;
     s.grid = WallGrid(p_.resolution, p_.min_hits);
     s.pose = robot;
@@ -224,6 +239,7 @@ Pose2 SubmapMap::insert(const std::vector<P2> & pts_map, const Pose2 & robot, do
   } else if (walked - subs_.back().walked >= p_.length && !subs_.back().grid.walls().empty()) {
     // a new submap where the robot is; the finished one looked for among the old
     const int k = static_cast<int>(subs_.size()) - 1;
+    started = true;
     finishCurrent();
     Submap s;
     s.grid = WallGrid(p_.resolution, p_.min_hits);
@@ -272,6 +288,8 @@ Pose2 SubmapMap::insert(const std::vector<P2> & pts_map, const Pose2 & robot, do
   m.reserve(local.size());
   for (const auto & q : local) {m.push_back(cur.pose.apply(q));}
   merged_.insert(m);
+  if (started) {rebuildLocal();}  // the oldest submap leaves it, walls moved by a loop
+  local_.insert(m);
   return correction;
 }
 
@@ -453,6 +471,7 @@ bool SubmapMap::load(const std::string & path)
     subs_.push_back(std::move(s));
   }
   rebuildMerged();
+  rebuildLocal();
   for (auto & s : subs_) {  // places from the merged walls round each origin
     const Pose2 inv = s.pose.inverse();
     std::vector<P2> near;

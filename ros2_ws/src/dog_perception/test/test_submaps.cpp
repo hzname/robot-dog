@@ -109,10 +109,10 @@ MapRun mapRing(bool loop_closure)
     }
     const auto cloud = view(segs, truth, 3.0, static_cast<int>(i), 0.02);
     bool pinned = true;
-    if (!run.map.empty() && run.map.merged().fieldValid()) {
+    if (!run.map.empty() && run.map.local().fieldValid()) {
       dog_perception::MatchParams mp;
       mp.prior_xy = 0.05;
-      const auto r = dog_perception::match(run.map.merged(), cloud, est, mp);
+      const auto r = dog_perception::match(run.map.local(), cloud, est, mp);
       if (r.ok && r.inlier_fraction > 0.5) {est = r.pose;}
       pinned = r.ok && r.constraint(std::cos(est.yaw), std::sin(est.yaw)) >= 0.1;
     }
