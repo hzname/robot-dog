@@ -110,10 +110,19 @@ class WalkCheck:
                     ir, ip, _ = _rpy(self.imu.orientation)
                     e['imu'] = [round(math.degrees(ir), 2), round(math.degrees(ip), 2)]
 
+    def sim_time(self):
+        s = self.odom.header.stamp
+        return s.sec + s.nanosec * 1e-9
+
     def spin(self, seconds, publish=None):
-        end = time.time() + seconds
+        """Spin for `seconds` of simulated time (odom stamps; the wall clock
+        before the first odom): the commanded distance is v * seconds, and a
+        CI runner simulating slower or faster than real time must not change
+        how far that is. At most 4x as long by the wall clock."""
+        end = time.time() + (4 * seconds if self.odom else seconds)
+        t_end = self.sim_time() + seconds if self.odom else None
         worst_tilt = 0.0
-        while time.time() < end:
+        while time.time() < end and (t_end is None or self.sim_time() < t_end):
             if publish:
                 publish()
             rclpy.spin_once(self.node, timeout_sec=0.02)
