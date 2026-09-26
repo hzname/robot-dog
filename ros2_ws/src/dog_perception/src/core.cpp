@@ -655,10 +655,15 @@ double ElevationMap::heightAt(double x, double y) const
 Obstacle tallObstacle(const ElevationMap & map, double x, double y, double yaw, double ground_z,
   double height, double d0, double d1, double reach, bool highest)
 {
-  Obstacle o;
   const double cs = std::cos(yaw), sn = std::sin(yaw), r = map.resolution();
+  const int n = static_cast<int>(std::floor(2.0 * reach / r + 1e-9)) + 1;
+  auto latOf = [&](int j) {return -reach + j * r;};
+  // per lateral column: tall anywhere ahead, nearest, ends open
+  std::vector<char> tall(n, 0), open_l(n, 0), open_r(n, 0);
+  std::vector<double> dmin(n, kInf);
   for (double d = d0; d <= d1; d += r) {
-    for (double lat = -reach; lat <= reach; lat += r) {
+    for (int j = 0; j < n; ++j) {
+      const double lat = latOf(j);
       const double cx = x + cs * d - sn * lat, cy = y + sn * d + cs * lat;
       // (the mean as well only over the points a highest point needs: one
       // noisy point is no mean)
@@ -679,30 +684,42 @@ Obstacle tallObstacle(const ElevationMap & map, double x, double y, double yaw, 
       // or still raised (a wall's top read a little under `height`): it may
       // go on there - only the ground within 3 cells closes it (the map
       // smears a block's sides by 1-2 cells)
-      auto open = [&](double l, double dir) {
+      auto open = [&](int dir) {
           for (int k = 1; k <= 3; ++k) {
-            const double lk = l + dir * k * r;
-            if (lk < -reach || lk > reach) {return true;}
+            const double lk = lat + dir * k * r;
+            if (lk < -reach - 1e-9 || lk > reach + 1e-9) {return true;}
             const double hn = map.maxAt(x + cs * d - sn * lk, y + sn * d + cs * lk);
             if (std::isfinite(hn) && hn - ground_z <= 0.5 * height) {return false;}
           }
           return true;
         };
-      const bool open_l = open(lat, 1.0), open_r = open(lat, -1.0);
-      if (!o.found) {
-        o = {true, lat, lat, d, open_l, open_r};
-      } else {
-        if (lat > o.lat_max + 1e-9) {o.open_left = open_l;} else if (lat > o.lat_max - 1e-9) {o.open_left |= open_l;}
-        if (lat < o.lat_min - 1e-9) {o.open_right = open_r;} else if (lat < o.lat_min + 1e-9) {o.open_right |= open_r;}
-        o.lat_min = std::min(o.lat_min, lat);
-        o.lat_max = std::max(o.lat_max, lat);
-        o.d_min = std::min(o.d_min, d);
-      }
+      tall[j] = 1;
+      dmin[j] = std::min(dmin[j], d);
+      open_l[j] |= open(1);
+      open_r[j] |= open(-1);
     }
   }
-  if (o.found) {  // cell edges, not centres
-    o.lat_min -= r / 2;
-    o.lat_max += r / 2;
+  // one obstacle: the run of tall columns (gaps of one cell bridged) nearest
+  // the robot's line - a noisy cell far to the side is another thing, not
+  // a wider one
+  Obstacle o;
+  double best = kInf;
+  for (int j = 0; j < n; ) {
+    if (!tall[j]) {++j; continue;}
+    int end = j;
+    while (end + 1 < n && (tall[end + 1] || (end + 2 < n && tall[end + 2]))) {end += tall[end + 1] ? 1 : 2;}
+    double near = kInf, dm = kInf;
+    for (int k = j; k <= end; ++k) {
+      if (!tall[k]) {continue;}
+      near = std::min(near, std::abs(latOf(k)));
+      dm = std::min(dm, dmin[k]);
+    }
+    if (latOf(j) <= 0.0 && latOf(end) >= 0.0) {near = 0.0;}
+    if (near < best) {
+      best = near;
+      o = {true, latOf(j) - r / 2, latOf(end) + r / 2, dm, open_l[end] != 0, open_r[j] != 0};
+    }
+    j = end + 1;
   }
   return o;
 }
@@ -717,6 +734,7 @@ double Avoider::update(bool blocked, const Obstacle & o, double x, double y, dou
     // unmapped ground: a wall seen in part is not narrow)
     const double left = o.open_left ? 1e9 : o.lat_max + p_.half_width + p_.margin;
     const double right = o.open_right ? 1e9 : -(o.lat_min - p_.half_width - p_.margin);
+    needed_ = std::min(left, right);
     if (std::min(left, right) <= p_.max_shift) {
       if (state_ == "idle") {
         x0_ = x;
@@ -737,10 +755,11 @@ double Avoider::update(bool blocked, const Obstacle & o, double x, double y, dou
       still = open ? 1e9 : std::max(0.0, side_ > 0 ? o.lat_max + p_.half_width + p_.margin :
         -(o.lat_min - p_.half_width - p_.margin));
     }
+    needed_ = std::abs(offset_) + still;
     if (!in_path) {
       state_ = "past";
       hold_ = offset_;
-    } else if (std::abs(offset_) > p_.max_shift + 0.1 || std::abs(offset_) + still > p_.max_shift + 0.02) {
+    } else if (std::abs(offset_) > p_.max_shift + 0.1 || needed_ > p_.max_shift + 0.02) {
       state_ = "idle";  // wider than it looked: give up, the guard keeps stopping
       return 0.0;
     } else {

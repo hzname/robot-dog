@@ -672,7 +672,13 @@ private:
       // its noisy cells alone look like a narrow block to go round
       const Obstacle extent = tallObstacle(*map_, pos.x, pos.y, yaw, pos.z - stand_height_, climb_max_, -0.35, 1.0, 0.8);
       const Obstacle & wide = extent.found ? extent : o;
+      const std::string before = avoider_.state();
       vy = avoider_.update(c.state == "stop" && wide.d_min > feet_x, wide, pos.x, pos.y, yaw);
+      if (avoider_.state() != before) {
+        RCLCPP_INFO(get_logger(), "avoid: %s -> %s (offset %.2f m, needs %.2f m; obstacle %.2f..%.2f m%s%s, %.2f m ahead)",
+          before.c_str(), avoider_.state().c_str(), avoider_.offset(), avoider_.needed(), wide.lat_min, wide.lat_max,
+          wide.open_right ? ", open right" : "", wide.open_left ? ", open left" : "", wide.d_min);
+      }
       if (avoider_.state() != "idle") {
         // going round: in the trot (the crawl sidesteps at ~1 cm/s and turns
         // away with it), and no forward step while it is still in the way

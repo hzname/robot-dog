@@ -600,3 +600,28 @@ TEST(Core, GivesUpGoingRoundWhatGrowsWider)
   EXPECT_EQ(a.state(), "idle");
   EXPECT_LT(y, 0.05);  // gave up at once
 }
+
+TEST(Core, ANoisyCellFarToTheSideIsNotPartOfTheBlock)
+{
+  // the sim: at climb_max the map's highest points found a few noisy cells
+  // 0.7-0.8 m to the right; one obstacle from there to the block needed a
+  // 0.5 m shift, open on the right, and the robot gave up going round
+  ElevationMap map(3.0, 0.02);
+  map.recenter(1.0, 0.0);
+  std::vector<V3> pts;
+  for (double x = -0.4; x < 1.6; x += 0.01) {
+    for (double y = -0.9; y < 0.9; y += 0.01) {
+      const bool block = x > 1.0 && x < 1.2 && std::abs(y) < 0.1;
+      const bool noise = x > 1.0 && x < 1.04 && y > -0.80 && y < -0.74;
+      pts.push_back({x, y, block ? 0.15 : (noise ? 0.09 : 0.0)});
+    }
+  }
+  map.insert(pts);
+  const Obstacle o = tallObstacle(map, 0.72, 0.0, 0.0, 0.0, 0.07, -0.35);
+  ASSERT_TRUE(o.found);
+  EXPECT_NEAR(o.lat_min, -0.10, 0.02);
+  EXPECT_NEAR(o.lat_max, 0.10, 0.02);
+  EXPECT_FALSE(o.open_left);
+  EXPECT_FALSE(o.open_right);
+  EXPECT_NEAR(o.d_min, 0.28, 0.02);
+}

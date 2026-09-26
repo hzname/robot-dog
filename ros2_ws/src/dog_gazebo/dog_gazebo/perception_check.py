@@ -305,6 +305,10 @@ class PerceptionCheck:
         self.spin(2.0)
         self.phase = 'stand'
         self.spin(5.0, lambda: self.cmd.publish(String(data='stand')) if self.state in ('passive', 'lying') else None)
+        # standing up takes simulated time: a slow simulation is not done in 5 s
+        end = time.time() + 60
+        while self.state != 'stand' and time.time() < end:
+            rclpy.spin_once(self.node, timeout_sec=0.05)
         self.spin(2.0)  # ToF calibration on the flat start
         self.stats_start = (time.time(), self.stats)
         self.phase = 'walk'

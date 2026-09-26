@@ -305,12 +305,14 @@ public:
   /// beyond it - a few degrees of heading must not stop it again.
   double pathHalfWidth() const {return state_ == "past" ? p_.half_width - 0.5 * p_.margin : p_.half_width;}
   double offset() const {return offset_;}
+  /// The whole side shift going round needs, as the obstacle last read (m).
+  double needed() const {return needed_;}
 
 private:
   AvoidParams p_;
   std::string state_{"idle"};
   int side_{0};
-  double x0_{0}, y0_{0}, yaw0_{0}, offset_{0}, hold_{0};
+  double x0_{0}, y0_{0}, yaw0_{0}, offset_{0}, hold_{0}, needed_{0};
 };
 
 }  // namespace dog_perception
