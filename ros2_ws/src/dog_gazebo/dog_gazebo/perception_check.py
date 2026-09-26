@@ -367,6 +367,9 @@ class PerceptionCheck:
                 gap = min(max(abs(e['x'] - (terrain.BLOCK_X + sx / 2)) - sx / 2 - 0.15,
                               abs(e['y']) - sy / 2 - 0.13) for e in allw)
                 out['crossing']['min_gap_m'] = round(gap, 3)
+                # back on its line once past it (the walk goes on for metres after)
+                past = [abs(e['y']) for e in allw if e['x'] > goal]
+                out['crossing']['back_on_line'] = bool(past) and min(past) < 0.1
                 out['crossing']['touched'] = gap < 0.0
         if self.kind == 'wall' and walk:
             xmax = max(e['x'] for e in walk + [e for e in self.trace if e['phase'] == 'stop'])
@@ -492,8 +495,8 @@ def main():
                 if args.terrain == 'block':
                     if cr.get('touched', True):
                         why.append(f"touched the block (gap {cr.get('min_gap_m')} m)")
-                    if abs(cr.get('final_y', 1.0)) > 0.1:
-                        why.append(f"did not come back to its line (y {cr.get('final_y')} m)")
+                    if not cr.get('back_on_line'):
+                        why.append('did not come back to its line after passing the block')
             if args.greet:
                 gr = res.get('greet') or {}
                 if not gr.get('finished'):
