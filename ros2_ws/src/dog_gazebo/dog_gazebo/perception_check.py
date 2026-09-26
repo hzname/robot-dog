@@ -386,9 +386,22 @@ class PerceptionCheck:
                 gap = min(max(abs(e['x'] - (terrain.BLOCK_X + sx / 2)) - sx / 2 - 0.15,
                               abs(e['y']) - sy / 2 - 0.13) for e in allw)
                 out['crossing']['min_gap_m'] = round(gap, 3)
-                # back on its line once past it (the walk goes on for metres after)
-                past = [abs(e['y']) for e in allw if e['x'] > goal]
+                # back on its line once past it (the walk goes on for metres
+                # after): the line it walked when the guard first stopped it
+                # there - the avoider's line; without an absolute heading the
+                # robot's heading has drifted a few degrees off the x axis by
+                # then, and that line with it
+                t_stop = next((r[0] for r in self.guard if r[1] == 'stop' and r[-1] == 'walk'), None)
+                ref = next((e for e in allw if t_stop is not None and e['t'] >= t_stop), None)
+                if ref is None:
+                    ref = {'x': 0.0, 'y': 0.0, 'yaw': 0.0}
+                yw = math.radians(ref['yaw'])
+
+                def off_line(e):
+                    return abs(-math.sin(yw) * (e['x'] - ref['x']) + math.cos(yw) * (e['y'] - ref['y']))
+                past = [off_line(e) for e in allw if e['x'] > goal]
                 out['crossing']['back_on_line'] = bool(past) and min(past) < 0.1
+                out['crossing']['line_heading_deg'] = round(ref['yaw'], 1)
                 out['crossing']['touched'] = gap < 0.0
         if self.kind == 'wall' and walk:
             xmax = max(e['x'] for e in walk + [e for e in self.trace if e['phase'] == 'stop'])
