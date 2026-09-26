@@ -194,7 +194,7 @@ TEST(Submaps, ScanContextKnowsAPlaceTurnedAndTellsPlacesApart)
   EXPECT_GT(dog_perception::scanContextDistance(here, other, sc), same + 0.1);
 }
 
-TEST(Submaps, LoopClosureStraightensTheRing)
+TEST(Submaps, LoopClosureKeepsTheRingStraight)
 {
   const MapRun open = mapRing(false);
   const MapRun closed = mapRing(true);
@@ -206,9 +206,11 @@ TEST(Submaps, LoopClosureStraightensTheRing)
     e_open, e_closed, wallError(open.map), wallError(closed.map));
   // a scale error the same all round (bare corridors) is no loop error: the
   // closed map is consistent, but a little stretched - the walls tell more
-  EXPECT_LT(e_closed, e_open);
-  EXPECT_LT(wallError(closed.map), 0.06);
-  EXPECT_LT(wallError(closed.map), 0.5 * wallError(open.map));
+  // with the matching kept off the directions the walls do not fix, the ring
+  // is mapped well even open; closing the loops must keep it so
+  EXPECT_LT(e_closed, 0.15);
+  EXPECT_LT(wallError(closed.map), 0.05);
+  EXPECT_LT(wallError(closed.map), 1.2 * wallError(open.map) + 0.005);
 }
 
 TEST(Submaps, RelocalizesByPlacesAndSurvivesSaveAndLoad)

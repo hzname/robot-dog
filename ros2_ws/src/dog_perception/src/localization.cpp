@@ -249,8 +249,9 @@ void WallGrid::computeNormals()
   }
 }
 
-double WallGrid::distance(double x, double y, double * gx, double * gy) const
+double WallGrid::distance(double x, double y, double * gx, double * gy, bool * line) const
 {
+  if (line) {*line = false;}
   if (gx) {*gx = 0.0;}
   if (gy) {*gy = 0.0;}
   if (!field_valid_ || w_ == 0) {return max_dist_;}
@@ -262,6 +263,7 @@ double WallGrid::distance(double x, double y, double * gx, double * gy) const
   const P2 m = cellPoint(k);
   const double dx = x - m.x, dy = y - m.y;
   if (nx_[k] != 0.0f || ny_[k] != 0.0f) {  // to the wall's line
+    if (line) {*line = true;}
     const double s = nx_[k] * dx + ny_[k] * dy, d = std::abs(s);
     if (d >= max_dist_) {return max_dist_;}
     if (gx) {*gx = s >= 0.0 ? nx_[k] : -nx_[k];}
@@ -424,13 +426,41 @@ MatchResult match(const WallGrid & map, const std::vector<P2> & cloud, const Pos
     for (const auto & pt : cloud) {
       const P2 q = T.apply(pt);
       double gx = 0.0, gy = 0.0;
-      const double d = map.distance(q.x, q.y, &gx, &gy);
+      bool line = false;
+      const double d = map.distance(q.x, q.y, &gx, &gy, &line);
       if (d > p.outlier) {continue;}
+      // nearest is a wall's end (or a corner): a point further than a few cm
+      // is most likely the same wall going on where the map has not been yet -
+      // it would drag the robot back to the map's edge
+      if (!line && d > p.huber) {continue;}
       const double w = (d <= p.huber ? 1.0 : p.huber / d) / sd2;
       const double J[3] = {gx, gy, -gx * (q.y - T.y) + gy * (q.x - T.x)};
       for (int a = 0; a < 3; ++a) {
         b[a] += w * J[a] * d;
         for (int c = 0; c < 3; ++c) {H[a][c] += w * J[a] * J[c];}
+      }
+    }
+    // a direction the walls barely fix (along a bare corridor): the tiny
+    // gradients there are noise in the wall normals, and over hundreds of
+    // points they would drag the robot - keep the prior there (degeneracy-
+    // aware matching, as in Zhang et al., ICRA 2016)
+    double weak_x = 0.0, weak_y = 0.0;
+    bool degenerate = false;
+    {
+      const double tr = H[0][0] + H[1][1], det = H[0][0] * H[1][1] - H[0][1] * H[1][0];
+      const double lmin = 0.5 * tr - std::sqrt(std::max(0.25 * tr * tr - det, 0.0));
+      if (lmin < p.degenerate * wp[0]) {
+        double ex = H[0][1], ey = lmin - H[0][0];
+        if (std::hypot(ex, ey) < 1e-12) {
+          ex = lmin - H[1][1];
+          ey = H[0][1];
+        }
+        const double en = std::hypot(ex, ey);
+        if (en > 1e-12) {
+          weak_x = ex / en;
+          weak_y = ey / en;
+          degenerate = true;
+        }
       }
     }
     const double e[3] = {T.x - guess.x, T.y - guess.y, wrapAngle(T.yaw - guess.yaw)};
@@ -441,6 +471,11 @@ MatchResult match(const WallGrid & map, const std::vector<P2> & cloud, const Pos
     double dx[3];
     const double nb[3] = {-b[0], -b[1], -b[2]};
     if (!solve3(H, nb, dx)) {break;}
+    if (degenerate) {
+      const double along = dx[0] * weak_x + dx[1] * weak_y;
+      dx[0] -= along * weak_x;
+      dx[1] -= along * weak_y;
+    }
     // no more than 10 cm / 6 deg a step: the field is only locally smooth
     const double sc = std::min({1.0, 0.1 / std::max(std::hypot(dx[0], dx[1]), 1e-12),
         0.1 / std::max(std::abs(dx[2]), 1e-12)});

@@ -64,7 +64,9 @@ public:
   /// Distance to the wall line through the nearest occupied cell (its mean
   /// hit and the normal of its neighbourhood; at corners to the mean hit)
   /// [m], capped at max_dist. With the gradient (d/dx, d/dy) when gx, gy are given.
-  double distance(double x, double y, double * gx = nullptr, double * gy = nullptr) const;
+  /// `line` (if given) says whether it was a wall line (false: a corner, a
+  /// wall's end, a blob - distance to a point).
+  double distance(double x, double y, double * gx = nullptr, double * gy = nullptr, bool * line = nullptr) const;
   double maxDist() const {return max_dist_;}
 
   /// ROS map_server format <path>.pgm + <path>.yaml, and <path>.walls: the
@@ -105,6 +107,7 @@ struct MatchParams
   double inlier{0.08};        // [m] counted as on a wall
   double prior_xy{0.10};      // [m] 1 sigma of the prior (the last correction)
   double prior_yaw{0.09};     // [rad]
+  double degenerate{10.0};    // walls fixing a direction less than this many priors: keep the prior there
 };
 
 struct MatchResult

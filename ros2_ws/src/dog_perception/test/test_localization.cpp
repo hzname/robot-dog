@@ -207,3 +207,32 @@ TEST(Localization, MappingWhileMovingStaysConsistent)
   EXPECT_NEAR(est.y, truth.y, 0.03);
   EXPECT_NEAR(wrapAngle(est.yaw - truth.yaw), 0.0, 0.02);
 }
+
+TEST(Localization, MappingABareCorridorDoesNotDragTheRobotBack)
+{
+  // a corridor 1.5 m wide with an end wall behind the start; the robot sees
+  // 5 m behind but only 1 m ahead (the tilted lidars look down ahead), walks
+  // 8 m with perfect dead reckoning while mapping. Wall points ahead of the
+  // mapped part used to pull it back to the map's edge: 1.4 m short in 8 m.
+  const std::vector<Seg> segs = {{{-1.0, -0.75}, {12.0, -0.75}}, {{-1.0, 0.75}, {12.0, 0.75}},
+    {{-1.0, -0.75}, {-1.0, 0.75}}};
+  WallGrid g;
+  Pose2 est;
+  for (int i = 0; i <= 80; ++i) {
+    const Pose2 truth{0.1 * i, 0.0, 0.0};
+    if (i > 0) {est = est.compose(Pose2{0.1, 0.0, 0.0});}
+    std::vector<P2> cloud;
+    for (const auto & q : view(segs, truth, 5.0, i)) {
+      if (q.x < 1.0) {cloud.push_back(q);}
+    }
+    if (g.fieldValid()) {
+      const auto r = dog_perception::match(g, cloud, est);
+      if (r.ok) {est = r.pose;}
+    }
+    std::vector<P2> w;
+    for (const auto & q : cloud) {w.push_back(est.apply(q));}
+    g.insert(w);
+    g.updateField();
+  }
+  EXPECT_NEAR(est.x, 8.0, 0.25);
+}
