@@ -114,6 +114,15 @@ struct Geometry
 /// calf runs to the contact point (robot.yaml, URDF): nothing to subtract.
 std::array<V3, 4> feetBody(const Geometry & g, const std::array<double, 12> & q, double foot_radius = 0.0);
 
+/// The legs as segments in the body frame: per leg the thigh joint, the knee
+/// and the foot (same kinematics as feetBody).
+using LegChain = std::array<V3, 3>;
+std::array<LegChain, 4> legsBody(const Geometry & g, const std::array<double, 12> & q);
+
+/// p (body frame) lies within r of a leg's thigh or calf, or of its foot:
+/// a lidar point on the robot's own leg, never the ground.
+bool onLeg(const std::array<LegChain, 4> & legs, const V3 & p, double r);
+
 /// Ground under the robot from the leg kinematics: taken when all four feet
 /// lie on one plane (four-leg support), carried with the IMU in between.
 class FeetPlane

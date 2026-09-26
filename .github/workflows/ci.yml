@@ -142,7 +142,9 @@ jobs:
         run: |
           source install/setup.bash
           ros2 launch dog_gazebo sim.launch.py headless:=true web:=false perception:=true terrain:=wall level:=80 > perc_wall.log 2>&1 &
-          ros2 run dog_gazebo perception_check --terrain wall --level 80 --seconds 20 --expect-guard > perception_wall.txt
+          # 40 s: from afar the wall reads under 70 mm, the guard crawls at it
+          # (~1 cm/s) until it reads it right at 0.3 m - 9 to 21 s in the sim
+          ros2 run dog_gazebo perception_check --terrain wall --level 80 --seconds 40 --expect-guard > perception_wall.txt
           kill %1; sleep 3
       - name: Perception - steps 30 mm, every hazard in the path found, no fall
         timeout-minutes: 8

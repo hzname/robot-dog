@@ -144,6 +144,21 @@ TEST(Core, FeetPlaneFromStanceAndImuCarry)
   double roll, pitch;
   rollPitchOfNormal(p->n, roll, pitch);
   EXPECT_NEAR(pitch, 5 * kDeg, 1e-9);
+  // the legs themselves: points on a calf are the leg, the ground ahead is not
+  const auto legs = legsBody(g, q);
+  for (int leg = 1; leg < 4; ++leg) {EXPECT_NEAR(legs[leg][2].z, feet[leg].z, 1e-9);}  // (feet[0] was raised above)
+  const V3 mid = (legs[0][1] + legs[0][2]) * 0.5;
+  EXPECT_TRUE(onLeg(legs, mid + V3{0.02, 0.0, 0.0}, 0.04));
+  EXPECT_FALSE(onLeg(legs, legs[0][2] + V3{0.10, 0.0, 0.0}, 0.04));
+  // a front leg swung forward and up: its calf reaches past the footprint
+  // filter (|x| < 0.22), still the leg
+  q[1] = -0.9;
+  q[2] = -0.6;
+  const auto up = legsBody(g, q);
+  const V3 calf_mid = (up[0][1] + up[0][2]) * 0.5;
+  EXPECT_GT(up[0][2].x, 0.22);
+  EXPECT_TRUE(onLeg(up, up[0][2] + V3{0.0, 0.0, 0.02}, 0.04));
+  EXPECT_TRUE(onLeg(up, calf_mid, 0.04));
 }
 
 TEST(Core, LidarHazardsAndElevationMap)

@@ -374,8 +374,8 @@ private:
       }
     }
     const auto feet = feetBody(geometry_, q);
-    feet_body_ = feet;
-    have_feet_body_ = true;
+    legs_body_ = legsBody(geometry_, q);
+    have_legs_body_ = true;
     const double t = stampSec(m.header.stamp);
     V3 pos;
     M3 R;
@@ -391,15 +391,8 @@ private:
     count(t0, 8);
   }
 
-  /// p (body frame) is on one of the robot's legs: over a foot, up to the body
-  bool onOwnLeg(const V3 & p) const
-  {
-    if (!have_feet_body_) {return false;}
-    for (const auto & f : feet_body_) {
-      if (std::hypot(p.x - f.x, p.y - f.y) < kLegRadius && p.z > f.z - 0.02) {return true;}
-    }
-    return false;
-  }
+  /// p (body frame) is on one of the robot's legs
+  bool onOwnLeg(const V3 & p) const {return have_legs_body_ && onLeg(legs_body_, p, kLegRadius);}
 
   void onScan(const std::string & name, const sensor_msgs::msg::LaserScan & msg)
   {
@@ -409,6 +402,7 @@ private:
     // own legs and body: nothing inside the robot's footprint
     // and the legs where they are: a front leg swung forward and up over a
     // bar reaches past the footprint and would be a tall obstacle on the map
+    // (its calf leans back to the knee: the whole leg, not a column over the foot)
     pts.erase(std::remove_if(pts.begin(), pts.end(),
       [this](const V3 & p) {return (std::abs(p.x) < 0.22 && std::abs(p.y) < 0.17) || onOwnLeg(p);}), pts.end());
     const double now = stampSec(msg.header.stamp);
@@ -643,7 +637,7 @@ private:
       // Only ahead of the front feet: what they already stand over or step
       // across (the crawl over a bar) is the crawl's, never a stop or a
       // switch to the trot under it
-      const double hw = avoider_.pathHalfWidth(), feet_x = geometry_.hip_x + kLegRadius;
+      const double hw = avoider_.pathHalfWidth(), feet_x = geometry_.hip_x + kFootReach;
       const bool tall_ahead = o.found && o.d_min > feet_x && o.lat_max > -hw && o.lat_min < hw;
       if (tall_ahead && o.d_min < 0.6) {c.gait = 0;}
       if (tall_ahead && o.d_min < guard_stop_dist_) {
@@ -738,9 +732,12 @@ private:
   std::map<std::string, int> tof_index_;
   std::map<std::string, int> gs2_seen_;
   FeetPlane feet_;
-  std::array<V3, 4> feet_body_{};
-  bool have_feet_body_{false};
-  static constexpr double kLegRadius = 0.05;  // lidar points this close over a foot are the leg
+  std::array<LegChain, 4> legs_body_{};
+  bool have_legs_body_{false};
+  // lidar points this close to a thigh or calf are the leg (links, the foot,
+  // and a swinging leg moving between the joint states and the scan)
+  static constexpr double kLegRadius = 0.04;
+  static constexpr double kFootReach = 0.05;  // a front foot swings this far ahead of its hip
   std::deque<std::pair<double, M3>> imu_hist_;
   std::optional<nav_msgs::msg::Odometry> odom_;
   std::map<std::string, Scan> scans_;

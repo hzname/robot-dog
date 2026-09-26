@@ -253,10 +253,10 @@ std::optional<RobustFit> robustPlane(const std::vector<V3> & pts, int iterations
 }
 
 // ------------------------------------------------------------------ legs
-std::array<V3, 4> feetBody(const Geometry & g, const std::array<double, 12> & q, double foot_radius)
+std::array<LegChain, 4> legsBody(const Geometry & g, const std::array<double, 12> & q)
 {
   static const int kFront[4] = {1, 1, -1, -1}, kSide[4] = {1, -1, 1, -1};
-  std::array<V3, 4> out;
+  std::array<LegChain, 4> out;
   for (int leg = 0; leg < 4; ++leg) {
     const double sd = kSide[leg];
     const V3 hip{kFront[leg] * g.hip_x, sd * g.hip_y, 0.0};
@@ -265,9 +265,36 @@ std::array<V3, 4> feetBody(const Geometry & g, const std::array<double, 12> & q,
     const M3 B = mul(A, rotRpy(0.0, q[leg * 3 + 1], 0.0));
     const V3 kn = th + mul(B, V3{0.0, 0.0, -g.thigh});
     const V3 ft = kn + mul(mul(B, rotRpy(0.0, q[leg * 3 + 2], 0.0)), V3{0.0, 0.0, -g.calf});
-    out[leg] = ft - V3{0.0, 0.0, foot_radius};
+    out[leg] = {th, kn, ft};
   }
   return out;
+}
+
+std::array<V3, 4> feetBody(const Geometry & g, const std::array<double, 12> & q, double foot_radius)
+{
+  const auto legs = legsBody(g, q);
+  std::array<V3, 4> out;
+  for (int leg = 0; leg < 4; ++leg) {out[leg] = legs[leg][2] - V3{0.0, 0.0, foot_radius};}
+  return out;
+}
+
+namespace
+{
+double segmentDistance(const V3 & a, const V3 & b, const V3 & p)
+{
+  const V3 ab = b - a, ap = p - a;
+  const double l2 = ab.dot(ab);
+  const double t = l2 > 0.0 ? std::clamp(ap.dot(ab) / l2, 0.0, 1.0) : 0.0;
+  return (p - (a + ab * t)).norm();
+}
+}  // namespace
+
+bool onLeg(const std::array<LegChain, 4> & legs, const V3 & p, double r)
+{
+  for (const auto & l : legs) {
+    if (segmentDistance(l[0], l[1], p) < r || segmentDistance(l[1], l[2], p) < r) {return true;}
+  }
+  return false;
 }
 
 bool FeetPlane::update(const std::array<V3, 4> & feet, const std::optional<M3> & R_imu)
