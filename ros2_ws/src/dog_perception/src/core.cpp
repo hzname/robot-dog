@@ -645,9 +645,17 @@ Obstacle tallObstacle(const ElevationMap & map, double x, double y, double yaw, 
         }
       }
       if (h - low <= height) {continue;}
+      // unmapped next to it, sideways (fewer points than a tall cell needs):
+      // it may go on there
+      auto unknown = [&](double l) {
+          return l < -reach || l > reach || !std::isfinite(map.maxAt(x + cs * d - sn * l, y + sn * d + cs * l));
+        };
+      const bool open_l = unknown(lat + r), open_r = unknown(lat - r);
       if (!o.found) {
-        o = {true, lat, lat, d};
+        o = {true, lat, lat, d, open_l, open_r};
       } else {
+        if (lat > o.lat_max + 1e-9) {o.open_left = open_l;} else if (lat > o.lat_max - 1e-9) {o.open_left |= open_l;}
+        if (lat < o.lat_min - 1e-9) {o.open_right = open_r;} else if (lat < o.lat_min + 1e-9) {o.open_right |= open_r;}
         o.lat_min = std::min(o.lat_min, lat);
         o.lat_max = std::max(o.lat_max, lat);
         o.d_min = std::min(o.d_min, d);
@@ -667,8 +675,10 @@ double Avoider::update(bool blocked, const Obstacle & o, double x, double y, dou
   const double clear = p_.half_width + 0.5 * p_.margin;
   const bool in_path = o.found && o.lat_max > -clear && o.lat_min < clear;
   if ((state_ == "idle" || state_ == "back") && blocked && o.found) {
-    const double left = o.lat_max + p_.half_width + p_.margin;     // shift needed to pass on the left
-    const double right = -(o.lat_min - p_.half_width - p_.margin);  // ... on the right
+    // shift needed to pass on the left / right (not where it runs into
+    // unmapped ground: a wall seen in part is not narrow)
+    const double left = o.open_left ? 1e9 : o.lat_max + p_.half_width + p_.margin;
+    const double right = o.open_right ? 1e9 : -(o.lat_min - p_.half_width - p_.margin);
     if (std::min(left, right) <= p_.max_shift) {
       if (state_ == "idle") {
         x0_ = x;

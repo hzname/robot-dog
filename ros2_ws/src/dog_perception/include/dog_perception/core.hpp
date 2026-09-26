@@ -267,6 +267,8 @@ struct Obstacle
   bool found{false};
   double lat_min{0.0}, lat_max{0.0};  // lateral extent [m], + left
   double d_min{0.0};                  // nearest distance ahead [m]
+  // an end runs into unmapped ground: its width that side is not known
+  bool open_left{false}, open_right{false};
 };
 Obstacle tallObstacle(const ElevationMap & map, double x, double y, double yaw, double ground_z,
   double height = 0.07, double d0 = 0.05, double d1 = 1.0, double reach = 0.8);
@@ -287,6 +289,10 @@ public:
   /// Returns vy [m/s] (+ left) and the state: idle | aside | past | back.
   double update(bool blocked, const Obstacle & o, double x, double y, double yaw);
   const std::string & state() const {return state_;}
+  /// Half width of the path the obstacle must stay out of: narrower by half
+  /// the margin once it is beside it ("past"), the same half as "aside" goes
+  /// beyond it - a few degrees of heading must not stop it again.
+  double pathHalfWidth() const {return state_ == "past" ? p_.half_width - 0.5 * p_.margin : p_.half_width;}
   double offset() const {return offset_;}
 
 private:

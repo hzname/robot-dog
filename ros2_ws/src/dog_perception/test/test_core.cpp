@@ -384,6 +384,43 @@ TEST(Core, GoesRoundAnObstacleAndBackToItsLine)
   EXPECT_LT(max_y, 0.45);
 }
 
+TEST(Core, AWanderingHeadingDoesNotStopItBesideTheBlock)
+{
+  // the sim: beside a 150 mm block, the heading a few degrees towards it, the
+  // corner of the block came back into the 0.20 m path and the map stopped
+  // the robot for good
+  ElevationMap map(3.0, 0.02);
+  map.recenter(1.0, 0.0);
+  std::vector<V3> pts;
+  for (double x = -0.4; x < 2.4; x += 0.01) {
+    for (double y = -1.4; y < 1.4; y += 0.01) {
+      const bool block = x > 1.0 && x < 1.2 && std::abs(y) < 0.1;
+      // the map smears its sides by 2 cm, taller than climb_max there too
+      const bool smear = x > 1.0 && x < 1.2 && std::abs(y) < 0.12;
+      pts.push_back({x, y, block ? 0.15 : (smear ? 0.10 : 0.0)});
+    }
+  }
+  map.insert(pts);
+  Avoider a;
+  double x = 0.7, y = 0.0;
+  const double dt = 0.05;
+  bool passed = false;
+  for (int k = 0; k < 3000 && !(passed && a.state() == "idle"); ++k) {
+    // it goes round on the left and turns towards the block (right, 7 degrees: the sim saw 7.4) once past it
+    const double yaw = a.state() == "past" ? -0.12 : 0.0;
+    const Obstacle o = tallObstacle(map, x, y, yaw, 0.0, 0.09, -0.35);
+    // the node: stop while the block is in the path (as narrow as the avoider says) and near
+    const double hw = a.pathHalfWidth();
+    const bool blocked = o.found && o.d_min > 0.0 && o.lat_max > -hw && o.lat_min < hw && o.d_min < 0.30;
+    const double vy = a.update(blocked, o, x, y, yaw);
+    x += (blocked || a.state() == "aside" ? 0.0 : 0.05) * dt;
+    y += vy * dt;
+    passed = passed || x > 1.6;
+  }
+  EXPECT_TRUE(passed) << "stuck at x " << x << " y " << y << " (" << a.state() << ")";
+  EXPECT_EQ(a.state(), "idle");
+}
+
 TEST(Core, ABlockSeenFromTheSideIsTall)
 {
   // lidar points on the near face of a 150 mm block only: the mean of the
@@ -433,4 +470,40 @@ TEST(Core, DoesNotTryToGoRoundAWideWall)
   const Obstacle o = tallObstacle(map, 0.75, 0.0, 0.0, 0.0, 0.07, -0.35);
   EXPECT_DOUBLE_EQ(a.update(true, o, 0.75, 0.0, 0.0), 0.0);
   EXPECT_EQ(a.state(), "idle");
+}
+
+TEST(Core, AWallSeenInPartIsNotNarrow)
+{
+  // the sim: an 80 mm wall, 0.8 m wide, only its middle mapped yet - the
+  // mapped part alone would be narrow enough to go round
+  ElevationMap map(3.0, 0.02);
+  map.recenter(1.0, 0.0);
+  std::vector<V3> pts;
+  for (double x = -0.4; x < 1.3; x += 0.01) {
+    for (double y = -0.25; y < 0.25; y += 0.01) {
+      pts.push_back({x, y, x > 1.0 && x < 1.1 ? 0.08 : 0.0});
+    }
+  }
+  map.insert(pts);
+  const Obstacle o = tallObstacle(map, 0.75, 0.0, 0.0, 0.0, 0.07, -0.35);
+  ASSERT_TRUE(o.found);
+  EXPECT_TRUE(o.open_left);
+  EXPECT_TRUE(o.open_right);
+  Avoider a;
+  EXPECT_DOUBLE_EQ(a.update(true, o, 0.75, 0.0, 0.0), 0.0);
+  EXPECT_EQ(a.state(), "idle");
+  // a block with the ground mapped on both sides: closed ends
+  ElevationMap m2(3.0, 0.02);
+  m2.recenter(1.0, 0.0);
+  pts.clear();
+  for (double x = -0.4; x < 1.3; x += 0.01) {
+    for (double y = -0.6; y < 0.6; y += 0.01) {
+      pts.push_back({x, y, x > 1.0 && x < 1.1 && std::abs(y) < 0.1 ? 0.15 : 0.0});
+    }
+  }
+  m2.insert(pts);
+  const Obstacle b = tallObstacle(m2, 0.75, 0.0, 0.0, 0.0, 0.07, -0.35);
+  ASSERT_TRUE(b.found);
+  EXPECT_FALSE(b.open_left);
+  EXPECT_FALSE(b.open_right);
 }

@@ -195,7 +195,6 @@ public:
     g.feet = {{{geometry_.hip_x, fy}, {geometry_.hip_x, -fy}, {-geometry_.hip_x, fy}, {-geometry_.hip_x, -fy}}};
     guard_ = HazardGuard(g);
     guard_stop_dist_ = g.stop_dist;
-    guard_half_width_ = g.half_width;
     climb_max_ = g.climb_max;
     // going round what is too tall to cross
     avoid_on_ = getB("perception.guard_avoid", true);
@@ -625,15 +624,21 @@ private:
       // The map sees a tall thing in the path: no crawl at it (a lidar jump
       // on its face, seen from afar, may read under climb_max), and stop at
       // stop_dist like any too tall edge
-      const bool tall_ahead = o.found && o.d_min > 0.0 && o.lat_max > -guard_half_width_ &&
-        o.lat_min < guard_half_width_;
+      // (going round it: the path narrows by half the side margin, or the
+      // heading wandering 3 degrees brings its corner back into the path)
+      const double hw = avoider_.pathHalfWidth();
+      const bool tall_ahead = o.found && o.d_min > 0.0 && o.lat_max > -hw && o.lat_min < hw;
       if (tall_ahead && o.d_min < 0.6) {c.gait = 0;}
       if (tall_ahead && o.d_min < guard_stop_dist_) {
         c.max_vx = 0.0;
         c.state = "stop";
         c.d = o.d_min;
       }
-      vy = avoider_.update(c.state == "stop", o, pos.x, pos.y, yaw);
+      // How wide it is, once stopped: taller than the edge rule's climb_max,
+      // no noise margin - an 80 mm wall is under climb_max + the margin, and
+      // its noisy cells alone look like a narrow block to go round
+      const Obstacle extent = tallObstacle(*map_, pos.x, pos.y, yaw, pos.z - stand_height_, climb_max_, -0.35, 1.0, 0.8);
+      vy = avoider_.update(c.state == "stop", extent.found ? extent : o, pos.x, pos.y, yaw);
       if (avoider_.state() != "idle") {
         // going round: in the trot (the crawl sidesteps at ~1 cm/s and turns
         // away with it), and no forward step while it is still in the way
@@ -725,7 +730,7 @@ private:
   std::array<double, 17> stats_{};
   bool guard_on_{true};
   HazardGuard guard_;
-  double guard_stop_dist_{0.30}, guard_half_width_{0.20};
+  double guard_stop_dist_{0.30};
   static constexpr double kMapTallMargin = 0.02;
 
   std::vector<rclcpp::SubscriptionBase::SharedPtr> subs_;
