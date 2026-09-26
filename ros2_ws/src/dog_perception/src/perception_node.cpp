@@ -667,13 +667,24 @@ private:
         c.state = "stop";
         c.d = o.d_min;
       }
-      // How wide it is, to go round it: by the cells' mean heights, well
-      // above what the crawl climbs. What rises only a little above
+      // What to go round: something whose top, by the cells' mean heights,
+      // is well above what the crawl climbs. What rises only a little above
       // climb_max (an 80 mm wall: means 78-84 mm, its highest points noisy)
       // is mapped too unreliably to size - a fragment of it looked narrow,
       // its end unmapped looked passed, and the robot walked into it; the
-      // guard just stops at that. A 150 mm block is sized whole.
-      const Obstacle wide = tallObstacle(*map_, pos.x, pos.y, yaw, pos.z - stand_height_, climb_max_ + kAvoidMargin, -0.35, 1.0, 0.8, false);
+      // guard just stops at that. How wide: the means see a block's top
+      // only in part from 0.35 m (few points on it that far), so the width
+      // is that of the run of highest points over climb_max + 20 mm that
+      // overlaps it - its face, seen whole; a noisy cell off to the side is
+      // no part of it.
+      Obstacle wide = tallObstacle(*map_, pos.x, pos.y, yaw, pos.z - stand_height_, climb_max_ + kAvoidMargin, -0.35, 1.0, 0.8, false);
+      if (wide.found && o.found && o.lat_min <= wide.lat_max && o.lat_max >= wide.lat_min) {
+        const Obstacle top = wide;
+        wide = o;
+        wide.lat_min = std::min(wide.lat_min, top.lat_min);
+        wide.lat_max = std::max(wide.lat_max, top.lat_max);
+        wide.d_min = std::min(wide.d_min, top.d_min);
+      }
       const std::string before = avoider_.state();
       vy = avoider_.update(c.state == "stop" && wide.found && wide.d_min > feet_x, wide, pos.x, pos.y, yaw);
       if (avoider_.state() != before) {
