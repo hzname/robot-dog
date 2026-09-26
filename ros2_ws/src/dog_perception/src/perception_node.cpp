@@ -625,10 +625,22 @@ private:
     // behind the rear feet to 1 m ahead
     double vy = 0.0;
     if (avoid_on_ && upright()) {
-      const Obstacle o = tallObstacle(*map_, pos.x, pos.y, yaw, pos.z - stand_height_, climb_max_ + kMapTallMargin, -0.35, 1.0, 0.8);
+      Obstacle o = tallObstacle(*map_, pos.x, pos.y, yaw, pos.z - stand_height_, climb_max_ + kMapTallMargin, -0.35, 1.0, 0.8);
       // (the map's highest points carry the lidar noise: 2 cm more than the
       // edge rule, or a 60 mm bar counts as too tall; the map is the backstop
       // for gross misreads - a 150 mm block's face read as 60 mm from afar)
+      // ... or its top above what the crawl climbs, by the cells' mean
+      // heights: an 80 mm wall the edge rule read under 70 mm all the way (CI)
+      // was crawled into; the means read its top 78-84 mm, a 60 mm bar's
+      // under 65
+      const Obstacle top = tallObstacle(*map_, pos.x, pos.y, yaw, pos.z - stand_height_, climb_max_ + kMapMeanMargin, -0.35, 1.0, 0.8, false);
+      if (top.found && !o.found) {
+        o = top;
+      } else if (top.found) {
+        o.lat_min = std::min(o.lat_min, top.lat_min);
+        o.lat_max = std::max(o.lat_max, top.lat_max);
+        o.d_min = std::min(o.d_min, top.d_min);
+      }
       // The map sees a tall thing in the path: no crawl at it (a lidar jump
       // on its face, seen from afar, may read under climb_max), and stop at
       // stop_dist like any too tall edge
@@ -762,6 +774,7 @@ private:
   HazardGuard guard_;
   double guard_stop_dist_{0.30};
   static constexpr double kMapTallMargin = 0.02;
+  static constexpr double kMapMeanMargin = 0.005;  // over climb_max, by the cells' mean heights
 
   std::vector<rclcpp::SubscriptionBase::SharedPtr> subs_;
   std::vector<rclcpp::TimerBase::SharedPtr> timers_;

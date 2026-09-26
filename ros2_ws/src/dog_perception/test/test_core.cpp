@@ -538,3 +538,30 @@ TEST(Core, AWallSeenInPartIsNotNarrow)
   EXPECT_FALSE(b.open_left);
   EXPECT_FALSE(b.open_right);
 }
+
+TEST(Core, ATopAboveTheCrawlByItsMeanHeight)
+{
+  // the lidars read a flat top +-2 cm: the highest points of a 60 mm bar
+  // reach 80 mm, those of an 80 mm wall 100 mm; the cells' means are the tops
+  auto mapWith = [](double top, double depth) {
+      ElevationMap map(3.0, 0.02);
+      map.recenter(1.0, 0.0);
+      std::vector<V3> pts;
+      int k = 0;
+      for (double x = -0.4; x < 1.3; x += 0.005) {
+        for (double y = -0.6; y < 0.6; y += 0.005) {
+          const bool on = x > 1.0 && x < 1.0 + depth && std::abs(y) < 0.4;
+          pts.push_back({x, y, on ? top + (++k % 2 ? 0.02 : -0.02) : 0.0});
+        }
+      }
+      map.insert(pts);
+      return map;
+    };
+  const auto wall = mapWith(0.08, 0.10), bar = mapWith(0.06, 0.04);
+  EXPECT_TRUE(tallObstacle(wall, 0.6, 0.0, 0.0, 0.0, 0.075, -0.35, 1.0, 0.8, false).found);
+  EXPECT_FALSE(tallObstacle(bar, 0.6, 0.0, 0.0, 0.0, 0.075, -0.35, 1.0, 0.8, false).found);
+  // by the highest points, 2 cm over climb_max: the wall, and the bar's
+  // noise stays under it
+  EXPECT_TRUE(tallObstacle(wall, 0.6, 0.0, 0.0, 0.0, 0.09).found);
+  EXPECT_FALSE(tallObstacle(bar, 0.6, 0.0, 0.0, 0.0, 0.09).found);
+}

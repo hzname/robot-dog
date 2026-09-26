@@ -653,15 +653,18 @@ double ElevationMap::heightAt(double x, double y) const
 }
 
 Obstacle tallObstacle(const ElevationMap & map, double x, double y, double yaw, double ground_z,
-  double height, double d0, double d1, double reach)
+  double height, double d0, double d1, double reach, bool highest)
 {
   Obstacle o;
   const double cs = std::cos(yaw), sn = std::sin(yaw), r = map.resolution();
   for (double d = d0; d <= d1; d += r) {
     for (double lat = -reach; lat <= reach; lat += r) {
       const double cx = x + cs * d - sn * lat, cy = y + sn * d + cs * lat;
-      const double h = map.maxAt(cx, cy);
-      if (!std::isfinite(h) || h - ground_z <= height) {continue;}
+      // (the mean as well only over the points a highest point needs: one
+      // noisy point is no mean)
+      const double hi = map.maxAt(cx, cy);
+      const double h = highest ? hi : map.heightAt(cx, cy);
+      if (!std::isfinite(hi) || h - ground_z <= height) {continue;}
       // tall over its surroundings too (a jump, not a height): a staircase is
       // high above the floor under the robot, but every riser is a step
       double low = h;

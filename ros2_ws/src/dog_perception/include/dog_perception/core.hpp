@@ -279,8 +279,10 @@ struct Obstacle
   // an end runs into unmapped ground: its width that side is not known
   bool open_left{false}, open_right{false};
 };
+/// highest: by the cells' highest points (sees a face, carries the lidar
+/// noise), else by their mean heights (a flat top, read to a few mm).
 Obstacle tallObstacle(const ElevationMap & map, double x, double y, double yaw, double ground_z,
-  double height = 0.07, double d0 = 0.05, double d1 = 1.0, double reach = 0.8);
+  double height = 0.07, double d0 = 0.05, double d1 = 1.0, double reach = 0.8, bool highest = true);
 
 /// Going round an obstacle that cannot be crossed: sideways until the path
 /// (half_width) is clear of it, forward past it, then back onto the line

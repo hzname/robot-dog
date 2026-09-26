@@ -525,7 +525,7 @@ def main():
                 if w.get('touched', True):
                     why.append(f"touched the wall (front feet {w.get('front_feet_to_wall_m')} m)")
             ok = not why
-            print(('PASS' if ok else 'FAIL') + ': guard ' + ('; '.join(why) or f'{g}'))
+            print(('PASS' if ok else 'FAIL') + ': guard ' + ('; '.join(why) + f' | {g}' if why else f'{g}'))
         if args.trace:
             with open(args.trace, 'w') as f:
                 json.dump({'terrain': args.terrain, 'level': args.level, 'scores': res, 'trace': chk.trace,
