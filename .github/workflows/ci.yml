@@ -138,32 +138,44 @@ jobs:
         timeout-minutes: 8
         run: |
           source install/setup.bash
+          # its own ROS domain and gz partition: a simulation left over from the
+          # step before (slow to die on a slow runner) mixed its odometry in
+          export ROS_DOMAIN_ID=71 GZ_PARTITION=perception1
           ros2 launch dog_gazebo sim.launch.py headless:=true web:=false perception:=true > perc_flat.log 2>&1 &
           ros2 run dog_gazebo perception_check --terrain flat --seconds 12 --expect --expect-guard | tee perception_flat.txt | tail -n 25 || { echo '--- full report'; grep -v '^\[' perception_flat.txt | head -n 200; echo '--- guard'; grep -E 'guard:|avoid:|tof|gs2' perc_flat.log | sed 's/.*\]: //' | head -n 60; exit 1; }
-          kill %1; sleep 3
+          kill %1; sleep 3; pkill -f "gz sim" || true
       - name: Hazard guard - stops before an 80 mm wall without touching it
         timeout-minutes: 8
         run: |
           source install/setup.bash
+          # its own ROS domain and gz partition: a simulation left over from the
+          # step before (slow to die on a slow runner) mixed its odometry in
+          export ROS_DOMAIN_ID=72 GZ_PARTITION=perception2
           ros2 launch dog_gazebo sim.launch.py headless:=true web:=false perception:=true terrain:=wall level:=80 > perc_wall.log 2>&1 &
           # 40 s: from afar the wall reads under 70 mm, the guard crawls at it
           # (~1 cm/s) until it reads it right at 0.3 m - 9 to 21 s of simulated time
           ros2 run dog_gazebo perception_check --terrain wall --level 80 --seconds 40 --expect-guard | tee perception_wall.txt | tail -n 25 || { echo '--- full report'; grep -v '^\[' perception_wall.txt | head -n 200; echo '--- guard'; grep -E 'guard:|avoid:|tof|gs2' perc_wall.log | sed 's/.*\]: //' | head -n 60; exit 1; }
-          kill %1; sleep 3
+          kill %1; sleep 3; pkill -f "gz sim" || true
       - name: Perception - steps 30 mm, every hazard in the path found, no fall
         timeout-minutes: 8
         run: |
           source install/setup.bash
+          # its own ROS domain and gz partition: a simulation left over from the
+          # step before (slow to die on a slow runner) mixed its odometry in
+          export ROS_DOMAIN_ID=73 GZ_PARTITION=perception3
           ros2 launch dog_gazebo sim.launch.py headless:=true web:=false perception:=true terrain:=steps level:=30 > perc_steps.log 2>&1 &
           ros2 run dog_gazebo perception_check --terrain steps --level 30 --seconds 45 --expect --expect-guard | tee perception_steps.txt | tail -n 25 || { echo '--- full report'; grep -v '^\[' perception_steps.txt | head -n 200; echo '--- guard'; grep -E 'guard:|avoid:|tof|gs2' perc_steps.log | sed 's/.*\]: //' | head -n 60; exit 1; }
-          kill %1
+          kill %1; sleep 3; pkill -f "gz sim" || true
       - name: Greeting - kneels, paws up, stands up again, no fall
         timeout-minutes: 8
         run: |
           source install/setup.bash
+          # its own ROS domain and gz partition: a simulation left over from the
+          # step before (slow to die on a slow runner) mixed its odometry in
+          export ROS_DOMAIN_ID=74 GZ_PARTITION=perception4
           ros2 launch dog_gazebo sim.launch.py headless:=true web:=false perception:=true > greet.log 2>&1 &
           ros2 run dog_gazebo perception_check --terrain flat --seconds 40 --greet --expect-guard | tee perception_greet.txt | tail -n 25 || { echo '--- full report'; grep -v '^\[' perception_greet.txt | head -n 200; echo '--- guard'; grep -E 'guard:|avoid:|tof|gs2' greet.log | sed 's/.*\]: //' | head -n 60; exit 1; }
-          kill %1; sleep 3
+          kill %1; sleep 3; pkill -f "gz sim" || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
