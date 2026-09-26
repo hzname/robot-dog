@@ -374,6 +374,8 @@ private:
       }
     }
     const auto feet = feetBody(geometry_, q);
+    feet_body_ = feet;
+    have_feet_body_ = true;
     const double t = stampSec(m.header.stamp);
     V3 pos;
     M3 R;
@@ -389,14 +391,26 @@ private:
     count(t0, 8);
   }
 
+  /// p (body frame) is on one of the robot's legs: over a foot, up to the body
+  bool onOwnLeg(const V3 & p) const
+  {
+    if (!have_feet_body_) {return false;}
+    for (const auto & f : feet_body_) {
+      if (std::hypot(p.x - f.x, p.y - f.y) < kLegRadius && p.z > f.z - 0.02) {return true;}
+    }
+    return false;
+  }
+
   void onScan(const std::string & name, const sensor_msgs::msg::LaserScan & msg)
   {
     const auto t0 = now_ms();
     auto pts = scanToBody(mounts_.at(name), msg.ranges, msg.angle_min, msg.angle_increment,
       msg.range_min, msg.range_max);
     // own legs and body: nothing inside the robot's footprint
+    // and the legs where they are: a front leg swung forward and up over a
+    // bar reaches past the footprint and would be a tall obstacle on the map
     pts.erase(std::remove_if(pts.begin(), pts.end(),
-      [](const V3 & p) {return std::abs(p.x) < 0.22 && std::abs(p.y) < 0.17;}), pts.end());
+      [this](const V3 & p) {return (std::abs(p.x) < 0.22 && std::abs(p.y) < 0.17) || onOwnLeg(p);}), pts.end());
     const double now = stampSec(msg.header.stamp);
     const auto R_now = R_at(now);
     scans_[name] = {now, pts, R_now};
@@ -626,8 +640,11 @@ private:
       // stop_dist like any too tall edge
       // (going round it: the path narrows by half the side margin, or the
       // heading wandering 3 degrees brings its corner back into the path)
-      const double hw = avoider_.pathHalfWidth();
-      const bool tall_ahead = o.found && o.d_min > 0.0 && o.lat_max > -hw && o.lat_min < hw;
+      // Only ahead of the front feet: what they already stand over or step
+      // across (the crawl over a bar) is the crawl's, never a stop or a
+      // switch to the trot under it
+      const double hw = avoider_.pathHalfWidth(), feet_x = geometry_.hip_x + kLegRadius;
+      const bool tall_ahead = o.found && o.d_min > feet_x && o.lat_max > -hw && o.lat_min < hw;
       if (tall_ahead && o.d_min < 0.6) {c.gait = 0;}
       if (tall_ahead && o.d_min < guard_stop_dist_) {
         c.max_vx = 0.0;
@@ -638,7 +655,8 @@ private:
       // no noise margin - an 80 mm wall is under climb_max + the margin, and
       // its noisy cells alone look like a narrow block to go round
       const Obstacle extent = tallObstacle(*map_, pos.x, pos.y, yaw, pos.z - stand_height_, climb_max_, -0.35, 1.0, 0.8);
-      vy = avoider_.update(c.state == "stop", extent.found ? extent : o, pos.x, pos.y, yaw);
+      const Obstacle & wide = extent.found ? extent : o;
+      vy = avoider_.update(c.state == "stop" && wide.d_min > feet_x, wide, pos.x, pos.y, yaw);
       if (avoider_.state() != "idle") {
         // going round: in the trot (the crawl sidesteps at ~1 cm/s and turns
         // away with it), and no forward step while it is still in the way
@@ -720,6 +738,9 @@ private:
   std::map<std::string, int> tof_index_;
   std::map<std::string, int> gs2_seen_;
   FeetPlane feet_;
+  std::array<V3, 4> feet_body_{};
+  bool have_feet_body_{false};
+  static constexpr double kLegRadius = 0.05;  // lidar points this close over a foot are the leg
   std::deque<std::pair<double, M3>> imu_hist_;
   std::optional<nav_msgs::msg::Odometry> odom_;
   std::map<std::string, Scan> scans_;
