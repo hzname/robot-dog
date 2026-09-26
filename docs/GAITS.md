@@ -88,12 +88,19 @@
 
 ## Как повторить
 
+Каждому миру — свой запуск симулятора (мир задаётся при запуске):
+
 ```bash
-# лестница 50 мм, брус 60 мм, блок 150 мм (обход), приветствие
-ros2 launch dog_gazebo sim.launch.py headless:=true web:=false perception:=true terrain:=stairs level:=50 &
-ros2 run dog_gazebo perception_check --terrain stairs --level 50 --seconds 420 --expect-guard --trace stairs50.json
-ros2 run dog_gazebo perception_check --terrain bar --level 60 --seconds 200 --expect-guard --trace bar60.json      # мир bar
-ros2 run dog_gazebo perception_check --terrain block --level 150 --seconds 200 --expect-guard --trace block150.json  # мир block
-ros2 run dog_gazebo perception_check --terrain flat --seconds 40 --greet --expect-guard --trace greet.json
+# мир и проверка: terrain / level / сколько секунд идти
+run() {
+  ros2 launch dog_gazebo sim.launch.py headless:=true web:=false perception:=true terrain:=$1 level:=$2 &
+  ros2 run dog_gazebo perception_check --terrain $1 --level $2 --seconds $3 --expect-guard --trace $1$2.json "${@:4}"
+  kill %1; sleep 3
+}
+run stairs 50 420   # лестница 50 мм: ползание
+run bar 60 300      # брус 60 мм: ползание
+run block 150 200   # блок 150 мм: объезд
+run wall 80 30      # стена 80 мм: стоп, без объезда
+run flat 0 40 --greet  # приветствие
 python3 tools/sim_video/perception_video.py stairs50.json stairs50.mp4 --title "Лестница 50 мм"
 ```

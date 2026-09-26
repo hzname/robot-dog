@@ -143,7 +143,7 @@ public:
     const double map_size = getD("perception.map_size", 3.0);
     const double map_res = getD("perception.map_resolution", 0.02);
     gs2_thr_ = getD("perception.gs2_threshold", 0.012);
-    gs2_confirm_ = getI("perception.gs2_confirm", 3);
+    gs2_confirm_ = getI("perception.gs2_confirm", 8);
     // whole line off the leg plane: 15 mm gave false reports on a flat floor
     gs2_plane_thr_ = getD("perception.gs2_plane_threshold", 0.02);
     // the GS2 line is 0.14 m ahead of the front feet: the leg plane is exact
@@ -195,7 +195,6 @@ public:
     g.feet = {{{geometry_.hip_x, fy}, {geometry_.hip_x, -fy}, {-geometry_.hip_x, fy}, {-geometry_.hip_x, -fy}}};
     guard_ = HazardGuard(g);
     guard_stop_dist_ = g.stop_dist;
-    guard_half_width_ = g.half_width;
     climb_max_ = g.climb_max;
     // going round what is too tall to cross
     avoid_on_ = getB("perception.guard_avoid", true);
@@ -375,6 +374,8 @@ private:
       }
     }
     const auto feet = feetBody(geometry_, q);
+    legs_body_ = legsBody(geometry_, q);
+    have_legs_body_ = true;
     const double t = stampSec(m.header.stamp);
     V3 pos;
     M3 R;
@@ -390,14 +391,20 @@ private:
     count(t0, 8);
   }
 
+  /// p (body frame) is on one of the robot's legs
+  bool onOwnLeg(const V3 & p) const {return have_legs_body_ && onLeg(legs_body_, p, kLegRadius);}
+
   void onScan(const std::string & name, const sensor_msgs::msg::LaserScan & msg)
   {
     const auto t0 = now_ms();
     auto pts = scanToBody(mounts_.at(name), msg.ranges, msg.angle_min, msg.angle_increment,
       msg.range_min, msg.range_max);
     // own legs and body: nothing inside the robot's footprint
+    // and the legs where they are: a front leg swung forward and up over a
+    // bar reaches past the footprint and would be a tall obstacle on the map
+    // (its calf leans back to the knee: the whole leg, not a column over the foot)
     pts.erase(std::remove_if(pts.begin(), pts.end(),
-      [](const V3 & p) {return std::abs(p.x) < 0.22 && std::abs(p.y) < 0.17;}), pts.end());
+      [this](const V3 & p) {return (std::abs(p.x) < 0.22 && std::abs(p.y) < 0.17) || onOwnLeg(p);}), pts.end());
     const double now = stampSec(msg.header.stamp);
     const auto R_now = R_at(now);
     scans_[name] = {now, pts, R_now};
@@ -618,22 +625,73 @@ private:
     // behind the rear feet to 1 m ahead
     double vy = 0.0;
     if (avoid_on_ && upright()) {
-      const Obstacle o = tallObstacle(*map_, pos.x, pos.y, yaw, pos.z - stand_height_, climb_max_ + kMapTallMargin, -0.35, 1.0, 0.8);
+      Obstacle o = tallObstacle(*map_, pos.x, pos.y, yaw, pos.z - stand_height_, climb_max_ + kMapTallMargin, -0.35, 1.0, 0.8);
       // (the map's highest points carry the lidar noise: 2 cm more than the
       // edge rule, or a 60 mm bar counts as too tall; the map is the backstop
       // for gross misreads - a 150 mm block's face read as 60 mm from afar)
+      // ... or its top above what the crawl climbs, by the cells' mean
+      // heights: an 80 mm wall the edge rule read under 70 mm all the way (CI)
+      // was crawled into; the means read its top 78-84 mm, a 60 mm bar's
+      // under 65
+      const Obstacle top = tallObstacle(*map_, pos.x, pos.y, yaw, pos.z - stand_height_, climb_max_ + kMapMeanMargin, -0.35, 1.0, 0.8, false);
+      if (top.found && !o.found) {
+        o = top;
+      } else if (top.found) {
+        o.lat_min = std::min(o.lat_min, top.lat_min);
+        o.lat_max = std::max(o.lat_max, top.lat_max);
+        o.d_min = std::min(o.d_min, top.d_min);
+      }
       // The map sees a tall thing in the path: no crawl at it (a lidar jump
       // on its face, seen from afar, may read under climb_max), and stop at
       // stop_dist like any too tall edge
-      const bool tall_ahead = o.found && o.d_min > 0.0 && o.lat_max > -guard_half_width_ &&
-        o.lat_min < guard_half_width_;
+      // (going round it: the path narrows by half the side margin, or the
+      // heading wandering 3 degrees brings its corner back into the path)
+      // Only ahead of the front feet: what they already stand over or step
+      // across (the crawl over a bar) is the crawl's, never a stop or a
+      // switch to the trot under it
+      const double hw = avoider_.pathHalfWidth(), feet_x = geometry_.hip_x + kFootReach;
+      const bool tall_now = o.found && o.d_min > feet_x && o.lat_max > -hw && o.lat_min < hw;
+      // and for a while: one noisy peak on a 60 mm bar read as tall for a
+      // tick, the robot stood on four feet, switched to the trot and trotted
+      // onto the bar when the crawl came back
+      const double t_now = now().seconds();
+      if (!tall_now) {
+        tall_since_ = kNaN;
+      } else if (!std::isfinite(tall_since_)) {
+        tall_since_ = t_now;
+      }
+      const bool tall_ahead = tall_now && t_now - tall_since_ >= kTallConfirm;
       if (tall_ahead && o.d_min < 0.6) {c.gait = 0;}
       if (tall_ahead && o.d_min < guard_stop_dist_) {
         c.max_vx = 0.0;
         c.state = "stop";
         c.d = o.d_min;
       }
-      vy = avoider_.update(c.state == "stop", o, pos.x, pos.y, yaw);
+      // What to go round: something whose top, by the cells' mean heights,
+      // is well above what the crawl climbs. What rises only a little above
+      // climb_max (an 80 mm wall: means 78-84 mm, its highest points noisy)
+      // is mapped too unreliably to size - a fragment of it looked narrow,
+      // its end unmapped looked passed, and the robot walked into it; the
+      // guard just stops at that. How wide: the means see a block's top
+      // only in part from 0.35 m (few points on it that far), so the width
+      // is that of the run of highest points over climb_max + 20 mm that
+      // overlaps it - its face, seen whole; a noisy cell off to the side is
+      // no part of it.
+      Obstacle wide = tallObstacle(*map_, pos.x, pos.y, yaw, pos.z - stand_height_, climb_max_ + kAvoidMargin, -0.35, 1.0, 0.8, false);
+      if (wide.found && o.found && o.lat_min <= wide.lat_max && o.lat_max >= wide.lat_min) {
+        const Obstacle top = wide;
+        wide = o;
+        wide.lat_min = std::min(wide.lat_min, top.lat_min);
+        wide.lat_max = std::max(wide.lat_max, top.lat_max);
+        wide.d_min = std::min(wide.d_min, top.d_min);
+      }
+      const std::string before = avoider_.state();
+      vy = avoider_.update(c.state == "stop" && wide.found && wide.d_min > feet_x, wide, pos.x, pos.y, yaw);
+      if (avoider_.state() != before) {
+        RCLCPP_INFO(get_logger(), "avoid: %s -> %s (offset %.2f m, needs %.2f m; obstacle %.2f..%.2f m%s%s, %.2f m ahead)",
+          before.c_str(), avoider_.state().c_str(), avoider_.offset(), avoider_.needed(), wide.lat_min, wide.lat_max,
+          wide.open_right ? ", open right" : "", wide.open_left ? ", open left" : "", wide.d_min);
+      }
       if (avoider_.state() != "idle") {
         // going round: in the trot (the crawl sidesteps at ~1 cm/s and turns
         // away with it), and no forward step while it is still in the way
@@ -709,12 +767,20 @@ private:
   bool avoid_on_{true};
   Avoider avoider_;
   rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr pub_terrain_;
-  int gs2_confirm_{3};
+  int gs2_confirm_{8};
   std::string reference_, gs2_reference_, state_, guard_state_;
   std::map<std::string, TofDetector> tof_;
   std::map<std::string, int> tof_index_;
   std::map<std::string, int> gs2_seen_;
   FeetPlane feet_;
+  std::array<LegChain, 4> legs_body_{};
+  bool have_legs_body_{false};
+  // lidar points this close to a thigh or calf are the leg (links, the foot,
+  // and a swinging leg moving between the joint states and the scan)
+  static constexpr double kLegRadius = 0.04;
+  static constexpr double kFootReach = 0.05;  // a front foot swings this far ahead of its hip
+  static constexpr double kTallConfirm = 0.6;  // [s] the map's tall obstacle holds this long before it acts
+  double tall_since_{kNaN};
   std::deque<std::pair<double, M3>> imu_hist_;
   std::optional<nav_msgs::msg::Odometry> odom_;
   std::map<std::string, Scan> scans_;
@@ -725,8 +791,10 @@ private:
   std::array<double, 17> stats_{};
   bool guard_on_{true};
   HazardGuard guard_;
-  double guard_stop_dist_{0.30}, guard_half_width_{0.20};
+  double guard_stop_dist_{0.30};
   static constexpr double kMapTallMargin = 0.02;
+  static constexpr double kMapMeanMargin = 0.005;  // over climb_max, by the cells' mean heights
+  static constexpr double kAvoidMargin = 0.03;  // ... to size an obstacle to go round
 
   std::vector<rclcpp::SubscriptionBase::SharedPtr> subs_;
   std::vector<rclcpp::TimerBase::SharedPtr> timers_;

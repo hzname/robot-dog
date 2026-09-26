@@ -53,10 +53,11 @@ MIN_BODY_HEIGHT = 0.108
 
 class WalkCheck:
     def __init__(self, kind='flat', level=0.0, min_ratio=0.4, max_tilt=20.0, seconds=5.0,
-                 record=False):
+                 record=False, backward_ratio=None):
         self.normal = np.array(terrain.normal(kind, level))
         self.kind, self.level = kind, level
         self.min_ratio, self.max_tilt, self.seconds = min_ratio, max_tilt, seconds
+        self.backward_ratio = min_ratio if backward_ratio is None else backward_ratio
         self.fallen = False
         self.record = record
         self.joints = {}
@@ -110,10 +111,19 @@ class WalkCheck:
                     ir, ip, _ = _rpy(self.imu.orientation)
                     e['imu'] = [round(math.degrees(ir), 2), round(math.degrees(ip), 2)]
 
+    def sim_time(self):
+        s = self.odom.header.stamp
+        return s.sec + s.nanosec * 1e-9
+
     def spin(self, seconds, publish=None):
-        end = time.time() + seconds
+        """Spin for `seconds` of simulated time (odom stamps; the wall clock
+        before the first odom): the commanded distance is v * seconds, and a
+        CI runner simulating slower or faster than real time must not change
+        how far that is. At most 4x as long by the wall clock."""
+        end = time.time() + (4 * seconds if self.odom else seconds)
+        t_end = self.sim_time() + seconds if self.odom else None
         worst_tilt = 0.0
-        while time.time() < end:
+        while time.time() < end and (t_end is None or self.sim_time() < t_end):
             if publish:
                 publish()
             rclpy.spin_once(self.node, timeout_sec=0.02)
@@ -169,7 +179,8 @@ class WalkCheck:
         moved = {'x': dx, 'y': dy, 'yaw': dyaw}
         axis, target = expect
         ratio = moved[axis] / target
-        ok = ratio > self.min_ratio and tilt < self.max_tilt and z1 > MIN_BODY_HEIGHT and not self.fallen
+        need = self.backward_ratio if name == 'backward' else self.min_ratio
+        ok = (need <= 0 or ratio > need) and tilt < self.max_tilt and z1 > MIN_BODY_HEIGHT and not self.fallen
         self.check(name, ok, 'dx=%+.2fm dy=%+.2fm dyaw=%+.0fdeg  (%d%% of command)  tilt<=%.0fdeg z=%.3f' % (
             dx, dy, math.degrees(dyaw), 100 * ratio, tilt, z1),
             cmd=[vx, vy, wz], seconds=seconds, dx=dx, dy=dy, dyaw_deg=math.degrees(dyaw),
@@ -228,6 +239,9 @@ def main():
     ap.add_argument('--terrain', default='flat', choices=['flat', 'slope', 'waves', 'rough'])
     ap.add_argument('--level', type=float, default=0.0, help='slope [deg] or obstacle height [mm]')
     ap.add_argument('--min-ratio', type=float, default=0.4, help='share of the command to pass')
+    ap.add_argument('--backward-ratio', type=float,
+                    help='... for the backward manoeuvre (default: --min-ratio); 0 = only no fall, '
+                    'no tilt, no sagging (backward on uneven ground is the weak manoeuvre, TERRAIN.md)')
     ap.add_argument('--max-tilt', type=float, default=20.0, help='body tilt vs. the ground [deg]')
     ap.add_argument('--seconds', type=float, default=5.0, help='duration of each maneuver')
     ap.add_argument('--record', action='store_true',
@@ -235,7 +249,7 @@ def main():
     args, ros_args = ap.parse_known_args()
     rclpy.init(args=ros_args)
     checker = WalkCheck(args.terrain, args.level, args.min_ratio, args.max_tilt, args.seconds,
-                        args.record)
+                        args.record, args.backward_ratio)
     try:
         code = checker.run()
         if args.trace:

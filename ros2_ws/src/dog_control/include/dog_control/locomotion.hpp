@@ -126,6 +126,8 @@ public:
   GaitType gaitType() const {return gait_type_;}
   /// Ground heights along the foot lines for the crawl gait.
   void setTerrain(const TerrainProfile & t) {terrain_ = t;}
+  /// Body pitch the legs are solved for (the pose's, plus the crawl's along the stairs).
+  double bodyPitch() const {return pose_.pitch + (gait_type_ == GaitType::CRAWL ? crawl_.pitch() : 0.0);}
   void clearTerrain() {terrain_ = TerrainProfile();}
   /// Height of the ground under the body above where the crawl started [m]
   /// (0 in the trot): the body climbs with it.
@@ -157,7 +159,8 @@ private:
   /// Feet relative to the body centre in the yaw-aligned ground frame -> joints.
   void solveRelative(const std::array<Vec3, kNumLegs> & g, const BodyPose & pose);
   bool activeGaitStepping() const;
-  bool feetLevel() const;
+  /// Crawl feet within tol of one level (and, for tol < 0.02, the body not pitched).
+  bool feetLevel(double tol = 0.01) const;
   std::array<Vec3, kNumLegs> activeFeet() const;
   void startTransition(Mode next, double from_height, double to_height);
 
@@ -166,6 +169,7 @@ private:
   CrawlGait crawl_;
   GreetSequence greet_;
   GaitType gait_type_{GaitType::TROT};
+  bool switching_gait_{false};  // stopped for a trot <-> crawl change
   GaitType operator_gait_{GaitType::TROT};
   GaitType guard_gait_{GaitType::TROT};
   double guard_vy_{0.0};

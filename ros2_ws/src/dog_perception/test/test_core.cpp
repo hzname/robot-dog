@@ -144,6 +144,21 @@ TEST(Core, FeetPlaneFromStanceAndImuCarry)
   double roll, pitch;
   rollPitchOfNormal(p->n, roll, pitch);
   EXPECT_NEAR(pitch, 5 * kDeg, 1e-9);
+  // the legs themselves: points on a calf are the leg, the ground ahead is not
+  const auto legs = legsBody(g, q);
+  for (int leg = 1; leg < 4; ++leg) {EXPECT_NEAR(legs[leg][2].z, feet[leg].z, 1e-9);}  // (feet[0] was raised above)
+  const V3 mid = (legs[0][1] + legs[0][2]) * 0.5;
+  EXPECT_TRUE(onLeg(legs, mid + V3{0.02, 0.0, 0.0}, 0.04));
+  EXPECT_FALSE(onLeg(legs, legs[0][2] + V3{0.10, 0.0, 0.0}, 0.04));
+  // a front leg swung forward and up: its calf reaches past the footprint
+  // filter (|x| < 0.22), still the leg
+  q[1] = -0.9;
+  q[2] = -0.6;
+  const auto up = legsBody(g, q);
+  const V3 calf_mid = (up[0][1] + up[0][2]) * 0.5;
+  EXPECT_GT(up[0][2].x, 0.22);
+  EXPECT_TRUE(onLeg(up, up[0][2] + V3{0.0, 0.0, 0.02}, 0.04));
+  EXPECT_TRUE(onLeg(up, calf_mid, 0.04));
 }
 
 TEST(Core, LidarHazardsAndElevationMap)
@@ -384,6 +399,43 @@ TEST(Core, GoesRoundAnObstacleAndBackToItsLine)
   EXPECT_LT(max_y, 0.45);
 }
 
+TEST(Core, AWanderingHeadingDoesNotStopItBesideTheBlock)
+{
+  // the sim: beside a 150 mm block, the heading a few degrees towards it, the
+  // corner of the block came back into the 0.20 m path and the map stopped
+  // the robot for good
+  ElevationMap map(3.0, 0.02);
+  map.recenter(1.0, 0.0);
+  std::vector<V3> pts;
+  for (double x = -0.4; x < 2.4; x += 0.01) {
+    for (double y = -1.4; y < 1.4; y += 0.01) {
+      const bool block = x > 1.0 && x < 1.2 && std::abs(y) < 0.1;
+      // the map smears its sides by 2 cm, taller than climb_max there too
+      const bool smear = x > 1.0 && x < 1.2 && std::abs(y) < 0.12;
+      pts.push_back({x, y, block ? 0.15 : (smear ? 0.10 : 0.0)});
+    }
+  }
+  map.insert(pts);
+  Avoider a;
+  double x = 0.7, y = 0.0;
+  const double dt = 0.05;
+  bool passed = false;
+  for (int k = 0; k < 3000 && !(passed && a.state() == "idle"); ++k) {
+    // it goes round on the left and turns towards the block (right, 7 degrees: the sim saw 7.4) once past it
+    const double yaw = a.state() == "past" ? -0.12 : 0.0;
+    const Obstacle o = tallObstacle(map, x, y, yaw, 0.0, 0.09, -0.35);
+    // the node: stop while the block is in the path (as narrow as the avoider says) and near
+    const double hw = a.pathHalfWidth();
+    const bool blocked = o.found && o.d_min > 0.0 && o.lat_max > -hw && o.lat_min < hw && o.d_min < 0.30;
+    const double vy = a.update(blocked, o, x, y, yaw);
+    x += (blocked || a.state() == "aside" ? 0.0 : 0.05) * dt;
+    y += vy * dt;
+    passed = passed || x > 1.6;
+  }
+  EXPECT_TRUE(passed) << "stuck at x " << x << " y " << y << " (" << a.state() << ")";
+  EXPECT_EQ(a.state(), "idle");
+}
+
 TEST(Core, ABlockSeenFromTheSideIsTall)
 {
   // lidar points on the near face of a 150 mm block only: the mean of the
@@ -433,4 +485,143 @@ TEST(Core, DoesNotTryToGoRoundAWideWall)
   const Obstacle o = tallObstacle(map, 0.75, 0.0, 0.0, 0.0, 0.07, -0.35);
   EXPECT_DOUBLE_EQ(a.update(true, o, 0.75, 0.0, 0.0), 0.0);
   EXPECT_EQ(a.state(), "idle");
+}
+
+TEST(Core, AWallSeenInPartIsNotNarrow)
+{
+  // the sim: an 80 mm wall, 0.8 m wide, only its middle mapped yet - the
+  // mapped part alone would be narrow enough to go round
+  ElevationMap map(3.0, 0.02);
+  map.recenter(1.0, 0.0);
+  std::vector<V3> pts;
+  for (double x = -0.4; x < 1.3; x += 0.01) {
+    for (double y = -0.25; y < 0.25; y += 0.01) {
+      pts.push_back({x, y, x > 1.0 && x < 1.1 ? 0.08 : 0.0});
+    }
+  }
+  map.insert(pts);
+  const Obstacle o = tallObstacle(map, 0.75, 0.0, 0.0, 0.0, 0.07, -0.35);
+  ASSERT_TRUE(o.found);
+  EXPECT_TRUE(o.open_left);
+  EXPECT_TRUE(o.open_right);
+  Avoider a;
+  EXPECT_DOUBLE_EQ(a.update(true, o, 0.75, 0.0, 0.0), 0.0);
+  EXPECT_EQ(a.state(), "idle");
+  // all of it mapped, but its top read under 70 mm towards the ends (the
+  // lidars graze it there): raised, not the ground - still open
+  ElevationMap m1(3.0, 0.02);
+  m1.recenter(1.0, 0.0);
+  pts.clear();
+  for (double x = -0.4; x < 1.3; x += 0.01) {
+    for (double y = -0.6; y < 0.6; y += 0.01) {
+      const bool wall = x > 1.0 && x < 1.1 && std::abs(y) < 0.4;
+      pts.push_back({x, y, wall ? (std::abs(y) < 0.2 ? 0.08 : 0.06) : 0.0});
+    }
+  }
+  m1.insert(pts);
+  const Obstacle w = tallObstacle(m1, 0.75, 0.0, 0.0, 0.0, 0.07, -0.35);
+  ASSERT_TRUE(w.found);
+  EXPECT_TRUE(w.open_left);
+  EXPECT_TRUE(w.open_right);
+  // a block with the ground mapped on both sides: closed ends
+  ElevationMap m2(3.0, 0.02);
+  m2.recenter(1.0, 0.0);
+  pts.clear();
+  for (double x = -0.4; x < 1.3; x += 0.01) {
+    for (double y = -0.6; y < 0.6; y += 0.01) {
+      // its sides smeared by 2 cm, raised but under the threshold
+      const bool on = x > 1.0 && x < 1.1;
+      pts.push_back({x, y, on && std::abs(y) < 0.1 ? 0.15 : (on && std::abs(y) < 0.14 ? 0.05 : 0.0)});
+    }
+  }
+  m2.insert(pts);
+  const Obstacle b = tallObstacle(m2, 0.75, 0.0, 0.0, 0.0, 0.07, -0.35);
+  ASSERT_TRUE(b.found);
+  EXPECT_FALSE(b.open_left);
+  EXPECT_FALSE(b.open_right);
+}
+
+TEST(Core, ATopAboveTheCrawlByItsMeanHeight)
+{
+  // the lidars read a flat top +-2 cm: the highest points of a 60 mm bar
+  // reach 80 mm, those of an 80 mm wall 100 mm; the cells' means are the tops
+  auto mapWith = [](double top, double depth) {
+      ElevationMap map(3.0, 0.02);
+      map.recenter(1.0, 0.0);
+      std::vector<V3> pts;
+      int k = 0;
+      for (double x = -0.4; x < 1.3; x += 0.005) {
+        for (double y = -0.6; y < 0.6; y += 0.005) {
+          const bool on = x > 1.0 && x < 1.0 + depth && std::abs(y) < 0.4;
+          pts.push_back({x, y, on ? top + (++k % 2 ? 0.02 : -0.02) : 0.0});
+        }
+      }
+      map.insert(pts);
+      return map;
+    };
+  const auto wall = mapWith(0.08, 0.10), bar = mapWith(0.06, 0.04);
+  EXPECT_TRUE(tallObstacle(wall, 0.6, 0.0, 0.0, 0.0, 0.075, -0.35, 1.0, 0.8, false).found);
+  EXPECT_FALSE(tallObstacle(bar, 0.6, 0.0, 0.0, 0.0, 0.075, -0.35, 1.0, 0.8, false).found);
+  // by the highest points, 2 cm over climb_max: the wall, and the bar's
+  // noise stays under it
+  EXPECT_TRUE(tallObstacle(wall, 0.6, 0.0, 0.0, 0.0, 0.09).found);
+  EXPECT_FALSE(tallObstacle(bar, 0.6, 0.0, 0.0, 0.0, 0.09).found);
+}
+
+TEST(Core, GivesUpGoingRoundWhatGrowsWider)
+{
+  // from afar a 0.8 m wall's left end read short (0.30 m): narrow enough to
+  // go round on the left; going aside the map reads it to 0.38 m
+  auto mapWith = [](double left_end) {
+      ElevationMap map(3.0, 0.02);
+      map.recenter(1.0, 0.0);
+      std::vector<V3> pts;
+      for (double x = -0.4; x < 1.3; x += 0.01) {
+        for (double y = -0.9; y < 0.9; y += 0.01) {
+          const bool wall = x > 1.0 && x < 1.1 && y > -0.40 && y < left_end;
+          pts.push_back({x, y, wall ? 0.10 : 0.0});
+        }
+      }
+      map.insert(pts);
+      return map;
+    };
+  const auto first = mapWith(0.30), later = mapWith(0.38);
+  Avoider a;
+  double y = 0.0;
+  Obstacle o = tallObstacle(first, 0.72, y, 0.0, 0.0, 0.07, -0.35);
+  ASSERT_TRUE(o.found);
+  EXPECT_GT(a.update(true, o, 0.72, y, 0.0), 0.0);  // left
+  EXPECT_EQ(a.state(), "aside");
+  for (int k = 0; k < 20 && a.state() == "aside"; ++k) {
+    y += 0.01;
+    o = tallObstacle(later, 0.72, y, 0.0, 0.0, 0.07, -0.35);
+    a.update(true, o, 0.72, y, 0.0);
+  }
+  EXPECT_EQ(a.state(), "idle");
+  EXPECT_LT(y, 0.05);  // gave up at once
+}
+
+TEST(Core, ANoisyCellFarToTheSideIsNotPartOfTheBlock)
+{
+  // the sim: at climb_max the map's highest points found a few noisy cells
+  // 0.7-0.8 m to the right; one obstacle from there to the block needed a
+  // 0.5 m shift, open on the right, and the robot gave up going round
+  ElevationMap map(3.0, 0.02);
+  map.recenter(1.0, 0.0);
+  std::vector<V3> pts;
+  for (double x = -0.4; x < 1.6; x += 0.01) {
+    for (double y = -0.9; y < 0.9; y += 0.01) {
+      const bool block = x > 1.0 && x < 1.2 && std::abs(y) < 0.1;
+      const bool noise = x > 1.0 && x < 1.04 && y > -0.80 && y < -0.74;
+      pts.push_back({x, y, block ? 0.15 : (noise ? 0.09 : 0.0)});
+    }
+  }
+  map.insert(pts);
+  const Obstacle o = tallObstacle(map, 0.72, 0.0, 0.0, 0.0, 0.07, -0.35);
+  ASSERT_TRUE(o.found);
+  EXPECT_NEAR(o.lat_min, -0.10, 0.02);
+  EXPECT_NEAR(o.lat_max, 0.10, 0.02);
+  EXPECT_FALSE(o.open_left);
+  EXPECT_FALSE(o.open_right);
+  EXPECT_NEAR(o.d_min, 0.28, 0.02);
 }

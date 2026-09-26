@@ -114,6 +114,15 @@ struct Geometry
 /// calf runs to the contact point (robot.yaml, URDF): nothing to subtract.
 std::array<V3, 4> feetBody(const Geometry & g, const std::array<double, 12> & q, double foot_radius = 0.0);
 
+/// The legs as segments in the body frame: per leg the thigh joint, the knee
+/// and the foot (same kinematics as feetBody).
+using LegChain = std::array<V3, 3>;
+std::array<LegChain, 4> legsBody(const Geometry & g, const std::array<double, 12> & q);
+
+/// p (body frame) lies within r of a leg's thigh or calf, or of its foot:
+/// a lidar point on the robot's own leg, never the ground.
+bool onLeg(const std::array<LegChain, 4> & legs, const V3 & p, double r);
+
 /// Ground under the robot from the leg kinematics: taken when all four feet
 /// lie on one plane (four-leg support), carried with the IMU in between.
 class FeetPlane
@@ -267,9 +276,13 @@ struct Obstacle
   bool found{false};
   double lat_min{0.0}, lat_max{0.0};  // lateral extent [m], + left
   double d_min{0.0};                  // nearest distance ahead [m]
+  // an end runs into unmapped ground: its width that side is not known
+  bool open_left{false}, open_right{false};
 };
+/// highest: by the cells' highest points (sees a face, carries the lidar
+/// noise), else by their mean heights (a flat top, read to a few mm).
 Obstacle tallObstacle(const ElevationMap & map, double x, double y, double yaw, double ground_z,
-  double height = 0.07, double d0 = 0.05, double d1 = 1.0, double reach = 0.8);
+  double height = 0.07, double d0 = 0.05, double d1 = 1.0, double reach = 0.8, bool highest = true);
 
 /// Going round an obstacle that cannot be crossed: sideways until the path
 /// (half_width) is clear of it, forward past it, then back onto the line
@@ -287,13 +300,19 @@ public:
   /// Returns vy [m/s] (+ left) and the state: idle | aside | past | back.
   double update(bool blocked, const Obstacle & o, double x, double y, double yaw);
   const std::string & state() const {return state_;}
+  /// Half width of the path the obstacle must stay out of: narrower by half
+  /// the margin once it is beside it ("past"), the same half as "aside" goes
+  /// beyond it - a few degrees of heading must not stop it again.
+  double pathHalfWidth() const {return state_ == "past" ? p_.half_width - 0.5 * p_.margin : p_.half_width;}
   double offset() const {return offset_;}
+  /// The whole side shift going round needs, as the obstacle last read (m).
+  double needed() const {return needed_;}
 
 private:
   AvoidParams p_;
   std::string state_{"idle"};
   int side_{0};
-  double x0_{0}, y0_{0}, yaw0_{0}, offset_{0}, hold_{0};
+  double x0_{0}, y0_{0}, yaw0_{0}, offset_{0}, hold_{0}, needed_{0};
 };
 
 }  // namespace dog_perception

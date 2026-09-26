@@ -280,6 +280,21 @@ class PerceptionCheck:
                 publish()
             rclpy.spin_once(self.node, timeout_sec=0.01)
 
+    def sim_time(self):
+        s = self.odom.header.stamp
+        return s.sec + s.nanosec * 1e-9
+
+    def spin_sim(self, seconds, publish=None):
+        """Like spin, for `seconds` of simulated time (odom stamps): a slow CI
+        runner simulates less than real time, and the walk must not be cut
+        short there. At most 4x as long by the wall clock."""
+        t_end = self.sim_time() + seconds
+        end = time.time() + 4 * seconds
+        while self.sim_time() < t_end and time.time() < end:
+            if publish:
+                publish()
+            rclpy.spin_once(self.node, timeout_sec=0.01)
+
     def run(self):
         end = time.time() + 90
         while (self.odom is None or self.state is None) and time.time() < end:
@@ -290,6 +305,10 @@ class PerceptionCheck:
         self.spin(2.0)
         self.phase = 'stand'
         self.spin(5.0, lambda: self.cmd.publish(String(data='stand')) if self.state in ('passive', 'lying') else None)
+        # standing up takes simulated time: a slow simulation is not done in 5 s
+        end = time.time() + 60
+        while self.state != 'stand' and time.time() < end:
+            rclpy.spin_once(self.node, timeout_sec=0.05)
         self.spin(2.0)  # ToF calibration on the flat start
         self.stats_start = (time.time(), self.stats)
         self.phase = 'walk'
@@ -299,7 +318,7 @@ class PerceptionCheck:
         if self.greet:  # standing still: sit, paws up, wave, stand up again
             self.spin(0.5, lambda: self.vel.publish(tw))
             self.cmd.publish(String(data='greet'))
-        self.spin(self.seconds, lambda: self.vel.publish(tw))
+        self.spin_sim(self.seconds, lambda: self.vel.publish(tw))
         self.phase = 'stop'
         self.spin(1.5, lambda: self.vel.publish(Twist()))
         self.walked = float(self.pose()[0][0]) - x0
@@ -367,9 +386,22 @@ class PerceptionCheck:
                 gap = min(max(abs(e['x'] - (terrain.BLOCK_X + sx / 2)) - sx / 2 - 0.15,
                               abs(e['y']) - sy / 2 - 0.13) for e in allw)
                 out['crossing']['min_gap_m'] = round(gap, 3)
-                # back on its line once past it (the walk goes on for metres after)
-                past = [abs(e['y']) for e in allw if e['x'] > goal]
+                # back on its line once past it (the walk goes on for metres
+                # after): the line it walked when the guard first stopped it
+                # there - the avoider's line; without an absolute heading the
+                # robot's heading has drifted a few degrees off the x axis by
+                # then, and that line with it
+                t_stop = next((r[0] for r in self.guard if r[1] == 'stop' and r[-1] == 'walk'), None)
+                ref = next((e for e in allw if t_stop is not None and e['t'] >= t_stop), None)
+                if ref is None:
+                    ref = {'x': 0.0, 'y': 0.0, 'yaw': 0.0}
+                yw = math.radians(ref['yaw'])
+
+                def off_line(e):
+                    return abs(-math.sin(yw) * (e['x'] - ref['x']) + math.cos(yw) * (e['y'] - ref['y']))
+                past = [off_line(e) for e in allw if e['x'] > goal]
                 out['crossing']['back_on_line'] = bool(past) and min(past) < 0.1
+                out['crossing']['line_heading_deg'] = round(ref['yaw'], 1)
                 out['crossing']['touched'] = gap < 0.0
         if self.kind == 'wall' and walk:
             xmax = max(e['x'] for e in walk + [e for e in self.trace if e['phase'] == 'stop'])
@@ -451,7 +483,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--terrain', default='flat', choices=list(terrain.KINDS))
     ap.add_argument('--level', type=float, default=0.0)
-    ap.add_argument('--seconds', type=float, default=10.0)
+    ap.add_argument('--seconds', type=float, default=10.0, help='walk this long (simulated time)')
     ap.add_argument('--speed', type=float, default=0.12)
     ap.add_argument('--trace', help='write scores + full recording to this JSON file')
     ap.add_argument('--greet', action='store_true',
@@ -510,7 +542,7 @@ def main():
                 if w.get('touched', True):
                     why.append(f"touched the wall (front feet {w.get('front_feet_to_wall_m')} m)")
             ok = not why
-            print(('PASS' if ok else 'FAIL') + ': guard ' + ('; '.join(why) or f'{g}'))
+            print(('PASS' if ok else 'FAIL') + ': guard ' + ('; '.join(why) + f' | {g}' if why else f'{g}'))
         if args.trace:
             with open(args.trace, 'w') as f:
                 json.dump({'terrain': args.terrain, 'level': args.level, 'scores': res, 'trace': chk.trace,

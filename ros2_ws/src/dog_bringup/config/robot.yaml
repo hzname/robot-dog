@@ -139,7 +139,7 @@
       tof_offsets: [0.0, 0.0, 0.0, 0.0]  # [m] measure once on a flat floor, then keep here
       tof_autocal: false       # never calibrate at every start (a ramp in view becomes an offset)
       gs2_threshold: 0.012     # [m] GS2: off the straight-line fit of its own profile (stones, pits)
-      gs2_confirm: 3           # scans in a row (0.1 s at 28 Hz)
+      gs2_confirm: 8           # scans in a row (0.3 s at 28 Hz: longer than the body sways as a walk starts)
       gs2_plane_threshold: 0.02  # [m] whole line off the leg plane (15 mm: false reports on a flat floor)
       gs2_reference: feet      # GS2 steps relative to the legs (line is 0.14 m ahead of the feet)
       # reaction to hazards (perception -> locomotion 'guard' topic)

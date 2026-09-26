@@ -253,10 +253,10 @@ std::optional<RobustFit> robustPlane(const std::vector<V3> & pts, int iterations
 }
 
 // ------------------------------------------------------------------ legs
-std::array<V3, 4> feetBody(const Geometry & g, const std::array<double, 12> & q, double foot_radius)
+std::array<LegChain, 4> legsBody(const Geometry & g, const std::array<double, 12> & q)
 {
   static const int kFront[4] = {1, 1, -1, -1}, kSide[4] = {1, -1, 1, -1};
-  std::array<V3, 4> out;
+  std::array<LegChain, 4> out;
   for (int leg = 0; leg < 4; ++leg) {
     const double sd = kSide[leg];
     const V3 hip{kFront[leg] * g.hip_x, sd * g.hip_y, 0.0};
@@ -265,9 +265,36 @@ std::array<V3, 4> feetBody(const Geometry & g, const std::array<double, 12> & q,
     const M3 B = mul(A, rotRpy(0.0, q[leg * 3 + 1], 0.0));
     const V3 kn = th + mul(B, V3{0.0, 0.0, -g.thigh});
     const V3 ft = kn + mul(mul(B, rotRpy(0.0, q[leg * 3 + 2], 0.0)), V3{0.0, 0.0, -g.calf});
-    out[leg] = ft - V3{0.0, 0.0, foot_radius};
+    out[leg] = {th, kn, ft};
   }
   return out;
+}
+
+std::array<V3, 4> feetBody(const Geometry & g, const std::array<double, 12> & q, double foot_radius)
+{
+  const auto legs = legsBody(g, q);
+  std::array<V3, 4> out;
+  for (int leg = 0; leg < 4; ++leg) {out[leg] = legs[leg][2] - V3{0.0, 0.0, foot_radius};}
+  return out;
+}
+
+namespace
+{
+double segmentDistance(const V3 & a, const V3 & b, const V3 & p)
+{
+  const V3 ab = b - a, ap = p - a;
+  const double l2 = ab.dot(ab);
+  const double t = l2 > 0.0 ? std::clamp(ap.dot(ab) / l2, 0.0, 1.0) : 0.0;
+  return (p - (a + ab * t)).norm();
+}
+}  // namespace
+
+bool onLeg(const std::array<LegChain, 4> & legs, const V3 & p, double r)
+{
+  for (const auto & l : legs) {
+    if (segmentDistance(l[0], l[1], p) < r || segmentDistance(l[1], l[2], p) < r) {return true;}
+  }
+  return false;
 }
 
 bool FeetPlane::update(const std::array<V3, 4> & feet, const std::optional<M3> & R_imu)
@@ -626,15 +653,23 @@ double ElevationMap::heightAt(double x, double y) const
 }
 
 Obstacle tallObstacle(const ElevationMap & map, double x, double y, double yaw, double ground_z,
-  double height, double d0, double d1, double reach)
+  double height, double d0, double d1, double reach, bool highest)
 {
-  Obstacle o;
   const double cs = std::cos(yaw), sn = std::sin(yaw), r = map.resolution();
+  const int n = static_cast<int>(std::floor(2.0 * reach / r + 1e-9)) + 1;
+  auto latOf = [&](int j) {return -reach + j * r;};
+  // per lateral column: tall anywhere ahead, nearest, ends open
+  std::vector<char> tall(n, 0), open_l(n, 0), open_r(n, 0);
+  std::vector<double> dmin(n, kInf);
   for (double d = d0; d <= d1; d += r) {
-    for (double lat = -reach; lat <= reach; lat += r) {
+    for (int j = 0; j < n; ++j) {
+      const double lat = latOf(j);
       const double cx = x + cs * d - sn * lat, cy = y + sn * d + cs * lat;
-      const double h = map.maxAt(cx, cy);
-      if (!std::isfinite(h) || h - ground_z <= height) {continue;}
+      // (the mean as well only over the points a highest point needs: one
+      // noisy point is no mean)
+      const double hi = map.maxAt(cx, cy);
+      const double h = highest ? hi : map.heightAt(cx, cy);
+      if (!std::isfinite(hi) || h - ground_z <= height) {continue;}
       // tall over its surroundings too (a jump, not a height): a staircase is
       // high above the floor under the robot, but every riser is a step
       double low = h;
@@ -645,18 +680,48 @@ Obstacle tallObstacle(const ElevationMap & map, double x, double y, double yaw, 
         }
       }
       if (h - low <= height) {continue;}
-      if (!o.found) {
-        o = {true, lat, lat, d};
-      } else {
-        o.lat_min = std::min(o.lat_min, lat);
-        o.lat_max = std::max(o.lat_max, lat);
-        o.d_min = std::min(o.d_min, d);
-      }
+      // next to it, sideways, unmapped (fewer points than a tall cell needs)
+      // or still raised (a top read a little under `height`): it may go on
+      // there - only lower ground within 3 cells closes it (the map smears a
+      // block's sides by 1-2 cells; read the same way as the cell itself)
+      auto open = [&](int dir) {
+          for (int k = 1; k <= 3; ++k) {
+            const double lk = lat + dir * k * r;
+            if (lk < -reach - 1e-9 || lk > reach + 1e-9) {return true;}
+            const double nx = x + cs * d - sn * lk, ny = y + sn * d + cs * lk;
+            const double hn_hi = map.maxAt(nx, ny);
+            const double hn = highest ? hn_hi : map.heightAt(nx, ny);
+            if (std::isfinite(hn_hi) && hn - ground_z <= 0.8 * height) {return false;}
+          }
+          return true;
+        };
+      tall[j] = 1;
+      dmin[j] = std::min(dmin[j], d);
+      open_l[j] |= open(1);
+      open_r[j] |= open(-1);
     }
   }
-  if (o.found) {  // cell edges, not centres
-    o.lat_min -= r / 2;
-    o.lat_max += r / 2;
+  // one obstacle: the run of tall columns (gaps of one cell bridged) nearest
+  // the robot's line - a noisy cell far to the side is another thing, not
+  // a wider one
+  Obstacle o;
+  double best = kInf;
+  for (int j = 0; j < n; ) {
+    if (!tall[j]) {++j; continue;}
+    int end = j;
+    while (end + 1 < n && (tall[end + 1] || (end + 2 < n && tall[end + 2]))) {end += tall[end + 1] ? 1 : 2;}
+    double near = kInf, dm = kInf;
+    for (int k = j; k <= end; ++k) {
+      if (!tall[k]) {continue;}
+      near = std::min(near, std::abs(latOf(k)));
+      dm = std::min(dm, dmin[k]);
+    }
+    if (latOf(j) <= 0.0 && latOf(end) >= 0.0) {near = 0.0;}
+    if (near < best) {
+      best = near;
+      o = {true, latOf(j) - r / 2, latOf(end) + r / 2, dm, open_l[end] != 0, open_r[j] != 0};
+    }
+    j = end + 1;
   }
   return o;
 }
@@ -667,8 +732,11 @@ double Avoider::update(bool blocked, const Obstacle & o, double x, double y, dou
   const double clear = p_.half_width + 0.5 * p_.margin;
   const bool in_path = o.found && o.lat_max > -clear && o.lat_min < clear;
   if ((state_ == "idle" || state_ == "back") && blocked && o.found) {
-    const double left = o.lat_max + p_.half_width + p_.margin;     // shift needed to pass on the left
-    const double right = -(o.lat_min - p_.half_width - p_.margin);  // ... on the right
+    // shift needed to pass on the left / right (not where it runs into
+    // unmapped ground: a wall seen in part is not narrow)
+    const double left = o.open_left ? 1e9 : o.lat_max + p_.half_width + p_.margin;
+    const double right = o.open_right ? 1e9 : -(o.lat_min - p_.half_width - p_.margin);
+    needed_ = std::min(left, right);
     if (std::min(left, right) <= p_.max_shift) {
       if (state_ == "idle") {
         x0_ = x;
@@ -680,11 +748,22 @@ double Avoider::update(bool blocked, const Obstacle & o, double x, double y, dou
     }
   }
   if (state_ == "aside") {
+    // the whole shift, as the obstacle reads now: walked + still needed that
+    // side (an 80 mm wall's end read short from afar, the face's foot taken
+    // for the ground: it looked narrow, and grew as the robot went aside)
+    // (by the width read, not the ends: an end's reading flickers open and
+    // closed on the way, a wider obstacle reads wider)
+    double still = 0.0;
+    if (o.found) {
+      still = std::max(0.0, side_ > 0 ? o.lat_max + p_.half_width + p_.margin :
+        -(o.lat_min - p_.half_width - p_.margin));
+    }
+    needed_ = std::abs(offset_) + still;
     if (!in_path) {
       state_ = "past";
       hold_ = offset_;
-    } else if (std::abs(offset_) > p_.max_shift + 0.1) {
-      state_ = "idle";  // it goes on further than expected: give up, the guard keeps stopping
+    } else if (std::abs(offset_) > p_.max_shift + 0.1 || needed_ > p_.max_shift + 0.02) {
+      state_ = "idle";  // wider than it looked: give up, the guard keeps stopping
       return 0.0;
     } else {
       return side_ * p_.vy;
