@@ -166,6 +166,7 @@ private:
   CrawlGait crawl_;
   GreetSequence greet_;
   GaitType gait_type_{GaitType::TROT};
+  bool switching_gait_{false};  // stopped for a trot <-> crawl change
   GaitType operator_gait_{GaitType::TROT};
   GaitType guard_gait_{GaitType::TROT};
   double guard_vy_{0.0};

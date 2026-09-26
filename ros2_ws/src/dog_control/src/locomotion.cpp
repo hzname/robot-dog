@@ -262,7 +262,8 @@ bool LocomotionController::update(double dt)
   // with all feet on one level (never between two steps of a staircase).
   const GaitType want = (operator_gait_ == GaitType::CRAWL || guard_gait_ == GaitType::CRAWL) ?
     GaitType::CRAWL : GaitType::TROT;
-  if (want != gait_type_ && upright) {
+  switching_gait_ = want != gait_type_ && upright;
+  if (switching_gait_) {
     target = BodyVelocity{};
     if (!activeGaitStepping() && feetLevel() &&
       std::abs(vel_.vx) < 1e-3 && std::abs(vel_.vy) < 1e-3 && std::abs(vel_.wz) < 1e-3)
@@ -335,7 +336,9 @@ bool LocomotionController::update(double dt)
       gait_vel_ = vel_;
       const bool moving = activeGaitStepping() || std::abs(vel_.vx) > 1e-3 ||
         std::abs(vel_.vy) > 1e-3 || std::abs(vel_.wz) > 1e-3;
-      if (p_.heading_hold && yaw_rate_valid_ && moving && !pending_lie_) {
+      // (not while it waits to change gaits: its turns would keep the gait
+      // stepping, and it would never come to rest to switch)
+      if (p_.heading_hold && yaw_rate_valid_ && moving && !pending_lie_ && !switching_gait_) {
         // measured turn: the integrated samples if there are any, else the last rate
         const double turned = yaw_turned_dt_ > 0.0 ? yaw_turned_ : yaw_rate_ * dt;
         heading_error_ = std::clamp(heading_error_ + vel_.wz * dt - turned,

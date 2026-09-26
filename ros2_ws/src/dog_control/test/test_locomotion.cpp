@@ -456,3 +456,33 @@ TEST(Locomotion, SwitchesToCrawlOnlyWhenStoppedAndGoesRound)
   run(c, 3.0);
   EXPECT_EQ(c.gaitType(), GaitType::CRAWL);
 }
+
+TEST(Locomotion, LeavesTheCrawlWhileTheHeadingDrifts)
+{
+  // the sim: stopped in the crawl in front of a block, the avoider asked for
+  // the trot; the heading hold kept turning the crawl (the gyro read the
+  // body swaying), the crawl never stood still and the switch never came
+  LocomotionParams p;
+  p.heading_hold = true;
+  LocomotionController c(p);
+  const double nan = std::nan("");
+  c.request("stand");
+  run(c, 2.0);
+  ASSERT_TRUE(c.request("crawl"));
+  c.setVelocity({0.1, 0.0, 0.0});
+  for (int i = 0; i < static_cast<int>(3.0 / kDt); ++i) {
+    c.addYawRate(0.03 * std::sin(i * kDt * 3.0), kDt);
+    c.update(kDt);
+  }
+  ASSERT_EQ(c.gaitType(), GaitType::CRAWL);
+  // the guard wants the trot to go round: the crawl must come to rest
+  c.request("trot");
+  c.setGuard(0.0, {nan, nan, nan, nan});
+  c.setGuardGait(GaitType::TROT, 0.0);
+  int i = 0;
+  for (; i < static_cast<int>(30.0 / kDt) && c.gaitType() != GaitType::TROT; ++i) {
+    c.addYawRate(0.03 * std::sin(i * kDt * 3.0), kDt);  // the body sways
+    c.update(kDt);
+  }
+  EXPECT_EQ(c.gaitType(), GaitType::TROT) << "still crawling after " << i * kDt << " s";
+}
