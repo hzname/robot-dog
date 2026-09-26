@@ -218,6 +218,9 @@ class WalkCheck:
             self.maneuver('right', 0, -0.06, 0, T, ('y', -0.06 * T))
             self.maneuver('turn_ccw', 0, 0, 0.5, T, ('yaw', 0.5 * T))
             self.maneuver('turn_cw', 0, 0, -0.5, T, ('yaw', -0.5 * T))
+            # walking and turning at once: an arc of ~0.33 m radius
+            self.maneuver('arc_left', 0.10, 0, 0.3, T, ('yaw', 0.3 * T))
+            self.maneuver('arc_right', 0.10, 0, -0.3, T, ('yaw', -0.3 * T))
         self.phase = 'lie'
         self.cmd.publish(String(data='lie'))
         # finishes the steps first; wall-clock wait, so allow for a slow simulation

@@ -529,3 +529,50 @@ TEST(Locomotion, LeavesTheCrawlWithItsFeetOnALowStep)
   step(kDt);
   EXPECT_NEAR(c.bodyPitch(), pitch, p.pose_rate * kDt + 1e-9);
 }
+
+TEST(Locomotion, SurveyLooksAroundWithTheFeetWhereTheyStand)
+{
+  LocomotionParams p;
+  LocomotionController c(p);
+  c.request("stand");
+  run(c, 2.0);
+  ASSERT_EQ(c.mode(), Mode::STAND);
+  const auto standing = c.joints();
+  std::array<Vec3, kNumLegs> feet0{};
+  for (int leg = 0; leg < kNumLegs; ++leg) {feet0[leg] = footInBody(c, p, leg);}
+  // not while walking
+  c.setVelocity({0.1, 0.0, 0.0});
+  run(c, 0.5);
+  EXPECT_FALSE(c.request("survey"));
+  c.setVelocity({});
+  run(c, 3.0);
+  ASSERT_TRUE(c.request("survey"));
+  EXPECT_EQ(c.mode(), Mode::SURVEY);
+  dog_control::SurveySequence s(p.survey);  // the same sequence alongside, for the body attitude
+  s.start();
+  double min_pitch = 0.0, max_pitch = 0.0, max_yaw = 0.0, worst = 0.0;
+  int ticks = 0;
+  for (; ticks < 5000 && c.mode() == Mode::SURVEY; ++ticks) {
+    c.update(kDt);
+    s.update(kDt);
+    ASSERT_EQ(c.unreachableCount(), 0) << "a foot out of reach at tick " << ticks;
+    const double pt = s.frame().pitch, yw = s.frame().yaw;
+    min_pitch = std::min(min_pitch, pt);
+    max_pitch = std::max(max_pitch, pt);
+    max_yaw = std::max(max_yaw, std::abs(yw));
+    for (int leg = 0; leg < kNumLegs; ++leg) {
+      // body -> ground under the body: R = Rz(yaw) Ry(pitch)
+      const Vec3 b = footInBody(c, p, leg);
+      const double gx = std::cos(pt) * b.x + std::sin(pt) * b.z, gz = -std::sin(pt) * b.x + std::cos(pt) * b.z;
+      const Vec3 w{std::cos(yw) * gx - std::sin(yw) * b.y, std::sin(yw) * gx + std::cos(yw) * b.y, gz};
+      worst = std::max({worst, std::abs(w.x - feet0[leg].x), std::abs(w.y - feet0[leg].y), std::abs(w.z - feet0[leg].z)});
+    }
+  }
+  EXPECT_EQ(c.mode(), Mode::STAND);
+  EXPECT_NEAR(ticks * kDt, s.duration(), 0.1);
+  EXPECT_LT(worst, 0.001) << "the feet moved on the ground";
+  EXPECT_NEAR(min_pitch, -p.survey.pitch_up_deg * M_PI / 180.0, 1e-3);
+  EXPECT_NEAR(max_pitch, p.survey.pitch_down_deg * M_PI / 180.0, 1e-3);
+  EXPECT_NEAR(max_yaw, p.survey.yaw_deg * M_PI / 180.0, 1e-3);
+  for (int j = 0; j < 12; ++j) {EXPECT_NEAR(c.joints()[j], standing[j], 1e-6) << j;}
+}

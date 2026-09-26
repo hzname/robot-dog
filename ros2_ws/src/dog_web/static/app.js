@@ -50,7 +50,7 @@ function setConn(on) {
 }
 const MODE_RU = {
   passive: 'выключен', standing_up: 'встаёт', stand: 'стоит', walk: 'идёт',
-  lying_down: 'ложится', lying: 'лежит', greeting: 'здоровается', estop: 'E-STOP', unknown: '—',
+  lying_down: 'ложится', lying: 'лежит', greeting: 'здоровается', survey: 'осматривается', estop: 'E-STOP', unknown: '—',
 };
 function setMode(mode) {
   const el = $('mode');
@@ -71,6 +71,7 @@ $('release').addEventListener('click', () => send({ type: 'estop', active: false
 $('stand').addEventListener('click', () => send({ type: 'command', name: 'stand' }));
 $('lie').addEventListener('click', () => send({ type: 'command', name: 'lie' }));
 $('greet').addEventListener('click', () => send({ type: 'command', name: 'greet' }));
+$('survey').addEventListener('click', () => send({ type: 'command', name: 'survey' }));
 let crawl = false;  // the operator's gait (the guard may still choose the crawl by itself)
 $('gait').addEventListener('click', () => {
   crawl = !crawl;
@@ -135,6 +136,7 @@ window.addEventListener('keydown', (ev) => {
   else if (ev.code === 'Digit1') send({ type: 'command', name: 'stand' });
   else if (ev.code === 'Digit2') send({ type: 'command', name: 'lie' });
   else if (ev.code === 'Digit3') send({ type: 'command', name: 'greet' });
+  else if (ev.code === 'Digit4') send({ type: 'command', name: 'survey' });
   if (KEYMAP[ev.code]) { keys.add(KEYMAP[ev.code]); ev.preventDefault(); }
   if (ev.key === 'Shift') keys.add('turbo');
 });

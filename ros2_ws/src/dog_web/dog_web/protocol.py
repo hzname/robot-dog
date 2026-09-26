@@ -3,7 +3,7 @@
 Client -> server (JSON text frames):
   {"type": "drive", "vx": -1..1, "vy": -1..1, "wz": -1..1}   normalized, >= 10 Hz while moving
   {"type": "stop"}
-  {"type": "command", "name": "stand" | "lie" | "greet" | "crawl" | "trot"}
+  {"type": "command", "name": "stand" | "lie" | "greet" | "survey" | "crawl" | "trot"}
   {"type": "estop", "active": true | false}
   {"type": "pose", "pitch": -1..1, "height": <metres offset>}
 Server -> client:
@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 
 # locomotion_node commands the page may send (greet: sit, paws up, wave;
 # crawl / trot: the operator's gait)
-COMMANDS = ('stand', 'lie', 'greet', 'crawl', 'trot')
+COMMANDS = ('stand', 'lie', 'greet', 'survey', 'crawl', 'trot')
 
 
 @dataclass

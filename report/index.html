@@ -121,6 +121,7 @@ details summary { cursor: pointer; font-size: 14px; color: var(--ink-2); }
   <li><a href="#s-slope"><b>Уклоны</b><span>10° и 15°, IMU вкл/выкл</span></a></li>
   <li><a href="#s-rough"><b>Неровности</b><span>волны, камни</span></a></li>
   <li><a href="#s-heading"><b>Курс</b><span>гироскоп, вкл/выкл</span></a></li>
+  <li><a href="#s-arc"><b>Дуга</b><span>вперёд с поворотом</span></a></li>
   <li><a href="#s-limits"><b>Пределы</b><span>рекомендации</span></a></li>
   <li><a href="#s-perception"><b>Датчики</b><span>лидары + ToF</span></a></li>
 </ol>
@@ -335,9 +336,34 @@ details summary { cursor: pointer; font-size: 14px; color: var(--ink-2); }
     <p>На прямой робот держит направление в пределах нескольких градусов даже на волнах и камнях, где без удержания уходил на 28–34°. Разворот на месте выполняется на заданный угол, без недоворота. Боковой снос на несколько сантиметров остаётся: курс удерживается, а положение пока не измеряется. Для этого нужен лидар или камера, варианты в docs/HEAD.md.</p></div>
 </section>
 
+<section id="s-arc">
+  <div class="sec-head"><div class="eyebrow">walk_check · 0,10 м/с вперёд + 0,3 рад/с поворот · удержание курса включено</div>
+    <h2><span class="num-badge">7</span>Движение по дуге</h2>
+    <p>Вперёд и поворот одновременно: так робот обходит угол или едет по кругу. За 5 с он проходит четверть круга радиусом около 0,33 м. Дуги влево и вправо идут в конце обычного набора манёвров; процент — какая доля заданного поворота выполнена. Каждая нога шагает на свою длину: внешняя дальше, внутренняя ближе.</p></div>
+  <figure class="vid">
+  <figcaption><h3>Дуга · ровный пол</h3><span class="badge ok">10/10</span></figcaption>
+  <div class="player"><video data-key="arcflat" src="videos/arc_flat.mp4" controls playsinline muted preload="none" poster="posters/arc_flat.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Вперёд</span><b>94%</b></li><li class="chip ok"><span>Назад</span><b>75%</b></li><li class="chip ok"><span>Влево</span><b>62%</b></li><li class="chip ok"><span>Вправо</span><b>70%</b></li><li class="chip ok"><span>Разворот ↺</span><b>119%</b></li><li class="chip ok"><span>Разворот ↻</span><b>121%</b></li><li class="chip ok"><span>Дуга влево</span><b>100%</b></li><li class="chip ok"><span>Дуга вправо</span><b>106%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure>
+  <div class="pair"><figure class="vid">
+  <figcaption><h3>Дуга · волны 10 мм</h3><span class="badge ok">10/10</span></figcaption>
+  <div class="player"><video data-key="arcwaves" src="videos/arc_waves.mp4" controls playsinline muted preload="none" poster="posters/arc_waves.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Вперёд</span><b>86%</b></li><li class="chip ok"><span>Назад</span><b>16%</b></li><li class="chip ok"><span>Влево</span><b>71%</b></li><li class="chip ok"><span>Вправо</span><b>66%</b></li><li class="chip ok"><span>Разворот ↺</span><b>121%</b></li><li class="chip ok"><span>Разворот ↻</span><b>121%</b></li><li class="chip ok"><span>Дуга влево</span><b>113%</b></li><li class="chip ok"><span>Дуга вправо</span><b>116%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure><figure class="vid">
+  <figcaption><h3>Дуга · камни 10 мм</h3><span class="badge ok">10/10</span></figcaption>
+  <div class="player"><video data-key="arcrough" src="videos/arc_rough.mp4" controls playsinline muted preload="none" poster="posters/arc_rough.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>Встаёт</span><b>да</b></li><li class="chip ok"><span>Вперёд</span><b>94%</b></li><li class="chip ok"><span>Назад</span><b>22%</b></li><li class="chip ok"><span>Влево</span><b>67%</b></li><li class="chip ok"><span>Вправо</span><b>72%</b></li><li class="chip ok"><span>Разворот ↺</span><b>121%</b></li><li class="chip ok"><span>Разворот ↻</span><b>114%</b></li><li class="chip ok"><span>Дуга влево</span><b>115%</b></li><li class="chip ok"><span>Дуга вправо</span><b>116%</b></li><li class="chip ok"><span>Ложится</span><b>да</b></li></ul>
+  
+</figure></div>
+  <div class="panel"><h3>Дуги, по одному прогону</h3><div class="tbl-wrap"><table><thead><tr><th>Покрытие</th><th class="num">Дуга влево</th><th class="num">Дуга вправо</th><th class="num">Наклон корпуса</th></tr></thead><tbody><tr><td>Ровный пол</td><td class="num r-ok">100% · +86°</td><td class="num r-ok">106% · -91°</td><td class="num r-ok">8°</td></tr><tr><td>Волны 10 мм</td><td class="num r-ok">113% · +97°</td><td class="num r-ok">116% · -100°</td><td class="num r-ok">12°</td></tr><tr><td>Камни 10 мм</td><td class="num r-ok">115% · +98°</td><td class="num r-ok">116% · -100°</td><td class="num r-ok">8°</td></tr></tbody></table></div>
+    <p class="note">Робот поворачивает на 99–116 % заданного угла: удержание курса по гироскопу доворачивает его до заданной скорости поворота, а на неровностях ноги ещё и проскальзывают по буграм в сторону поворота. Падений и заметного наклона нет.</p></div>
+</section>
+
 <section id="s-limits">
   <div class="sec-head"><div class="eyebrow">по итогам всех прогонов</div>
-    <h2><span class="num-badge">7</span>Пределы и рекомендации</h2>
+    <h2><span class="num-badge">8</span>Пределы и рекомендации</h2>
     <p>Для реального робота нужен запас около 30 %: у MG996R люфт 1–2°, под нагрузкой они слабеют, трение и массы в модели заданы оценочно. Начинайте с последней строки таблицы и повышайте постепенно.</p></div>
   <div class="panel"><h3>Рекомендуемые пределы по манёврам</h3><div class="tbl-wrap"><table><thead><tr><th>Манёвр</th><th class="num">Уклон с IMU</th><th class="num">Уклон без IMU</th><th class="num">Волны</th><th class="num">Камни</th></tr></thead><tbody><tr><td>Вперёд, подъём</td><td class="num r-ok">≤ 15°</td><td class="num r-warn">≤ 6°</td><td class="num r-ok">≤ 30 мм</td><td class="num r-ok">≤ 30 мм</td></tr><tr><td>Назад, спуск</td><td class="num r-ok">≤ 15°</td><td class="num r-warn">≤ 6°</td><td class="num r-warn">≤ 10 мм, ползком</td><td class="num r-warn">≤ 20 мм, медленно</td></tr><tr><td>Вбок поперёк склона</td><td class="num r-ok">≤ 12°</td><td class="num r-warn">≤ 6°</td><td class="num r-ok">≤ 10 мм</td><td class="num r-ok">≤ 20 мм</td></tr><tr><td>Разворот на месте</td><td class="num r-ok">≤ 15°</td><td class="num r-warn">≤ 6°</td><td class="num r-ok">≤ 10 мм</td><td class="num r-ok">≤ 20 мм</td></tr><tr><td>Любые манёвры</td><td class="num r-ok">≤ 10°</td><td class="num r-warn">≤ 6°</td><td class="num r-ok">≤ 10 мм</td><td class="num r-ok">≤ 10 мм</td></tr><tr><td><b>Реальный робот: начать с</b></td><td class="num r-">7°</td><td class="num r-">4°</td><td class="num r-">7 мм</td><td class="num r-">7 мм</td></tr></tbody></table></div></div>
   <div class="pair">
@@ -361,7 +387,7 @@ details summary { cursor: pointer; font-size: 14px; color: var(--ink-2); }
 
 <section id="s-perception">
   <div class="sec-head"><div class="eyebrow">отдельный отчёт</div>
-    <h2><span class="num-badge">8</span>Датчики: лидары «крестом», VL53L1X, GS2 и реакция на препятствия</h2>
+    <h2><span class="num-badge">9</span>Датчики: лидары «крестом», VL53L1X, GS2 и реакция на препятствия</h2>
     <p>Симуляция двух наклонных лидаров, четырёх ToF-дальномеров и линейного лидара GS2: точность пола, обнаружение камней и ступенек, ложные срабатывания, нагрузка на процессор, остановка и перешагивание — <a href="perception.html">perception.html</a> (28 роликов) и docs/PERCEPTION.md.</p></div>
 </section>
 </main>

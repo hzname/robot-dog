@@ -42,13 +42,15 @@ const char * modeName(Mode m)
     case Mode::LYING_DOWN: return "lying_down";
     case Mode::LYING: return "lying";
     case Mode::GREETING: return "greeting";
+    case Mode::SURVEY: return "survey";
   }
   return "unknown";
 }
 
 LocomotionController::LocomotionController(const LocomotionParams & params)
 : p_(params), gait_(params.gait, neutralFeet(params)), crawl_(params.crawl, neutralFeet(params)),
-  greet_(params.greet, neutralFeet(params), params.stand_height, params.leg.thigh, params.leg.calf)
+  greet_(params.greet, neutralFeet(params), params.stand_height, params.leg.thigh, params.leg.calf),
+  survey_(params.survey)
 {
   height_ = p_.lie_height;
   guard_step_.fill(std::numeric_limits<double>::quiet_NaN());
@@ -97,15 +99,20 @@ bool LocomotionController::request(const std::string & cmd)
     requestGait(cmd == "crawl" ? GaitType::CRAWL : GaitType::TROT);
     return true;
   }
-  if (cmd == "greet") {
+  if (cmd == "greet" || cmd == "survey") {
     // standing still on level feet in the trot (the sequence starts from the
     // neutral stance); the body pose and the slope shift return to neutral
     const bool still = std::abs(vel_.vx) < 1e-3 && std::abs(vel_.vy) < 1e-3 && std::abs(vel_.wz) < 1e-3;
     if (mode_ != Mode::STAND || gait_type_ != GaitType::TROT || gait_.stepping() || !still || pending_lie_) {
       return false;
     }
-    greet_.start();
-    mode_ = Mode::GREETING;
+    if (cmd == "greet") {
+      greet_.start();
+      mode_ = Mode::GREETING;
+    } else {
+      survey_.start();
+      mode_ = Mode::SURVEY;
+    }
     return true;
   }
   if (cmd == "lie") {
@@ -405,6 +412,24 @@ bool LocomotionController::update(double dt)
       height_ = p_.lie_height;
       solve(height_, BodyPose{});
       return true;
+
+    case Mode::SURVEY: {
+      // feet where they stand; the body pitched and turned on them
+      survey_.update(dt);
+      const SurveyFrame & f = survey_.frame();
+      const double c = std::cos(f.yaw), sn = std::sin(f.yaw);
+      const auto feet = gait_.feet();
+      std::array<Vec3, kNumLegs> rel{};
+      for (int leg = 0; leg < kNumLegs; ++leg) {
+        const double x = feet[leg].x + shift_x_, y = feet[leg].y + shift_y_;
+        rel[leg] = {c * x + sn * y, -sn * x + c * y, -height_ + feet[leg].z};  // Rz(-yaw)
+      }
+      BodyPose pose;
+      pose.pitch = f.pitch;
+      solveRelative(rel, pose);
+      if (survey_.done()) {mode_ = Mode::STAND;}
+      return true;
+    }
 
     case Mode::GREETING: {
       greet_.update(dt);

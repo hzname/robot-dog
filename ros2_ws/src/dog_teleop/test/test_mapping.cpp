@@ -163,6 +163,7 @@ TEST(KeyboardMapper, CommandsEstopAndQuit)
   EXPECT_EQ(m.apply({Key::CHAR, '1'}, quit).command.value_or(""), "stand");
   EXPECT_EQ(m.apply({Key::CHAR, '2'}, quit).command.value_or(""), "lie");
   EXPECT_EQ(m.apply({Key::CHAR, '3'}, quit).command.value_or(""), "greet");
+  EXPECT_EQ(m.apply({Key::CHAR, '4'}, quit).command.value_or(""), "survey");
   EXPECT_NEAR(m.apply({Key::CHAR, '+'}, quit).height.value_or(0), 0.01, 1e-9);
   out = m.apply({Key::CTRL_C, 0}, quit);
   EXPECT_TRUE(quit);

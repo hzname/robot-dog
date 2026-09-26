@@ -2,7 +2,7 @@
 //
 // Subscribes (relative names, launched in the /dog namespace):
 //   cmd_vel        geometry_msgs/Twist    linear.x/y [m/s], angular.z [rad/s]
-//   command        std_msgs/String        "stand" | "lie" | "greet" | "crawl" | "trot"
+//   command        std_msgs/String        "stand" | "lie" | "greet" | "survey" | "crawl" | "trot"
 //   body_pose      geometry_msgs/Vector3  x=roll [rad], y=pitch [rad], z=height offset [m]
 //   estop          std_msgs/Bool          true = limp, requires "stand" after release
 //   imu/data       sensor_msgs/Imu        optional: slope compensation and heading hold
@@ -219,6 +219,11 @@ private:
     p.greet.margin = declare_parameter("greet.margin", p.greet.margin);
     p.greet.waves = static_cast<int>(declare_parameter("greet.waves", static_cast<int64_t>(p.greet.waves)));
     p.greet.speed = declare_parameter("greet.speed", p.greet.speed);
+    p.survey.pitch_up_deg = declare_parameter("survey.pitch_up_deg", p.survey.pitch_up_deg);
+    p.survey.pitch_down_deg = declare_parameter("survey.pitch_down_deg", p.survey.pitch_down_deg);
+    p.survey.yaw_deg = declare_parameter("survey.yaw_deg", p.survey.yaw_deg);
+    p.survey.cycles = static_cast<int>(declare_parameter("survey.cycles", static_cast<int64_t>(p.survey.cycles)));
+    p.survey.segment_time = declare_parameter("survey.segment_time", p.survey.segment_time);
     // it kneels on the rear knees: knee and foot contacts of the description
     p.greet.contact_r = declare_parameter("description.foot_radius", p.greet.contact_r);
 

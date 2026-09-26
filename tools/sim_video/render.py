@@ -34,7 +34,8 @@ GOOD, BAD = '#0ca30c', '#d03b3b'
 PAIR = {'lf': C1, 'rr': C1, 'rf': C2, 'lr': C2}
 NAMES = {
     'stand': 'Встаёт', 'forward': 'Вперёд', 'backward': 'Назад', 'left': 'Шаг влево',
-    'right': 'Шаг вправо', 'turn_ccw': 'Разворот ↺', 'turn_cw': 'Разворот ↻', 'lie': 'Ложится'}
+    'right': 'Шаг вправо', 'turn_ccw': 'Разворот ↺', 'turn_cw': 'Разворот ↻',
+         'arc_left': 'Дуга влево', 'arc_right': 'Дуга вправо', 'lie': 'Ложится'}
 SLOPE_NAMES = {'forward': 'Подъём', 'backward': 'Спуск (задним ходом)',
                'left': 'Влево поперёк склона', 'right': 'Вправо поперёк склона'}
 WIN = 4.0  # seconds shown in the charts

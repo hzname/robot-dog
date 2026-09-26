@@ -4,6 +4,7 @@
 //   PASSIVE --stand--> STANDING_UP --> STAND <--twist--> WALK
 //   STAND/WALK --lie--> LYING_DOWN --> LYING --stand--> STANDING_UP
 //   STAND --greet--> GREETING (sit, paws up, wave, back up) --> STAND
+//   STAND --survey--> SURVEY (body looks up / down, left / right, for the lidars) --> STAND
 //   any --estop--> PASSIVE (no joint output until "stand" after release)
 #pragma once
 
@@ -14,12 +15,13 @@
 #include "dog_control/crawl.hpp"
 #include "dog_control/gait.hpp"
 #include "dog_control/greet.hpp"
+#include "dog_control/survey.hpp"
 #include "dog_control/kinematics.hpp"
 
 namespace dog_control
 {
 
-enum class Mode { PASSIVE, STANDING_UP, STAND, WALK, LYING_DOWN, LYING, GREETING };
+enum class Mode { PASSIVE, STANDING_UP, STAND, WALK, LYING_DOWN, LYING, GREETING, SURVEY };
 
 /// TROT: the normal gait. CRAWL: three feet down at any time, slow, follows
 /// the terrain profile (steps, stairs, high bars) - see crawl.hpp.
@@ -81,6 +83,7 @@ struct LocomotionParams
   GaitParams gait;
   CrawlParams crawl;
   GreetParams greet;
+  SurveyParams survey;
 };
 
 class LocomotionController
@@ -168,6 +171,7 @@ private:
   TrotGait gait_;
   CrawlGait crawl_;
   GreetSequence greet_;
+  SurveySequence survey_;
   GaitType gait_type_{GaitType::TROT};
   bool switching_gait_{false};  // stopped for a trot <-> crawl change
   GaitType operator_gait_{GaitType::TROT};

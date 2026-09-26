@@ -165,6 +165,7 @@ TeleopOutput KeyboardMapper::apply(const KeyEvent & ev, bool & quit)
   else if (ch == '1') {out.command = "stand"; t = Twist2D{};}
   else if (ch == '2') {out.command = "lie"; t = Twist2D{};}
   else if (ch == '3') {out.command = "greet"; t = Twist2D{};}
+  else if (ch == '4') {out.command = "survey"; t = Twist2D{};}
   else if (ev.key == Key::ESCAPE || ch == 'x') {out.estop = true; t = Twist2D{};}
   else if (ch == 'r') {out.estop = false;}
   else if (ch == '+' || ch == '=') {
@@ -198,6 +199,7 @@ const char * keyboardHelp()
     "  Space / k   stop moving\n"
     "  1           stand up           2          lie down\n"
     "  3           greeting (sit, paws up, wave)\n"
+    "  4           survey (look up / down, left / right: lidars map the room)\n"
     "  + / -       body height up / down\n"
     "  Esc / x     EMERGENCY STOP     r          release e-stop\n"
     "  h           this help          Ctrl-C     quit (sends stop)\n";

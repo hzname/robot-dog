@@ -21,6 +21,7 @@ add_library(dog_control_core
   src/gait.cpp
   src/crawl.cpp
   src/greet.cpp
+  src/survey.cpp
   src/locomotion.cpp)
 target_include_directories(dog_control_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

@@ -17,7 +17,8 @@ import common as cm
 from common import F, P, W, X, table
 
 NAMES = {'stand': 'Встаёт', 'forward': 'Вперёд', 'backward': 'Назад', 'left': 'Влево', 'right': 'Вправо',
-         'turn_ccw': 'Разворот ↺', 'turn_cw': 'Разворот ↻', 'lie': 'Ложится'}
+         'turn_ccw': 'Разворот ↺', 'turn_cw': 'Разворот ↻',
+         'arc_left': 'Дуга влево', 'arc_right': 'Дуга вправо', 'lie': 'Ложится'}
 SLOPE = {'forward': 'Подъём', 'backward': 'Спуск', 'left': 'Влево поперёк', 'right': 'Вправо поперёк'}
 PKG_RU = {'dog_control': 'кинематика, походка, режимы', 'dog_hardware': 'сервы, датчик тока, IMU',
           'dog_teleop': 'геймпад, клавиатура', 'dog_web': 'веб-пульт, калибровка по сети',
@@ -133,7 +134,21 @@ def main():
         'w20off': vid_block('w20off', 'waves20_off', 'Волны 20 мм · без IMU', 'off/waves_20.json'),
         'r20on': vid_block('r20on', 'rough20_on', 'Камни до 20 мм · IMU включена', 'on/rough_20.json'),
         'r20off': vid_block('r20off', 'rough20_off', 'Камни до 20 мм · без IMU', 'off/rough_20.json'),
+        'arcflat': vid_block('arcflat', 'arc_flat', 'Дуга · ровный пол', 'arc/rec/flat_0.json'),
+        'arcwaves': vid_block('arcwaves', 'arc_waves', 'Дуга · волны 10 мм', 'arc/rec/waves_10.json'),
+        'arcrough': vid_block('arcrough', 'arc_rough', 'Дуга · камни 10 мм', 'arc/rec/rough_10.json'),
     }
+    arc_rows = []
+    for key, lab in [('arc/rec/flat_0.json', 'Ровный пол'), ('arc/rec/waves_10.json', 'Волны 10 мм'),
+                     ('arc/rec/rough_10.json', 'Камни 10 мм')]:
+        res = {r['name']: r for r in walk[key]['results']}
+        row = [lab]
+        for m in ('arc_left', 'arc_right'):
+            r = res[m]
+            row.append((P if r['ok'] else F)(f"{100 * r['ratio']:.0f}% · {r['dyaw_deg']:+.0f}°"))
+        row.append(P(f"{max(res[m]['tilt_deg'] for m in ('arc_left', 'arc_right')):.0f}°"))
+        arc_rows.append(row)
+    arc_tbl = table(['Покрытие', 'Дуга влево', 'Дуга вправо', 'Наклон корпуса'], arc_rows)
     file_ = {'flat': 'flat_0', 'slope': 'slope_10', 'waves': 'waves_20', 'rough': 'rough_20'}
     title = {'flat': 'Ровный пол', 'slope': 'Уклон 10°', 'waves': 'Волны 20 мм', 'rough': 'Камни до 20 мм'}
     heading = [f'on_flat_{i}' for i in (1, 2, 3)] + [f'off_flat_{i}' for i in (1, 2, 3)] + \
@@ -168,7 +183,7 @@ def main():
     for k, v in blocks.items():
         html = html.replace(f'<!--V:{k}-->', v)
     for k, v in {'TESTS': tests_tbl, 'CAL': cal_tbl, 'SLOPE': slope_tbl, 'OFF': off_tbl, 'WAVES': waves_tbl,
-                 'ROUGH': rough_tbl, 'LIM': lim_tbl, 'NCASES': str(tests['cases']),
+                 'ROUGH': rough_tbl, 'LIM': lim_tbl, 'ARC': arc_tbl, 'NCASES': str(tests['cases']),
                  'NTESTS': str(tests.get('colcon_tests', '—')), 'HEADTBL': head_tbl,
                  'PERCEPTION_N': str(n_perception), 'VIDEODATA': '',
                  'VIDEONOTE': 'Ролики лежат рядом, в папке videos/. Откройте этот файл из клонированного '

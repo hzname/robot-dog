@@ -17,7 +17,7 @@ def test_stop_command_and_estop_zero_the_twist():
     assert protocol.handle_message('{"type":"stop"}', LIM).twist == (0.0, 0.0, 0.0)
     a = protocol.handle_message('{"type":"command","name":"stand"}', LIM)
     assert a.command == 'stand' and a.twist == (0.0, 0.0, 0.0)
-    for name in ('greet', 'crawl', 'trot'):
+    for name in ('greet', 'survey', 'crawl', 'trot'):
         assert protocol.handle_message('{"type":"command","name":"%s"}' % name, LIM).command == name
     a = protocol.handle_message('{"type":"estop","active":true}', LIM)
     assert a.estop is True and a.twist == (0.0, 0.0, 0.0)
