@@ -243,6 +243,18 @@ void WallGrid::computeNormals()
       }
       const double en = std::hypot(ex, ey);
       if (en < 1e-12) {continue;}
+      // a wall's end (neighbours on one side only along it): its normal is
+      // tilted by the one-sided neighbourhood and would hold the robot back
+      // as the wall goes on past the map - no line there
+      const double tx = -ey / en, ty = ex / en;
+      const P2 me = cellPoint(k);
+      double lo = 0.0, hi = 0.0;
+      for (int i = 0; i < n; ++i) {
+        const double u = (q[i].x - me.x) * tx + (q[i].y - me.y) * ty;
+        lo = std::min(lo, u);
+        hi = std::max(hi, u);
+      }
+      if (lo > -0.9 * res_ || hi < 0.9 * res_) {continue;}
       nx_[k] = static_cast<float>(ex / en);
       ny_[k] = static_cast<float>(ey / en);
     }
@@ -429,10 +441,11 @@ MatchResult match(const WallGrid & map, const std::vector<P2> & cloud, const Pos
       bool line = false;
       const double d = map.distance(q.x, q.y, &gx, &gy, &line);
       if (d > p.outlier) {continue;}
-      // nearest is a wall's end (or a corner): a point further than a few cm
-      // is most likely the same wall going on where the map has not been yet -
-      // it would drag the robot back to the map's edge
-      if (!line && d > p.huber) {continue;}
+      // nearest is a wall's end (or a corner, a blob): the point is most
+      // likely the same wall going on where the map has not been yet, and a
+      // distance to a point would drag the robot back to the map's edge. A
+      // corner still counts through the lines of its two walls.
+      if (!line) {continue;}
       const double w = (d <= p.huber ? 1.0 : p.huber / d) / sd2;
       const double J[3] = {gx, gy, -gx * (q.y - T.y) + gy * (q.x - T.x)};
       for (int a = 0; a < 3; ++a) {
