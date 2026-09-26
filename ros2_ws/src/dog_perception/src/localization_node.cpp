@@ -341,6 +341,12 @@ private:
     } else if (map_.submaps().size() > subs) {
       RCLCPP_INFO(get_logger(), "submap %zu after %.1f m", map_.submaps().size() - 1, walked_);
     }
+    if (map_.submaps().size() > subs) {
+      for (const auto & tr : map_.lastTries()) {
+        RCLCPP_INFO(get_logger(), "  loop try %d-%d (%.1f m apart): fit %.0f %%, next %.0f %%, inliers %.0f %% -> %s",
+          tr.from, tr.to, tr.dist, 100.0 * tr.fit, 100.0 * tr.second, 100.0 * tr.inliers, tr.ok ? "closed" : "no");
+      }
+    }
     if (t - last_field_ > 0.5 || !map_.local().fieldValid()) {
       map_.refresh();
       last_field_ = t;

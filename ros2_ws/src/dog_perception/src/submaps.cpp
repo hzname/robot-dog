@@ -312,6 +312,7 @@ void SubmapMap::finishCurrent()
 
 std::optional<LoopClosure> SubmapMap::closeLoop(int k)
 {
+  tries_.clear();
   const Submap & sk = subs_[k];
   const auto cloud = wallsOf(sk);
   if (cloud.size() < 30) {return std::nullopt;}
@@ -345,6 +346,8 @@ std::optional<LoopClosure> SubmapMap::closeLoop(int k)
     gp.step_yaw = 0.026;
     gp.clearance = 0.0;
     const auto r = globalSearch(ref, cloud, gp);
+    tries_.push_back({c.j, k, c.d, r.score, r.second, r.best.inlier_fraction,
+        r.ok && r.best.inlier_fraction >= p_.loop_min_inliers});
     if (!r.ok || r.best.inlier_fraction < p_.loop_min_inliers) {continue;}
     if (!best || r.best.inlier_fraction > best->inliers) {
       best = LoopClosure{c.j, k, r.best.inlier_fraction, 0.0, 0.0};

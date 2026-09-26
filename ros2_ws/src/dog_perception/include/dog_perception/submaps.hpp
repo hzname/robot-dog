@@ -76,8 +76,8 @@ struct SubmapParams
   int loop_skip{2};               // the last submaps before this one are its neighbours, not loops
   int local_submaps{3};           // mapping matches against this many latest submaps
   double loop_min_inliers{0.55};  // share of the submap's walls that must fall on the old one's
-  double loop_win_xy{1.0};        // [m] search window round the graph's guess
-  double loop_win_yaw{0.35};      // [rad]
+  double loop_win_xy{1.5};        // [m] search window round the graph's guess
+  double loop_win_yaw{0.5};       // [rad]
   double odom_sigma_xy{0.03};     // [m] per edge between neighbours, + 1 % of its length
   double odom_scale{0.15};        // dead reckoning's error share along what the walls do not fix
   double odom_sigma_yaw{0.017};   // [rad]
@@ -113,6 +113,9 @@ public:
   const std::vector<Submap> & submaps() const {return subs_;}
   const std::vector<GraphEdge> & edges() const {return edges_;}
   const std::vector<LoopClosure> & loops() const {return loops_;}
+  /// The loop candidates tried for the last finished submap (for the log).
+  struct LoopTry {int from, to; double dist, fit, second, inliers; bool ok;};
+  const std::vector<LoopTry> & lastTries() const {return tries_;}
   bool empty() const {return subs_.empty();}
 
   /// Every submap's walls at its current pose: to localize in a stored map.
@@ -158,6 +161,7 @@ private:
   std::vector<Submap> subs_;
   std::vector<GraphEdge> edges_;
   std::vector<LoopClosure> loops_;
+  std::vector<LoopTry> tries_;
   WallGrid merged_, local_;
   bool merged_dirty_{false};
 };
