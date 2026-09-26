@@ -124,14 +124,28 @@ public:
         // learnt whenever the robot is still - lying at start (as imu_node
         // does once) and standing on its feet later (the survey and the
         // greeting turn the body: not then), as the bias wanders with temperature
-        const double wz = msg->angular_velocity.z + odom_gyro_bias_;
+        // over the whole gap since the last message (messages get lost when the
+        // computer is busy): the IMU's own yaw change where it gives one (on the
+        // robot imu_node integrates the gyro at its full rate), else rate * dt
+        const double rdt = prev_stamp_ > 0.0 ? std::clamp(stamp - prev_stamp_, 0.0, 2.0) : 0.0;
+        prev_stamp_ = stamp;
+        double dyaw = msg->angular_velocity.z * gdt;
+        if (msg->orientation_covariance[0] >= 0.0) {
+          const auto & o = msg->orientation;
+          const double y = std::atan2(2.0 * (o.w * o.z + o.x * o.y), 1.0 - 2.0 * (o.y * o.y + o.z * o.z));
+          dyaw = have_prev_yaw_ ? std::remainder(y - prev_yaw_, 2.0 * M_PI) : 0.0;
+          prev_yaw_ = y;
+          have_prev_yaw_ = true;
+        }
+        dyaw += odom_gyro_bias_ * rdt;  // a drifting gyro (simulation)
+        const double wz = rdt > 0.0 ? dyaw / rdt : 0.0;
         const Mode md = controller_->mode();
         const bool resting = md == Mode::PASSIVE || md == Mode::LYING ||
           (md == Mode::STAND && !controller_->gait().stepping() && !controller_->crawl().stepping());
         const bool still = resting && std::abs(wz - gyro_bias_est_) < 0.05;
-        still_time_ = still ? still_time_ + gdt : 0.0;
-        if (still_time_ > 0.5) {gyro_bias_est_ += (wz - gyro_bias_est_) * std::min(1.0, gdt / 2.0);}
-        gyro_yaw_ += (wz - gyro_bias_est_) * gdt;
+        still_time_ = still ? still_time_ + rdt : 0.0;
+        if (still_time_ > 0.5) {gyro_bias_est_ += (wz - gyro_bias_est_) * std::min(1.0, rdt / 2.0);}
+        gyro_yaw_ += dyaw - gyro_bias_est_ * rdt;
         last_gyro_ = now();
         const auto & q = msg->orientation;
         if (msg->orientation_covariance[0] < 0.0) {return;}  // no orientation in this message
@@ -373,7 +387,8 @@ private:
   bool odom_publish_{false};
   bool odom_gyro_{false};
   double odom_gyro_bias_{0.0}, odom_scale_{1.0};
-  double gyro_yaw_{0.0}, gyro_bias_est_{0.0}, still_time_{0.0};
+  double gyro_yaw_{0.0}, gyro_bias_est_{0.0}, still_time_{0.0}, prev_stamp_{0.0}, prev_yaw_{0.0};
+  bool have_prev_yaw_{false};
   double odom_height_{0.15};
   int odom_div_{0};
   std::array<double, 3> imu_rpy_{};
