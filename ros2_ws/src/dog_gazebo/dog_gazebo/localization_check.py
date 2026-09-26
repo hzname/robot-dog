@@ -287,8 +287,10 @@ class LocalizationCheck:
         tr = [e for e in self.trace if e['phase'] in ('route', 'end')]
         # the first moment the node was sure where it was (after the survey,
         # standing or walking on)
-        self.t_tracking = next((e['t'] for e in self.trace
-                                if e['t'] >= self.t_survey_end - 0.5 and e.get('status') == 'tracking'), None)
+        # a narrow winner is 'verifying' while walked with: it counts, the errors
+        # (of the published, confirmed pose) say whether it was right
+        self.t_tracking = next((e['t'] for e in self.trace if e['t'] >= self.t_survey_end - 0.5
+                                and e.get('status') in ('tracking', 'verifying')), None)
         if self.t_tracking is not None:
             out['relocalized_s'] = round(max(0.0, self.t_tracking - self.t_survey_end), 1)
         else:
@@ -331,7 +333,8 @@ class LocalizationCheck:
             out['map_to_world'] = [round(v, 4) for v in self.map_offset]
         out['localization'] = err('loc', self.map_offset)
         out['dead_reckoning'] = err('dr', first_offset('dr'))
-        out['tracking_share'] = round(sum(1 for e in tr if e.get('status') == 'tracking') / max(len(tr), 1), 3)
+        out['tracking_share'] = round(sum(1 for e in tr if e.get('status') in ('tracking', 'verifying'))
+                                      / max(len(tr), 1), 3)
         if tr:
             walked = sum(math.hypot(b['truth'][0] - a['truth'][0], b['truth'][1] - a['truth'][1])
                          for a, b in zip(tr, tr[1:]))
