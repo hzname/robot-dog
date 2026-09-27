@@ -6,6 +6,7 @@
 #include <limits>
 #include <sstream>
 #include <unordered_set>
+#include <utility>
 
 namespace dog_perception
 {
@@ -528,6 +529,64 @@ MatchResult match(const WallGrid & map, const std::vector<P2> & cloud, const Pos
   return r;
 }
 
+double weakDirection(double xx, double xy, double yy, double * ratio)
+{
+  const double tr = xx + yy, det = xx * yy - xy * xy;
+  const double disc = std::sqrt(std::max(0.25 * tr * tr - det, 0.0));
+  const double l1 = 0.5 * tr + disc, l2 = 0.5 * tr - disc;
+  if (ratio) {*ratio = l1 > 0.0 ? std::max(l2, 0.0) / l1 : 0.0;}
+  // eigenvector of the smaller eigenvalue
+  double ex = xy, ey = l2 - xx;
+  if (std::hypot(ex, ey) < 1e-12) {
+    ex = l2 - yy;
+    ey = xy;
+  }
+  if (std::hypot(ex, ey) < 1e-12) {return 0.0;}
+  return std::atan2(ey, ex);
+}
+
+MatchResult slideAlong(const WallGrid & map, const std::vector<P2> & cloud, const MatchResult & r,
+  const MatchParams & p, double range, double min_gain)
+{
+  // nothing out of the matcher's reach: no wall for the cloud to slide to
+  if (!r.ok || cloud.empty() || r.points >= 0.95 * static_cast<double>(cloud.size())) {return r;}
+  double ratio = 1.0;
+  const double weak = weakDirection(r.cxx, r.cxy, r.cyy, &ratio);
+  if (ratio >= 0.1) {return r;}  // the walls fix both ways
+  const double ux = std::cos(weak), uy = std::sin(weak);
+  const auto pts = thin(cloud, 0.05);
+  auto fit = [&](double sft) {
+      Pose2 T = r.pose;
+      T.x += sft * ux;
+      T.y += sft * uy;
+      double f = 0.0;
+      for (const auto & pt : pts) {
+        const P2 q = T.apply(pt);
+        double gx = 0.0, gy = 0.0;
+        f += std::max(0.0, 1.0 - map.distance(q.x, q.y, &gx, &gy) / 0.1);
+      }
+      return f / static_cast<double>(pts.size());
+    };
+  const double f0 = fit(0.0);
+  const double step = 0.05;
+  std::vector<std::pair<double, double>> f;  // shift, fit
+  for (double sft = -range; sft <= range + 1e-9; sft += step) {f.push_back({sft, fit(sft)});}
+  const auto top = *std::max_element(f.begin(), f.end(),
+    [](const auto & a, const auto & b) {return a.second < b.second;});
+  const double best = top.second, best_s = top.first;
+  if (best < f0 + min_gain || std::abs(best_s) < 0.1) {return r;}
+  // one clear place along the corridor, not one of a few alike (doors, a
+  // row of shelves): the best elsewhere must stay clearly below
+  for (const auto & [sft, v] : f) {
+    if (std::abs(sft - best_s) > 0.3 && v > best - 0.5 * min_gain) {return r;}
+  }
+  Pose2 g = r.pose;
+  g.x += best_s * ux;
+  g.y += best_s * uy;
+  const auto m = match(map, cloud, g, p);
+  return m.ok && m.fit > r.fit ? m : r;
+}
+
 std::vector<P2> thin(const std::vector<P2> & pts, double cell)
 {
   std::unordered_set<int64_t> seen;
@@ -637,6 +696,7 @@ GlobalResult globalSearch(const WallGrid & map, const std::vector<P2> & cloud,
   for (size_t k = 1; k < refined.size(); ++k) {
     if (distinct(refined[k].pose, g.best.pose)) {
       g.second = refined[k].fit;
+      g.alt = refined[k];
       break;
     }
   }

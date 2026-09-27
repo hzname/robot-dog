@@ -154,6 +154,31 @@ TEST(Localization, CorridorKeepsThePriorAlongIt)
   EXPECT_NEAR(r.pose.x, guess.x, 0.02);                    // along: stays where it was
 }
 
+TEST(Localization, TheCorridorsEndWallBringsTheRobotBackAlongIt)
+{
+  // a corridor closed at x = 3; dead reckoning has the robot 0.5 m too far
+  // along: the end wall is beyond match()'s reach, slideAlong() finds it
+  const std::vector<Seg> segs = {{{-10.0, -0.75}, {3.0, -0.75}}, {{-10.0, 0.75}, {3.0, 0.75}},
+    {{3.0, -0.75}, {3.0, 0.75}}};
+  const WallGrid g = mapOf(segs);
+  const Pose2 truth{0.0, 0.0, 0.0};
+  const auto cloud = view(segs, truth, 5.0);
+  const Pose2 guess{-0.5, 0.05, 0.01};
+  const auto r = dog_perception::match(g, cloud, guess);
+  ASSERT_TRUE(r.ok);
+  EXPECT_NEAR(r.pose.x, guess.x, 0.05);  // match() alone: stuck
+  const auto s = dog_perception::slideAlong(g, cloud, r);
+  EXPECT_NEAR(s.pose.x, truth.x, 0.05);
+  EXPECT_NEAR(s.pose.y, truth.y, 0.02);
+  EXPECT_GT(s.inlier_fraction, r.inlier_fraction);
+  // a corridor with nothing along it: nothing to slide to
+  const std::vector<Seg> open = {{{-10.0, -0.75}, {10.0, -0.75}}, {{-10.0, 0.75}, {10.0, 0.75}}};
+  const WallGrid go = mapOf(open);
+  const auto co = view(open, truth, 5.0);
+  const auto ro = dog_perception::match(go, co, guess);
+  EXPECT_NEAR(dog_perception::slideAlong(go, co, ro).pose.x, ro.pose.x, 1e-9);
+}
+
 TEST(Localization, GlobalSearchFindsTheRobotInTheRoom)
 {
   const auto segs = room();

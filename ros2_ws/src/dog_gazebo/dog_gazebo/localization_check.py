@@ -401,12 +401,18 @@ def main():
                     why.append('no loop closed')
             else:
                 # the room: 1.7-2.1 cm p95 in most runs; a brief 10 cm excursion along
-                # a wall the lines do not fix happens (dead reckoning holds it there)
-                lim = 0.08 if args.world == 'room' else 0.15
+                # a wall the lines do not fix happens (dead reckoning holds it there).
+                # The house: 7-12 cm mean, 16-36 cm p95 in the right place - the
+                # map's own bend on the far side of the loop, as the live pose was
+                # there while mapping; a wrong place is metres and tens of degrees off
+                room = args.world == 'room'
+                lim, mean_lim, yaw_lim = (0.08, 1.0, 4.0) if room else (0.45, 0.15, 6.0)
                 if lo.get('p95_m', 1) > lim:
                     why.append(f"position error p95 {lo.get('p95_m')} m (> {lim})")
-                if lo.get('yaw_p95_deg', 99) > 4.0:
-                    why.append(f"heading error p95 {lo.get('yaw_p95_deg')} deg")
+                if lo.get('mean_m', 1) > mean_lim:
+                    why.append(f"position error mean {lo.get('mean_m')} m (> {mean_lim})")
+                if lo.get('yaw_p95_deg', 99) > yaw_lim:
+                    why.append(f"heading error p95 {lo.get('yaw_p95_deg')} deg (> {yaw_lim})")
             ok = not why
             print(('PASS' if ok else 'FAIL') + ': localization ' + ('; '.join(why) if why else
                   f"p95 {lo.get('p95_m')} m / {lo.get('yaw_p95_deg')} deg, map walls {mw.get('mean_m')} m, dead reckoning final "

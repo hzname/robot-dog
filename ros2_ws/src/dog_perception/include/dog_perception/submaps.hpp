@@ -75,7 +75,12 @@ struct SubmapParams
   double loop_radius{3.0};        // [m] + 10 % of the way walked since: old submaps this near are candidates
   int loop_skip{2};               // the last submaps before this one are its neighbours, not loops
   int local_submaps{3};           // mapping matches against this many latest submaps
-  double loop_min_inliers{0.55};  // share of the submap's walls that must fall on the old one's
+  double loop_min_inliers{0.8};   // share of the submap's walls that must fall on the old one's
+  double loop_min_fit{0.6};       // and how closely (MatchResult::fit). Wrong loops seen in the
+                                  // house: 42-50 % fit, 61-65 % inliers; right ones 78-84 %, 99-100 %
+  double loop_weak_ratio{0.15};   // walls this one-sided (a bare corridor, see weakDirection)
+  double loop_sigma_weak{0.75};   // leave the loop this loose along them [m]
+  double loop_max_residual{3.0};  // a loop the optimised graph cannot meet this well (sigmas) is dropped
   double loop_win_xy{1.5};        // [m] search window round the graph's guess
   double loop_win_yaw{0.5};       // [rad]
   double odom_sigma_xy{0.03};     // [m] per edge between neighbours, + 1 % of its length
@@ -114,7 +119,7 @@ public:
   const std::vector<GraphEdge> & edges() const {return edges_;}
   const std::vector<LoopClosure> & loops() const {return loops_;}
   /// The loop candidates tried for the last finished submap (for the log).
-  struct LoopTry {int from, to; double dist, fit, second, inliers; bool ok;};
+  struct LoopTry {int from, to; double dist, fit, second, inliers; bool ok; double residual{0.0};};
   const std::vector<LoopTry> & lastTries() const {return tries_;}
   bool empty() const {return subs_.empty();}
 

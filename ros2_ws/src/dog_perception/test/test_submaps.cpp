@@ -183,6 +183,54 @@ TEST(Submaps, PoseGraphSpreadsTheLoopError)
   EXPECT_NEAR(nodes[0].x, 0.0, 1e-12);  // node 0 stays
 }
 
+TEST(Submaps, ALoopInABareCorridorFixesAcrossItNotAlong)
+{
+  // walls along x only: nothing says where along the corridor
+  const std::vector<P2> normals(50, P2{0.0, 1.0});
+  double ratio = 1.0;
+  const double weak = dog_perception::weakDirection(0.0, 0.0, 1.0, &ratio);
+  EXPECT_LT(ratio, 0.01);
+  EXPECT_NEAR(std::abs(std::cos(weak)), 1.0, 1e-6);  // along x
+  double r2 = 1.0;
+  EXPECT_NEAR(std::abs(std::cos(dog_perception::weakDirection(normals, &r2))), 1.0, 1e-6);
+
+  // three nodes 2 m apart along the corridor; a loop from 0 to 2 that says
+  // 0.8 m too short (a look-alike stretch) and 0.1 m aside
+  std::vector<Pose2> nodes{{0.0, 0.0, 0.0}, {2.0, 0.0, 0.0}, {4.0, 0.0, 0.0}};
+  std::vector<GraphEdge> edges;
+  for (int k = 1; k <= 2; ++k) {
+    GraphEdge e;
+    e.a = k - 1;
+    e.b = k;
+    e.z = Pose2{2.0, 0.0, 0.0};
+    e.sigma_xy = 0.05;
+    e.sigma_yaw = 0.017;
+    edges.push_back(e);
+  }
+  GraphEdge loop;
+  loop.a = 0;
+  loop.b = 2;
+  loop.z = Pose2{3.2, 0.1, 0.0};
+  loop.sigma_xy = 0.03;
+  loop.sigma_yaw = 0.017;
+  loop.weak_dir = weak;
+  loop.sigma_weak = 0.75;
+  loop.loop = true;
+  auto loose = edges;
+  loose.push_back(loop);
+  auto n1 = nodes;
+  dog_perception::optimizePoseGraph(n1, loose);
+  EXPECT_NEAR(n1[2].x, 4.0, 0.05);  // along: the odometry holds
+  EXPECT_NEAR(n1[2].y, 0.1, 0.02);  // across: the loop
+  // the same loop taken as firm would squeeze the corridor
+  loop.sigma_weak = 0.0;
+  auto firm = edges;
+  firm.push_back(loop);
+  auto n2 = nodes;
+  dog_perception::optimizePoseGraph(n2, firm);
+  EXPECT_LT(n2[2].x, 3.5);
+}
+
 TEST(Submaps, ScanContextKnowsAPlaceTurnedAndTellsPlacesApart)
 {
   const auto segs = ring();

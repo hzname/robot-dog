@@ -62,19 +62,9 @@ double weakDirection(const std::vector<P2> & normals, double * ratio)
     xy += n.x * n.y;
     yy += n.y * n.y;
   }
-  const double tr = xx + yy, det = xx * yy - xy * xy;
-  const double disc = std::sqrt(std::max(0.25 * tr * tr - det, 0.0));
-  const double l1 = 0.5 * tr + disc, l2 = 0.5 * tr - disc;
-  if (ratio) {*ratio = l1 > 0.0 ? std::max(l2, 0.0) / l1 : 0.0;}
-  // eigenvector of the smaller eigenvalue
-  double ex = xy, ey = l2 - xx;
-  if (std::hypot(ex, ey) < 1e-12) {
-    ex = l2 - yy;
-    ey = xy;
-  }
-  if (std::hypot(ex, ey) < 1e-12) {return 0.0;}
-  return std::atan2(ey, ex);
+  return weakDirection(xx, xy, yy, ratio);
 }
+
 
 double optimizePoseGraph(std::vector<Pose2> & nodes, const std::vector<GraphEdge> & edges, int iterations)
 {
@@ -327,6 +317,8 @@ std::optional<LoopClosure> SubmapMap::closeLoop(int k)
   if (cands.size() > 3) {cands.resize(3);}
   std::optional<LoopClosure> best;
   GraphEdge best_edge;
+  double best_score = 0.0;
+  int best_try = -1;
   for (const auto & c : cands) {
     // the old submap with its neighbours, in its frame: more of the place to match
     WallGrid ref(p_.resolution, p_.min_hits);
@@ -346,17 +338,30 @@ std::optional<LoopClosure> SubmapMap::closeLoop(int k)
     gp.step_yaw = 0.026;
     gp.clearance = 0.0;
     const auto r = globalSearch(ref, cloud, gp);
-    tries_.push_back({c.j, k, c.d, r.score, r.second, r.best.inlier_fraction,
-        r.ok && r.best.inlier_fraction >= p_.loop_min_inliers});
-    if (!r.ok || r.best.inlier_fraction < p_.loop_min_inliers) {continue;}
-    if (!best || r.best.inlier_fraction > best->inliers) {
+    // a weak match (few walls in common, loosely) is no loop: in the house
+    // such ones were wrong by half a metre and bent the map for good
+    const bool ok = r.ok && r.best.inlier_fraction >= p_.loop_min_inliers && r.score >= p_.loop_min_fit;
+    tries_.push_back({c.j, k, c.d, r.score, r.second, r.best.inlier_fraction, ok});
+    if (!ok) {continue;}
+    if (!best || r.score > best_score) {
       best = LoopClosure{c.j, k, r.best.inlier_fraction, 0.0, 0.0};
+      best_score = r.score;
+      best_try = static_cast<int>(tries_.size()) - 1;
       best_edge.a = c.j;
       best_edge.b = k;
       best_edge.z = r.best.pose;
       best_edge.sigma_xy = p_.loop_sigma_xy;
       best_edge.sigma_yaw = p_.loop_sigma_yaw;
       best_edge.loop = true;
+      // along a bare corridor the walls say nothing about where along it:
+      // the loop fixes across and the heading only (the odometry edges'
+      // treatment of the same walls)
+      double ratio = 1.0;
+      const double weak = weakDirection(r.best.cxx, r.best.cxy, r.best.cyy, &ratio);
+      if (ratio < p_.loop_weak_ratio) {
+        best_edge.weak_dir = weak;  // in the old submap's frame, as the edge
+        best_edge.sigma_weak = p_.loop_sigma_weak;
+      }
     }
   }
   if (!best) {return std::nullopt;}
@@ -364,6 +369,16 @@ std::optional<LoopClosure> SubmapMap::closeLoop(int k)
   std::vector<Pose2> nodes;
   for (const auto & s : subs_) {nodes.push_back(s.pose);}
   optimizePoseGraph(nodes, edges_);
+  // the graph must be able to meet the loop: one it cannot is a match in the
+  // wrong place that happened to fit (a look-alike stretch of corridor)
+  const auto res = residual(best_edge, nodes[best_edge.a], nodes[best_edge.b]);
+  const double worst = std::max({std::abs(res[0]), std::abs(res[1]), std::abs(res[2])});
+  tries_[best_try].residual = worst;
+  if (worst > p_.loop_max_residual) {
+    edges_.pop_back();
+    tries_[best_try].ok = false;
+    return std::nullopt;
+  }
   for (size_t i = 0; i < subs_.size(); ++i) {subs_[i].pose = nodes[i];}
   rebuildMerged();
   return best;
@@ -405,7 +420,20 @@ GlobalResult SubmapMap::relocalize(const std::vector<P2> & cloud, const GlobalPa
       if (std::hypot(o.x - out.best.pose.x, o.y - out.best.pose.y) > 0.3 ||
         std::abs(wrapAngle(o.yaw - out.best.pose.yaw)) > 0.26)
       {
-        out.second = std::max(out.second, res[i].score);
+        if (res[i].score > out.second) {
+          out.second = res[i].score;
+          out.alt = res[i].best;
+        }
+      }
+      // within one place's window too
+      if (res[i].second > out.second && res[i].alt.ok) {
+        const auto & a = res[i].alt.pose;
+        if (std::hypot(a.x - out.best.pose.x, a.y - out.best.pose.y) > 0.3 ||
+          std::abs(wrapAngle(a.yaw - out.best.pose.yaw)) > 0.26)
+        {
+          out.second = res[i].second;
+          out.alt = res[i].alt;
+        }
       }
     }
     out.ok = out.second < gp.ambiguity * out.score;

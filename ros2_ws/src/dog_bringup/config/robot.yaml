@@ -160,18 +160,22 @@
       min_points: 30          # fewer wall points: dead reckoning alone
       min_inliers: 0.5        # share of points on the map's walls to accept a match
       lost_after: 3.0         # [s] without a good match: relocalize
+      recover_distance: 10.0  # [m] after that, looked for round the last good place first (then everywhere)
       reloc_wait: 3.0         # [s] between relocalization tries (and right after a survey)
       reloc_radius: 8.0       # [m] of the little map made while relocalizing that is looked for
       reloc_clear: 0.7        # next best below this share of the best, and a fit of
       reloc_clear_fit: 0.72   #   at least this: believed at once;
-      verify_distance: 3.0    #   else walked this far [m] with the walls under it first
+      verify_distance: 3.0    #   else walked this far [m] with the walls under it first,
+      verify_margin: 0.05     #   the runner-up walked along: one must fit this much better (fit share)
+      verify_max: 9.0         #   [m] still alike after this: relocalize
       reloc_min_points: 400   # fewer (5 cm cells): not sure, whatever the fit
       prior_xy: 0.10          # [m] trust in the last correction (1 sigma per match)
       prior_yaw_deg: 5.0
       submap_length: 2.5      # [m] of walking per submap (a node of the pose graph)
       loop_closure: true      # recognise old submaps and straighten the map
       loop_radius: 3.0        # [m] (+10 % of the way since) old submaps this near are loop candidates
-      loop_min_inliers: 0.55  # share of a submap's walls that must land on the old ones
+      loop_min_inliers: 0.8   # share of a submap's walls that must land on the old ones
+      loop_min_fit: 0.6       # ... and how closely (weaker matches were wrong in the house)
       scale_estimation: false # experimental: learn dead reckoning's scale online (calibrate odom.scale instead)
       scale_min_move: 1.0     # [m] reckoned between two such places
 

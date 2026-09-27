@@ -128,6 +128,20 @@ struct MatchResult
 MatchResult match(const WallGrid & map, const std::vector<P2> & cloud, const Pose2 & guess,
   const MatchParams & p = MatchParams());
 
+/// The direction walls with this mean n n^T (MatchResult::cxx, cxy, cyy) pin
+/// down least (angle), and how much less (smallest / largest eigenvalue, 0..1).
+double weakDirection(double xx, double xy, double yy, double * ratio);
+
+/// Along a bare corridor match() keeps where the robot is along it, and
+/// walls further than MatchParams::outlier are ignored: once dead reckoning
+/// has put the robot more than that far along, the corridor's end wall no
+/// longer pulls it back. When `r` is such a match, slide the cloud along the
+/// corridor (+-range) and take the one place where it fits clearly better
+/// (the end wall, a door, furniture on it), matched again; else `r` as it is
+/// (also when 95 % of the cloud is within its reach already).
+MatchResult slideAlong(const WallGrid & map, const std::vector<P2> & cloud, const MatchResult & r,
+  const MatchParams & p = MatchParams(), double range = 1.0, double min_gain = 0.05);
+
 struct GlobalParams
 {
   double step_xy{0.10};      // [m]
@@ -149,6 +163,7 @@ struct GlobalResult
   MatchResult best;
   double score{0.0};         // fit of the best after refinement (MatchResult::fit)
   double second{0.0};        // fit of the best distinct alternative (> 0.3 m or 15 deg away)
+  MatchResult alt;           // that alternative (alt.ok false if there is none)
   bool ok{false};
 };
 
