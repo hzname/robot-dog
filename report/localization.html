@@ -102,15 +102,15 @@ details summary { cursor: pointer; font-size: 14px; color: var(--ink-2); }
 </style></head>
 <body><main>
 <header>
-  <div class="eyebrow">RobotDog 2.0 · Gazebo Harmonic · dog_perception/localization_node · 26.09.2026</div>
+  <div class="eyebrow">RobotDog 2.0 · Gazebo Harmonic · dog_perception/localization_node · 27.09.2026</div>
   <h1>Локализация по карте</h1>
-  <p>Счисление по шагам и гироскопу уходит на полметра за круг по комнате. Верхние половины двух наклонённых лидаров видят стены и мебель; по ним робот строит 2D-карту комнаты, а потом, с любого места в ней, находит себя и идёт с ошибкой в пару сантиметров. Подробности — <a href="../docs/LOCALIZATION.md">docs/LOCALIZATION.md</a>.</p>
+  <p>Счисление по шагам и гироскопу уходит на полметра за круг по комнате. Верхние половины двух наклонённых лидаров видят стены и мебель; по ним робот строит 2D-карту комнаты, а потом, с любого места в ней, находит себя и идёт с ошибкой в пару сантиметров. В доме с кольцевым коридором на 37 м карта собирается из подкарт, связанных графом с замыканием петель, а верное место в почти симметричном доме выбирается ходьбой из двух гипотез. Подробности — <a href="../docs/LOCALIZATION.md">docs/LOCALIZATION.md</a>.</p>
 </header>
 <div class="stats">
-  <div class="stat"><div class="v">1.7<small> см</small></div><div class="k">ошибка положения (p95) по карте с другого старта</div></div>
-  <div class="stat"><div class="v">98<small> см</small></div><div class="k">у одного счисления за тот же маршрут 6.3 м</div></div>
-  <div class="stat"><div class="v">1.5<small> с</small></div><div class="k">после осмотра робот знает, где он в сохранённой карте</div></div>
-  <div class="stat"><div class="v">1836</div><div class="k">клеток стен 5 см в карте комнаты 5 × 4 м</div></div>
+  <div class="stat"><div class="v">5.5<small> см</small></div><div class="k">ошибка положения (p95) по карте с другого старта</div></div>
+  <div class="stat"><div class="v">13<small> см</small></div><div class="k">у одного счисления за тот же маршрут 6.3 м</div></div>
+  <div class="stat"><div class="v">0.5<small> с</small></div><div class="k">после осмотра робот знает, где он в сохранённой карте</div></div>
+  <div class="stat"><div class="v">1702</div><div class="k">клеток стен 5 см в карте комнаты 5 × 4 м</div></div>
 </div>
 <div class="callout"><h3>Как читать ролики</h3>
   <div class="legend">
@@ -122,11 +122,11 @@ details summary { cursor: pointer; font-size: 14px; color: var(--ink-2); }
 
 <section><div class="sec-head"><div class="eyebrow">первый запуск: карты нет</div>
   <h2><span class="num-badge">1</span>Построение карты</h2>
-  <p>Робот встаёт, делает осмотр (корпус качается вверх-вниз и влево-вправо, лидары проходят по стенам) и идёт по кругу. Каждый скан сопоставляется с уже построенной частью карты и дописывается в неё. Счисление с гироскопом, уходящим на 0,3°/с, к концу круга ошибается на 47 см и 25°. Карта при этом не расползается: стены ложатся на мир в пределах пары сантиметров.</p></div>
+  <p>Робот встаёт, делает осмотр (корпус качается вверх-вниз и влево-вправо, лидары проходят по стенам) и идёт по кругу. Каждый скан сопоставляется с уже построенной частью карты и дописывается в неё. Счисление с гироскопом, уходящим на 0,3°/с, к концу круга ошибается на 28 см и 7°. Карта при этом не расползается: стены ложатся на мир в пределах пары сантиметров.</p></div>
   <figure class="vid">
   <figcaption><h3>Построение карты комнаты</h3><span class="badge">×2</span></figcaption>
   <div class="player"><video data-key="loc_mapping" src="videos/loc_mapping.mp4" controls playsinline muted preload="none" poster="posters/loc_mapping.jpg"></video></div>
-  <ul class="chips"><li class="chip ok"><span>ошибка p95</span><b>1.9 см</b></li><li class="chip ok"><span>курс p95</span><b>2.9°</b></li><li class="chip bad"><span>счисление в конце</span><b>47 см</b></li><li class="chip skip"><span>пройдено</span><b>5.2 м</b></li></ul>
+  <ul class="chips"><li class="chip ok"><span>ошибка p95</span><b>1.9 см</b></li><li class="chip ok"><span>курс p95</span><b>1.9°</b></li><li class="chip bad"><span>счисление в конце</span><b>28 см</b></li><li class="chip skip"><span>пройдено</span><b>5.1 м</b></li></ul>
 </figure>
 </section>
 
@@ -136,21 +136,44 @@ details summary { cursor: pointer; font-size: 14px; color: var(--ink-2); }
   <figure class="vid">
   <figcaption><h3>Локализация с другого старта</h3><span class="badge">×2</span></figcaption>
   <div class="player"><video data-key="loc_localize" src="videos/loc_localize.mp4" controls playsinline muted preload="none" poster="posters/loc_localize.jpg"></video></div>
-  <ul class="chips"><li class="chip ok"><span>нашёл себя</span><b>за 1.5 с</b></li><li class="chip ok"><span>ошибка p95</span><b>1.7 см</b></li><li class="chip ok"><span>курс p95</span><b>2.1°</b></li><li class="chip bad"><span>счисление в конце</span><b>98 см</b></li><li class="chip skip"><span>пройдено</span><b>6.3 м</b></li></ul>
+  <ul class="chips"><li class="chip ok"><span>нашёл себя</span><b>за 0.5 с</b></li><li class="chip ok"><span>ошибка p95</span><b>5.5 см</b></li><li class="chip ok"><span>курс p95</span><b>2.8°</b></li><li class="chip bad"><span>счисление в конце</span><b>13 см</b></li><li class="chip skip"><span>пройдено</span><b>6.3 м</b></li></ul>
 </figure>
-  <div class="panel"><div class="tbl-wrap"><table><thead><tr><th>Прогон</th><th class="num">Нашёл себя</th><th class="num">На стенах: лучшая / вторая гипотеза</th><th class="num">Ошибка p95</th><th class="num">Курс p95</th><th class="num">Счисление в конце</th></tr></thead><tbody><tr><td>Картирование, старт 0</td><td class="num r-">—</td><td class="num r-">—</td><td class="num r-ok">1.9 см</td><td class="num r-ok">2.9°</td><td class="num r-warn">47 см</td></tr><tr><td>Локализация, старт 1</td><td class="num r-">1.5 с</td><td class="num r-">91 % / 66 % (1168 точек)</td><td class="num r-ok">1.7 см</td><td class="num r-ok">2.1°</td><td class="num r-warn">98 см</td></tr><tr><td>Локализация, старт 2</td><td class="num r-">1.5 с</td><td class="num r-">78 % / 58 % (1591 точек)</td><td class="num r-ok">1.8 см</td><td class="num r-ok">2.1°</td><td class="num r-warn">92 см</td></tr><tr><td>Старт 1 без осмотра</td><td class="num r-">1.5 с</td><td class="num r-">100 % / 81 % (367 точек)</td><td class="num r-ok">1.6 см</td><td class="num r-ok">2.2°</td><td class="num r-warn">91 см</td></tr></tbody></table></div></div>
+  <div class="panel"><div class="tbl-wrap"><table><thead><tr><th>Прогон</th><th class="num">Нашёл себя</th><th class="num">На стенах: лучшая / вторая гипотеза</th><th class="num">Ошибка p95</th><th class="num">Курс p95</th><th class="num">Счисление в конце</th></tr></thead><tbody><tr><td>Картирование, старт 0</td><td class="num r-">—</td><td class="num r-">—</td><td class="num r-ok">1.9 см</td><td class="num r-ok">1.9°</td><td class="num r-warn">28 см</td></tr><tr><td>Локализация, старт 1</td><td class="num r-">0.5 с</td><td class="num r-">82 % / 66 % (657 точек)</td><td class="num r-ok">5.5 см</td><td class="num r-ok">2.8°</td><td class="num r-warn">13 см</td></tr><tr><td>Локализация, старт 2</td><td class="num r-">2.2 с</td><td class="num r-">80 % / 49 % (707 точек)</td><td class="num r-ok">4.7 см</td><td class="num r-ok">2.9°</td><td class="num r-warn">1 см</td></tr><tr><td>Старт 1 без осмотра</td><td class="num r-">3.6 с</td><td class="num r-">82 % / 52 % (427 точек)</td><td class="num r-ok">4.5 см</td><td class="num r-ok">2.6°</td><td class="num r-warn">4 см</td></tr></tbody></table></div></div>
   <div class="panel"><h3>Что видно по прогонам</h3><ul class="list">
-    <li><b>Осмотр нужен для надёжности, а не для точности.</b> Без него робот тоже нашёл себя, но по 367 точкам вместо 1168, и вторая гипотеза набрала 81 % против 100 % (с осмотром — 66 против 91). Порог неоднозначности — 90 % от лучшей. В комнате посимметричнее без осмотра привязка откажется или ошибётся.</li>
-    <li><b>Ошибки сравниваются в одном кадре.</b> Кадр карты — там, где робот стоял в начале картирования, по его счислению. Прогон картирования подбирает жёсткое совмещение карты с миром (она оказалась повёрнута на 3°), и тот же сдвиг используется для всех стартов. Поэтому ошибка локализации — это ещё и искажение самой карты.</li>
+    <li><b>Осмотр нужен для надёжности, а не для точности.</b> Без него робот тоже нашёл себя, но по 427 точкам вместо 657, и вторая гипотеза набрала 52 % против 82 % (с осмотром — 66 против 82). Порог неоднозначности — 92 % от лучшей. В комнате посимметричнее без осмотра привязка откажется или ошибётся.</li>
+    <li><b>Ошибки сравниваются в одном кадре.</b> Кадр карты — там, где робот стоял в начале картирования, по его счислению. Прогон картирования подбирает жёсткое совмещение карты с миром (сдвиг на несколько сантиметров и доли градуса), и тот же сдвиг используется для всех стартов. Поэтому ошибка локализации — это ещё и искажение самой карты.</li>
     <li><b>Курс</b> ошибается на 2–3° p95, в среднем около 1°: откуда остаток, ещё не разобрано (кандидаты — рыскание корпуса в рыси между сканами и задержка скана относительно счисления).</li>
   </ul></div>
 </section>
 
-<section><div class="sec-head"><div class="eyebrow">чего это ещё не умеет</div><h2><span class="num-badge">3</span>Ограничения</h2></div>
+<section><div class="sec-head"><div class="eyebrow">много комнат: кольцо 10 × 7 м вокруг ядра, 37 м пути</div>
+  <h2><span class="num-badge">3</span>Дом: подкарты, петли и две гипотезы</h2>
+  <p>Одна сетка на весь дом запомнила бы дрейф первого круга навсегда. Поэтому карта — это подкарты по 2,5 м пути, связанные графом. Законченная подкарта ищется среди старых; найденная петля добавляется в граф, он оптимизируется, и подкарты переезжают вместе с узлами. Счисление за круг ушло на 179 см, а стены карты легли на настоящие в среднем в 3.3 см.</p></div>
+  <figure class="vid">
+  <figcaption><h3>Дом: карта с замыканием петель</h3><span class="badge">×2</span></figcaption>
+  <div class="player"><video data-key="house_mapping" src="videos/house_mapping.mp4" controls playsinline muted preload="none" poster="posters/house_mapping.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>ошибка p95</span><b>16.7 см</b></li><li class="chip ok"><span>курс p95</span><b>1.9°</b></li><li class="chip bad"><span>счисление в конце</span><b>179 см</b></li><li class="chip skip"><span>пройдено</span><b>37.2 м</b></li></ul>
+</figure>
+  <p>Дом почти симметричен при повороте на 180°, коридоры голые, и с одного места верное положение и зеркальное часто подходят почти одинаково. Поэтому узел ведёт обе гипотезы и принимает ту, что за 3 м пути легла на стены заметно лучше. Мебель есть только с одной стороны. В ролике первая найденная гипотеза оказалась зеркальной: через 2,8 м пути её стены разошлись с картой, и победила вторая.</p>
+  <figure class="vid">
+  <figcaption><h3>Дом: привязка, две гипотезы</h3><span class="badge">×2</span></figcaption>
+  <div class="player"><video data-key="house_localize" src="videos/house_localize.mp4" controls playsinline muted preload="none" poster="posters/house_localize.jpg"></video></div>
+  <ul class="chips"><li class="chip ok"><span>нашёл себя</span><b>за 0.9 с</b></li><li class="chip ok"><span>ошибка p95</span><b>35.6 см</b></li><li class="chip ok"><span>курс p95</span><b>5.0°</b></li><li class="chip bad"><span>счисление в конце</span><b>177 см</b></li><li class="chip skip"><span>пройдено</span><b>36.3 м</b></li></ul>
+</figure>
+  <div class="panel"><div class="tbl-wrap"><table><thead><tr><th>Прогон</th><th class="num">Нашёл себя</th><th class="num">Как</th><th class="num">Ошибка: средняя / p95</th><th class="num">Курс p95</th></tr></thead><tbody><tr><td>Карта, старт 0</td><td class="num r-">—</td><td class="num r-">петель: 3</td><td class="num r-ok">стены 3.3 / 8.8 см</td><td class="num r-ok">1.9°</td></tr><tr><td>Старт 1</td><td class="num r-">36.7 с</td><td class="num r-">1-я гипотеза отвергнута</td><td class="num r-ok">9 / 26 см</td><td class="num r-ok">2.3°</td></tr><tr><td>Старт 2</td><td class="num r-">0.9 с</td><td class="num r-">победила 2-я гипотеза; потерь 1, найден рядом 1</td><td class="num r-ok">10 / 36 см</td><td class="num r-ok">5.0°</td></tr></tbody></table></div></div>
+  <div class="panel"><h3>Что пришлось исправить</h3><ul class="list">
+    <li><b>Слабые петли гнули карту.</b> Совпадения на 42–50 % оказывались ошибкой на полметра вдоль коридора; жёсткая связь дёргала робота на 7,5°, и стены ложились в подкарты косыми копиями. Теперь петля требует 80 % стен и 60 % совпадения, в голом коридоре не держит положение вдоль него и выбрасывается, если граф не может её выполнить.</li>
+    <li><b>Потеряв стены, робот искал себя по всему дому</b> и находил зеркальный коридор. Теперь сначала рядом с последним местом.</li>
+    <li><b>Торцевая стена коридора выпадала из сопоставления</b>, как только счисление уводило робота на 30 см вдоль. Теперь облако пробуется со сдвигом вдоль коридора на ±1 м.</li>
+    <li><b>Что осталось.</b> Ошибка 10–25 см на дальней от старта стороне кольца — изгиб самой карты. Иногда при картировании сопоставление придерживает робота в голом коридоре (в одном из двух прогонов на 0,5 м). Дома в CI нет.</li>
+  </ul></div>
+</section>
+
+<section><div class="sec-head"><div class="eyebrow">чего это ещё не умеет</div><h2><span class="num-badge">4</span>Ограничения</h2></div>
   <div class="panel"><ul class="list">
     <li>Карта плоская: стены и мебель от 10 см до 2 м над полом, спроецированные на пол. Для ковра, порогов и ступеней по-прежнему карта высот охранника.</li>
-    <li>Без замыкания петель: в большом доме карта будет накапливать искажение. Комната 5 × 4 м проходится с ошибкой меньше 2 см.</li>
-    <li>Длинный пустой коридор задаёт только поперечное положение, вдоль него держится счисление (тест <code>CorridorKeepsThePriorAlongIt</code>).</li>
+    <li>Замыкание петель проверено на одном кольце (дом): верное место находится, но изгиб карты на дальней стороне — 10–25 см. В почти симметричном доме место отличает только мебель: нужны признаки сильнее контуров стен (камера головы, двери).</li>
+    <li>Длинный пустой коридор задаёт только поперечное положение, вдоль него держится счисление (тест <code>CorridorKeepsThePriorAlongIt</code>), пока в облако не попадёт торцевая стена.</li>
     <li>Люди и передвинутая мебель не удаляются из карты: при сопоставлении такие точки просто не попадают на стены.</li>
     <li>Глобальный поиск по комнате — около 1 с на ПК. На A53 будет в разы дольше; для большого дома нужен поиск от грубой сетки к мелкой.</li>
   </ul></div>

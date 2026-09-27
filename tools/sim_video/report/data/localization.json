@@ -1,134 +1,315 @@
 {
  "map0": {
   "phase": "mapping",
+  "world": "room",
   "seed": 0,
   "route_points": 4,
   "reached": 4,
   "relocalized_s": 0.0,
+  "map_walls": {
+   "mean_m": 0.046,
+   "p95_m": 0.219,
+   "within_5cm": 0.761,
+   "cells": 1700
+  },
   "map_to_world": [
-   0.0482,
-   0.028,
-   -0.0498
+   0.0402,
+   -0.0016,
+   -0.0074
   ],
   "localization": {
-   "mean_m": 0.008,
+   "mean_m": 0.01,
    "p95_m": 0.019,
    "max_m": 0.024,
-   "final_m": 0.005,
-   "yaw_p95_deg": 2.86,
-   "yaw_final_deg": 0.36,
+   "final_m": 0.011,
+   "yaw_p95_deg": 1.86,
+   "yaw_final_deg": 0.91,
    "samples": 277
   },
   "dead_reckoning": {
-   "mean_m": 0.304,
-   "p95_m": 0.485,
-   "max_m": 0.498,
-   "final_m": 0.467,
-   "yaw_p95_deg": 25.15,
-   "yaw_final_deg": 2.21,
+   "mean_m": 0.245,
+   "p95_m": 0.33,
+   "max_m": 0.341,
+   "final_m": 0.279,
+   "yaw_p95_deg": 6.91,
+   "yaw_final_deg": 7.02,
    "samples": 277
   },
   "tracking_share": 1.0,
-  "walked_m": 5.17,
-  "map_cells": 1836
+  "walked_m": 5.06,
+  "map_cells": 1702,
+  "submaps": 2,
+  "loops": 0,
+  "events": {
+   "lost": 0,
+   "found_near": 0,
+   "rejected": 0,
+   "runner_up": false,
+   "loops": 0
+  }
  },
  "loc1": {
   "phase": "localize",
+  "world": "room",
   "seed": 1,
   "route_points": 4,
   "reached": 4,
-  "relocalized_s": 1.5,
+  "relocalized_s": 0.5,
   "localization": {
-   "mean_m": 0.008,
-   "p95_m": 0.017,
-   "max_m": 0.029,
-   "final_m": 0.003,
-   "yaw_p95_deg": 2.09,
-   "yaw_final_deg": 0.29,
-   "samples": 330
+   "mean_m": 0.028,
+   "p95_m": 0.055,
+   "max_m": 0.073,
+   "final_m": 0.028,
+   "yaw_p95_deg": 2.77,
+   "yaw_final_deg": 1.74,
+   "samples": 150
   },
   "dead_reckoning": {
-   "mean_m": 0.555,
-   "p95_m": 1.156,
-   "max_m": 1.183,
-   "final_m": 0.976,
-   "yaw_p95_deg": 43.28,
-   "yaw_final_deg": 40.56,
-   "samples": 330
+   "mean_m": 0.11,
+   "p95_m": 0.218,
+   "max_m": 0.235,
+   "final_m": 0.129,
+   "yaw_p95_deg": 7.86,
+   "yaw_final_deg": 8.3,
+   "samples": 321
   },
   "tracking_share": 1.0,
-  "walked_m": 6.35,
-  "map_cells": 1836,
+  "walked_m": 6.34,
+  "map_cells": 1411,
+  "submaps": 2,
+  "loops": 0,
   "reloc": {
-   "points": 1168,
-   "best": 91,
+   "points": 657,
+   "best": 82,
    "second": 66
+  },
+  "events": {
+   "lost": 0,
+   "found_near": 0,
+   "rejected": 0,
+   "runner_up": false,
+   "loops": 0
   }
  },
  "loc2": {
   "phase": "localize",
+  "world": "room",
   "seed": 2,
   "route_points": 4,
   "reached": 4,
-  "relocalized_s": 1.5,
+  "relocalized_s": 2.2,
   "localization": {
-   "mean_m": 0.008,
-   "p95_m": 0.018,
-   "max_m": 0.028,
-   "final_m": 0.006,
-   "yaw_p95_deg": 2.13,
-   "yaw_final_deg": 0.2,
-   "samples": 298
+   "mean_m": 0.021,
+   "p95_m": 0.047,
+   "max_m": 0.065,
+   "final_m": 0.031,
+   "yaw_p95_deg": 2.85,
+   "yaw_final_deg": 2.48,
+   "samples": 300
   },
   "dead_reckoning": {
-   "mean_m": 0.488,
-   "p95_m": 0.862,
-   "max_m": 0.921,
-   "final_m": 0.921,
-   "yaw_p95_deg": 37.61,
-   "yaw_final_deg": 31.42,
-   "samples": 298
+   "mean_m": 0.138,
+   "p95_m": 0.22,
+   "max_m": 0.233,
+   "final_m": 0.008,
+   "yaw_p95_deg": 4.74,
+   "yaw_final_deg": 4.85,
+   "samples": 300
   },
   "tracking_share": 1.0,
-  "walked_m": 6.07,
-  "map_cells": 1836,
+  "walked_m": 5.96,
+  "map_cells": 1411,
+  "submaps": 2,
+  "loops": 0,
   "reloc": {
-   "points": 1591,
-   "best": 78,
-   "second": 58
+   "points": 707,
+   "best": 80,
+   "second": 49
+  },
+  "events": {
+   "lost": 0,
+   "found_near": 0,
+   "rejected": 0,
+   "runner_up": false,
+   "loops": 0
   }
  },
  "loc1ns": {
   "phase": "localize",
+  "world": "room",
   "seed": 1,
   "route_points": 4,
   "reached": 4,
-  "relocalized_s": 1.5,
+  "relocalized_s": 3.6,
   "localization": {
-   "mean_m": 0.008,
-   "p95_m": 0.016,
-   "max_m": 0.027,
-   "final_m": 0.005,
-   "yaw_p95_deg": 2.24,
-   "yaw_final_deg": 0.28,
-   "samples": 334
+   "mean_m": 0.023,
+   "p95_m": 0.045,
+   "max_m": 0.058,
+   "final_m": 0.03,
+   "yaw_p95_deg": 2.62,
+   "yaw_final_deg": 1.94,
+   "samples": 322
   },
   "dead_reckoning": {
-   "mean_m": 0.448,
-   "p95_m": 0.826,
-   "max_m": 0.907,
-   "final_m": 0.907,
-   "yaw_p95_deg": 46.65,
-   "yaw_final_deg": 45.32,
-   "samples": 334
+   "mean_m": 0.058,
+   "p95_m": 0.09,
+   "max_m": 0.097,
+   "final_m": 0.041,
+   "yaw_p95_deg": 2.5,
+   "yaw_final_deg": 2.05,
+   "samples": 322
   },
   "tracking_share": 1.0,
-  "walked_m": 6.38,
-  "map_cells": 1836,
+  "walked_m": 6.32,
+  "map_cells": 1411,
+  "submaps": 2,
+  "loops": 0,
   "reloc": {
-   "points": 367,
-   "best": 100,
-   "second": 81
+   "points": 427,
+   "best": 82,
+   "second": 52
+  },
+  "events": {
+   "lost": 0,
+   "found_near": 0,
+   "rejected": 0,
+   "runner_up": false,
+   "loops": 0
+  }
+ },
+ "house_map": {
+  "phase": "mapping",
+  "world": "house",
+  "seed": 0,
+  "route_points": 6,
+  "reached": 6,
+  "relocalized_s": 0.0,
+  "map_walls": {
+   "mean_m": 0.033,
+   "p95_m": 0.088,
+   "within_5cm": 0.81,
+   "cells": 3596
+  },
+  "map_to_world": [
+   0.0426,
+   0.0727,
+   -0.0192
+  ],
+  "localization": {
+   "mean_m": 0.074,
+   "p95_m": 0.167,
+   "max_m": 0.206,
+   "final_m": 0.081,
+   "yaw_p95_deg": 1.91,
+   "yaw_final_deg": 0.67,
+   "samples": 1611
+  },
+  "dead_reckoning": {
+   "mean_m": 1.15,
+   "p95_m": 2.215,
+   "max_m": 2.452,
+   "final_m": 1.793,
+   "yaw_p95_deg": 28.98,
+   "yaw_final_deg": 30.44,
+   "samples": 1626
+  },
+  "tracking_share": 1.0,
+  "walked_m": 37.17,
+  "map_cells": 3596,
+  "submaps": 15,
+  "loops": 3,
+  "events": {
+   "lost": 0,
+   "found_near": 0,
+   "rejected": 0,
+   "runner_up": false,
+   "loops": 3
+  }
+ },
+ "house_loc1": {
+  "phase": "localize",
+  "world": "house",
+  "seed": 1,
+  "route_points": 6,
+  "reached": 6,
+  "relocalized_s": 36.7,
+  "localization": {
+   "mean_m": 0.093,
+   "p95_m": 0.26,
+   "max_m": 0.356,
+   "final_m": 0.049,
+   "yaw_p95_deg": 2.32,
+   "yaw_final_deg": 1.91,
+   "samples": 1384
+  },
+  "dead_reckoning": {
+   "mean_m": 0.383,
+   "p95_m": 0.638,
+   "max_m": 0.695,
+   "final_m": 0.637,
+   "yaw_p95_deg": 3.18,
+   "yaw_final_deg": 1.98,
+   "samples": 1598
+  },
+  "tracking_share": 0.941,
+  "walked_m": 36.7,
+  "map_cells": 3583,
+  "submaps": 15,
+  "loops": 0,
+  "reloc": {
+   "points": 815,
+   "best": 76,
+   "second": 48
+  },
+  "events": {
+   "lost": 0,
+   "found_near": 0,
+   "rejected": 1,
+   "runner_up": false,
+   "loops": 0
+  }
+ },
+ "house_loc2": {
+  "phase": "localize",
+  "world": "house",
+  "seed": 2,
+  "route_points": 6,
+  "reached": 6,
+  "relocalized_s": 0.9,
+  "localization": {
+   "mean_m": 0.102,
+   "p95_m": 0.356,
+   "max_m": 0.505,
+   "final_m": 0.032,
+   "yaw_p95_deg": 4.95,
+   "yaw_final_deg": 1.33,
+   "samples": 1434
+  },
+  "dead_reckoning": {
+   "mean_m": 1.066,
+   "p95_m": 1.822,
+   "max_m": 1.909,
+   "final_m": 1.767,
+   "yaw_p95_deg": 26.46,
+   "yaw_final_deg": 27.76,
+   "samples": 1578
+  },
+  "tracking_share": 0.991,
+  "walked_m": 36.3,
+  "map_cells": 3583,
+  "submaps": 15,
+  "loops": 0,
+  "reloc": {
+   "points": 472,
+   "best": 79,
+   "second": 71
+  },
+  "events": {
+   "lost": 1,
+   "found_near": 1,
+   "rejected": 1,
+   "runner_up": true,
+   "loops": 0
   }
  }
 }

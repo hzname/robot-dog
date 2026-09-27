@@ -13,7 +13,8 @@
   # perception_check recordings listed in data/gaits_runs.json (crawl, going round, greeting)
   collect.py gaits --root /path/with/recordings
 
-  # localization_check recordings: <name>.json in ROOT (map0, loc1, loc2, loc1ns)
+  # localization_check recordings: <name>.json (+ .sim.log) in ROOT: the room's map0,
+  # loc1, loc2, loc1ns; the house's house_map, house_loc1, house_loc2
   collect.py localization --root /path/with/recordings
 
 The raw recordings are large (MB per run) and stay out of git; the report
@@ -118,7 +119,7 @@ def cmd_gaits(args):
 def cmd_localization(args):
     """data/localization.json: scores of the localization_check runs."""
     out = load('localization.json', {})
-    for name in ('map0', 'loc1', 'loc2', 'loc1ns'):
+    for name in ('map0', 'loc1', 'loc2', 'loc1ns', 'house_map', 'house_loc1', 'house_loc2'):
         path = os.path.join(args.root, name + '.json')
         if os.path.exists(path):
             out[name] = json.load(open(path, encoding='utf-8'))['scores']
@@ -129,6 +130,13 @@ def cmd_localization(args):
                                open(log, encoding='utf-8', errors='replace').read())
                 if m:
                     out[name]['reloc'] = {'points': int(m[-1][0]), 'best': int(m[-1][1]), 'second': int(m[-1][2])}
+                text = open(log, encoding='utf-8', errors='replace').read()
+                out[name]['events'] = {
+                    'lost': len(re.findall(r'\]: lost: ', text)),
+                    'found_near': len(re.findall(r'found near the last place', text)),
+                    'rejected': len(re.findall(r'that was not it', text)),
+                    'runner_up': bool(re.search(r'the other place is$|: the runner-up', text, re.M)),
+                    'loops': len(re.findall(r'loop closed:', text))}
         elif name not in out:
             print(f'missing {path}')
     save('localization.json', out)
