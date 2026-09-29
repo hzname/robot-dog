@@ -1,387 +1,323 @@
 ---
-last_mapped_commit: 104fd262ee2afbd8c9ca25310c9647ab91815a75
+last_mapped_commit: d269bd16b0d0f69f3ab623b9cecc4ba545b70517
 last_mapped_at: 2026-09-29
 ---
 # Testing Patterns
 
 **Analysis Date:** 2026-09-29
 
+Three layers, all wired into CI (`.github/workflows/ci.yml`):
+
+1. **Unit tests** of ROS-independent cores: GoogleTest (C++) and pytest (Python), no ROS graph.
+2. **Launch/integration tests** with `launch_testing` against real node processes (mock hardware backends).
+3. **Gazebo simulation checks** (`dog_gazebo` CLI tools) that drive the simulated robot and return exit code 0/1; not part of `colcon test`.
+
+`legacy/` has its own old tests (`legacy/v1/tests/test_ros_bridge.py`, C++ tests under `legacy/v1/robot_dog_ws/src/*/test/`); they are not built (`legacy/COLCON_IGNORE`) and not run in CI. Do not extend them.
+
 ## Test Framework
 
 **Runner:**
 
-- pytest (implicit; no configuration file found)
-- Config: No `pytest.ini`, `setup.cfg`, or `pyproject.toml` configuration
-- Discover tests by pattern: `test_*.py` files with `test_*` functions
+- C++: GoogleTest through `ament_cmake_gtest` (`ament_add_gtest`), C++17, built with `-Wall -Wextra -Wpedantic`.
+- Python unit tests: pytest (`python3-pytest`), either via colcon (`ament_python` packages, `ament_add_pytest_test`) or standalone (`python -m pytest`).
+- Integration: `launch_testing` + `launch_testing_ament_cmake` (`add_launch_test`) with `unittest.TestCase` classes and `@pytest.mark.launch_test`.
+- ROS distros under test: `jazzy` and `lyrical` (CI matrix). Python 3.12 for the standalone tool jobs.
+- Config: no `pytest.ini`/`pyproject.toml`; per-package `setup.cfg` only sets script dirs. Test wiring lives in each `CMakeLists.txt` (`if(BUILD_TESTING) ... endif()`).
 
 **Assertion Library:**
 
-- pytest built-in assertions
-- NumPy assertions: `np.allclose()`, `np.testing.*`
-- Math assertions: `math.isfinite()`, `math.isnan()`
+- gtest macros: `EXPECT_*` for independent checks, `ASSERT_*` when later lines would dereference or index a failed result (`ASSERT_TRUE(c.request("stand"));`, `ASSERT_TRUE(out.twist);`). Floating point: `EXPECT_NEAR(a, b, tol)` / `EXPECT_DOUBLE_EQ`, never `EXPECT_EQ` on doubles.
+- pytest: bare `assert`, `pytest.approx` for floats, `pytest.raises(ValueError)`, `numpy.testing.assert_allclose` for arrays. `unittest` assertions (`assertAlmostEqual`, `assertTrue(..., msg)`) only inside launch tests.
 
 **Run Commands:**
 
 ```bash
-
-# Standard pytest invocation (no special config)
-
-python -m pytest
-
-# Run specific test file
-
-python -m pytest tools/autocal/tests/test_fit.py
-
-# Run specific test
-
-python -m pytest tools/autocal/tests/test_fit.py::test_direct_fit_recovers_direction_offset_and_scale
-
-# With verbose output
-
-python -m pytest -v
+cd ros2_ws && colcon build && source install/setup.bash          # build everything
+colcon test --packages-skip dog_gazebo --event-handlers console_cohesion+   # what CI runs
+colcon test-result --verbose                                     # summarize failures
+colcon test --packages-select dog_control && colcon test-result  # one package
+./build/dog_control/test_kinematics --gtest_filter='Kinematics.RoundTrip*'   # one gtest binary
+python -m pytest -q tools/autocal/tests                          # standalone tool tests (needs numpy, opencv-contrib-python-headless)
+python -m pytest -q tools/robot_setup/test                       # needs pyyaml
+python tools/robot_setup/robot_setup.py --check                  # CI also validates the committed config
+python -m robotdog_autocal demo                                  # run from tools/autocal (CI smoke test)
 ```
+
+Simulation checks (need Gazebo, `osrf/ros:<distro>-simulation`):
+
+```bash
+ros2 launch dog_gazebo sim.launch.py headless:=true web:=false &
+ros2 run dog_gazebo walk_check --backward-ratio 0.2
+ros2 run dog_gazebo terrain_sweep --terrain slope --levels 10 --out slope.json
+ros2 run dog_gazebo perception_check --terrain flat --seconds 12 --expect --expect-guard
+ros2 run dog_gazebo localization_check --seed 0 --phase mapping --map $PWD/room_map --expect
+```
+
+No watch mode and no coverage tooling are configured.
 
 ## Test File Organization
 
 **Location:**
 
-- Co-located with source: `tools/autocal/tests/` next to `tools/autocal/robotdog_autocal/`
-- Separate `test/` directories: `ros2_ws/src/dog_perception/test/`, `tools/robot_setup/test/`
-- Python package structure: conftest.py for setup
+- Separate `test/` directory per ROS package, mirroring the unit under test (`ros2_ws/src/dog_control/test/test_kinematics.cpp` for `src/kinematics.cpp`). Tools use `tools/<tool>/tests/` (`autocal`) or `tools/<tool>/test/` (`robot_setup`).
 
 **Naming:**
 
-- Test files: `test_*.py` (e.g., `test_fit.py`, `test_geometry.py`, `test_servo_model.py`)
-- Test functions: `test_*` prefix (e.g., `test_direct_fit_recovers_direction_offset_and_scale`)
-- Test helper functions: No prefix, placed in same file (e.g., `camera_positions()`, `run()`, `_gs2_scan()`)
+- Files `test_<unit>.{cpp,py}`. gtest suites: `TEST(<Unit>, <PascalCaseSentenceDescribingBehavior>)` (`TEST(Locomotion, LieWhileWalkingFinishesStepsFirst)`, `TEST(Submaps, ABareCornerIsNoAnswer)`). pytest: `test_<snake_case_sentence>` (`test_bad_messages_produce_errors_only`, `test_robust_plane_ignores_a_stone`). Name tests for the behavior/guarantee, not the function.
 
 **Structure:**
 
 ```
-tools/autocal/
-├── robotdog_autocal/
-│   ├── __init__.py
-│   ├── client.py
-│   ├── fit.py
-│   ├── geometry.py
-│   ├── servo_model.py
-│   └── ...
-├── tests/
-│   ├── conftest.py          # Shared fixtures and setup
-│   ├── test_fit.py
-│   ├── test_geometry.py
-│   ├── test_procedure.py
-│   ├── test_servo_model.py
-│   └── test_client.py
-└── setup.py
+ros2_ws/src/<pkg>/
+  src/foo.cpp
+  include/<pkg>/foo.hpp
+  test/test_foo.cpp          # gtest, links <pkg>_core
+  test/test_foo.py           # pytest or launch_test
+tools/autocal/tests/conftest.py   # adds tools/autocal to sys.path
 ```
+
+Registering a new C++ test: add `ament_add_gtest(test_foo test/test_foo.cpp)` + `target_link_libraries(test_foo <pkg>_core)` inside `if(BUILD_TESTING)`. `dog_control` loops over names: `foreach(t kinematics gait crawl greet locomotion)` in `ros2_ws/src/dog_control/CMakeLists.txt`: add the name there. Registering a launch test must assign a unique DDS domain (see below).
+
+Current inventory (about 130 test cases):
+
+- `dog_control`: `test_kinematics`, `test_gait`, `test_crawl`, `test_greet`, `test_locomotion` (C++)
+- `dog_hardware`: `test_servo_driver`, `test_power`, `test_imu` (C++); `test_power_monitor.py` (launch)
+- `dog_perception`: `test_core`, `test_localization`, `test_submaps` (C++, `test_submaps` has `TIMEOUT 300`); `test_core.py` (numpy twin)
+- `dog_teleop`: `test_mapping` (C++); `test_gamepad_fifo.py` (launch)
+- `dog_web`: `test_protocol.py`, `test_wsserver.py`
+- `dog_description`: `test_urdf.py`
+- `dog_bringup`: `test_mock_bringup.py` (launch, full stack)
+- `tools/autocal/tests`: `test_fit`, `test_geometry`, `test_servo_model`, `test_procedure`, `test_client`
+- `tools/robot_setup/test/test_robot_setup.py`
+- No tests: `dog_gazebo` (verified by its own check tools), `tools/sim_video`.
 
 ## Test Structure
 
-**Basic Test Function:**
+**Suite Organization (gtest, `ros2_ws/src/dog_control/test/test_locomotion.cpp`):**
 
-```python
-def test_direct_fit_recovers_direction_offset_and_scale():
-    # Arrange
-    true = ServoCal(direction=-1, offset_deg=48.3, range_deg=184.0)
-    believed = ServoCal()
-    q = np.linspace(20, 60, 9)
-    pulses = [true.joint_to_pulse(a) for a in q]
-    noisy = q + np.random.default_rng(0).normal(0, 0.3, len(q))
-    
-    # Act
-    r = fit_joint('j', believed, pulses, noisy)
-    
-    # Assert
-    assert r.direction == -1
-    assert r.offset_deg == pytest.approx(48.3, abs=0.4)
-    assert r.rms_deg < 0.5
+```cpp
+#include <gtest/gtest.h>
+#include <cmath>
+#include "dog_control/locomotion.hpp"
+
+using dog_control::LocomotionController;
+using dog_control::Mode;
+
+namespace
+{
+constexpr double kDt = 0.02;
+
+void run(LocomotionController & c, double seconds)
+{
+  for (int i = 0; i < static_cast<int>(seconds / kDt); ++i) {c.update(kDt);}
+}
+}  // namespace
+
+TEST(Locomotion, StandUpReachesStandHeight)
+{
+  LocomotionParams p;
+  LocomotionController c(p);
+  ASSERT_TRUE(c.request("stand"));
+  run(c, p.transition_time + 0.1);
+  EXPECT_EQ(c.mode(), Mode::STAND);
+  EXPECT_EQ(c.unreachableCount(), 0);
+}
 ```
 
-**Parametrized Test:**
+- Helpers and constants go in an anonymous namespace at the top of the test file (`kDt`, `run`, `footInBody`, `expectNear`). Common test-file-local helpers are duplicated per file rather than shared in a header.
+- Drive time-dependent logic by calling `update(dt)` in a loop with a fixed `kDt`; never sleep and never read the wall clock in a unit test.
+- Fixture classes (`TEST_F`) only when several tests share heavy setup (`DriverTest` in `ros2_ws/src/dog_hardware/test/test_servo_driver.cpp` builds a `MockBus` + `ServoDriver` in `SetUp()`); otherwise plain `TEST`.
+- Add a one-line comment for every non-obvious assertion, stating the physical/logic reason (`EXPECT_LT(ik.q[2], 0.0);  // knee bent backwards`).
+- Print context on loop assertions with `<<`: `EXPECT_FALSE(clamped) << deg;`, `ASSERT_TRUE(c.validate().empty()) << c.validate();`.
+
+**pytest (`ros2_ws/src/dog_web/test/test_protocol.py`):**
 
 ```python
-@pytest.mark.parametrize('view', ['left', 'right'])
-@pytest.mark.parametrize('tilt', [0.0, 6.0])
-def test_side_views_recover_thigh_and_calf(view, tilt):
-    # Test logic using view and tilt parameters
+import json
+import pytest
+from dog_web import protocol
+
+LIM = protocol.Limits()
+
+def test_drive_is_scaled_and_clamped():
+    a = protocol.handle_message('{"type":"drive","vx":1,"vy":-0.5,"wz":7}', LIM)
+    assert not a.errors
+    assert a.twist == pytest.approx((LIM.max_vx, -0.5 * LIM.max_vy, LIM.max_wz))
+
+@pytest.mark.parametrize('text', ['not json', '[]', '{"type":"dance"}'])
+def test_bad_messages_produce_errors_only(text):
+    a = protocol.handle_message(text, LIM)
+    assert a.errors
 ```
 
-**Test with Fixtures:**
+- Module-level constants for shared inputs, `@pytest.mark.parametrize` for input matrices, `pytest.fixture` with `tmp_path` for file-based tests (`tools/robot_setup/test/test_robot_setup.py` `cfg` fixture copies `robot.yaml`/`servos.yaml` into `tmp_path`).
+- Tests that must reach a sibling package do `sys.path.insert(0, os.path.join(os.path.dirname(__file__), ...))` and mark the import `# noqa: E402` (`tools/autocal/tests/test_client.py` imports the robot's real `dog_web.wsserver`).
+- Optional dependency: `pytest.importorskip('cv2')` at module top (`tools/autocal/tests/test_procedure.py`).
 
-```python
-@pytest.fixture
-def cfg(tmp_path):
-    # Setup test configuration
-    for f in ('robot.yaml', 'servos.yaml'):
-        shutil.copy(os.path.join(rs.CONFIG, f), tmp_path / f)
-    return str(tmp_path)
-
-def test_save_changes_only_values_and_keeps_comments(cfg):
-    # Test using cfg fixture
-```
-
-## Test Fixtures and Setup
-
-**Fixture Definition:**
-
-```python
-
-# conftest.py - minimal setup
-
-import sys
-import os
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
-# Usage in tests:
-
-# @pytest.fixture
-
-# def cfg(tmp_path):  # tmp_path is built-in pytest fixture
-
-#     return str(tmp_path)
-
-```
-
-**Built-in Fixtures Used:**
-
-- `tmp_path`: pytest-provided temporary directory fixture
-- Example: `def test_yaml_update(tmp_path):`
-
-**Test Data:**
-
-- Module-level constants: `SENSORS`, `GEOM`, `H`, `FLOOR` in `test_core.py`
-- Reference values: `CPP_REFERENCE` dictionary in `test_servo_model.py`
-- Example:
-  ```python
-  SENSORS = {
-      'x_lidar': True, 'x_lidar_x': 0.10, 'x_lidar_y': 0.04, ...
-  }
-  ```
-
-## Mocking
-
-**Framework:** No dedicated mocking library (unittest.mock) observed in codebase
+**Property/sweep style:** Prefer sweeping the workspace and asserting an invariant over hand-picked points. Example: `Kinematics.RoundTripOverWorkspace` nests loops over side, knee direction, x, y, z, asserts `forwardKinematics(inverseKinematics(t)) == t` to 1e-9, counts the cases and asserts `checked > 1000` so the sweep cannot silently become empty. Random data uses a fixed seed (`np.random.default_rng(0)`, `std::mt19937` with a constant seed): tests must be deterministic.
 
 **Patterns:**
 
-- **Fake implementations:** Classes like `FakeRobot`, `VirtualCamera` in `sim` module
-- **Integration testing:** Tests use real implementations where possible
-- **Dependency injection:** Pass dependencies as constructor arguments
-  ```python
-  cal = procedure.Calibrator(robot, cam, vision.MarkerTracker(...))
-  ```
+- Setup: construct the object under test with default params (`LocomotionController(LocomotionParams{})`); no global state.
+- Teardown: RAII in C++; `try/finally` around sockets in Python (`ws.close()`); `setUp`/`tearDown` with `rclpy.init()`/`rclpy.shutdown()` in launch tests.
+- Prove safety behavior explicitly: e-stop blocks commands, watchdogs fire once, NaN/`bool`/non-object JSON rejected, clamped targets flagged (`EstopGoesPassiveAndBlocksCommands`, `test_watchdog_fires_once_after_stall`, `UnreachableTargetsAreClampedAndFlagged`).
+
+## Mocking
+
+**Framework:** None (no gmock, no `unittest.mock`). Test doubles are hand-written production classes behind small interfaces.
+
+**Patterns:**
+
+```cpp
+// production code ships the fake: ros2_ws/src/dog_hardware/include/dog_hardware/servo_bus.hpp
+class MockBus : public ServoBus { /* records pulses_, writes_ */ };
+
+// test: ros2_ws/src/dog_hardware/test/test_servo_driver.cpp
+bus = std::make_shared<MockBus>();
+driver = std::make_unique<ServoDriver>(bus, names, cals, p);
+driver->setTargets(names, {0.1, 0.2, 0.3, 0.4, 0.5, 0.6}, 10.0);
+driver->update(10.0);
+EXPECT_NEAR(bus->pulse(i), jointToPulseUs(driver->calibrations()[i], 0.1 * (i + 1)), 1e-9);
+```
+
+- Hardware is abstracted (`ServoBus` -> `MockBus` / `Pca9685Bus`; power sensor and IMU have `mock` backends). Launch tests select them with node parameters `backend: mock` (`'power': 'mock'`, `'imu': 'mock'` launch args; `mock.voltage`, `mock.current` parameters that the test changes live through `SetParameters`).
+- Time is injected (`now`/`dt` arguments), so no clock mocking is needed.
+- Python fakes for the robot live next to the code they fake: `tools/autocal/robotdog_autocal/sim.py` (`FakeRobot`, `VirtualCamera`, `hidden_errors(seed)`), used by tests and by the CI `python -m robotdog_autocal demo`.
+- Hardware devices are replaced with OS primitives: a FIFO carrying raw Linux `js_event` structs stands in for `/dev/input/js0` (`ros2_ws/src/dog_teleop/test/test_gamepad_fifo.py`, `struct.pack('IhBB', ms, value, kind, number)`).
+- Network is real but local: `Server(str(tmp_path), on_client)` on `127.0.0.1` port `0` with a raw-socket client (`ros2_ws/src/dog_web/test/test_wsserver.py`); bringup test uses fixed `WEB_PORT = 18080`.
 
 **What to Mock:**
 
-- Hardware interfaces: Use fake implementations (`FakeRobot`, `VirtualCamera`)
-- File systems: Use `tmp_path` fixture instead of mocking
+- I2C buses, PWM outputs, IMU/current sensors, joystick devices, cameras.
 
 **What NOT to Mock:**
 
-- Business logic: Test with real implementations
-- Mathematical computations: Verify against reference values
-- Geometry/physics: Use real implementations with assertions on results
+- Kinematics, gait, controller state machines, protocol parsing, YAML round-trips, the real WebSocket server. Test them for real; cross-check independent implementations against each other (URDF forward kinematics vs `dog_control` formulas in `test_urdf.py`; numpy vs C++ perception core; Python `servo_model.py` vs C++ `servo_driver.cpp` reference values).
 
-## Assertions and Comparisons
+## Fixtures and Factories
 
-**Float Comparisons:**
+**Test Data:**
+
+```cpp
+// factory helpers in an anonymous namespace: test_servo_driver.cpp
+ServoCalibration knee()
+{
+  ServoCalibration c;
+  c.channel = 2; c.direction = 1; c.offset_deg = -90.0;
+  c.min_deg = -165.0; c.max_deg = -15.0;
+  return c;
+}
+```
 
 ```python
 
-# Use pytest.approx for floating point tolerance
+# test_core.py: dict literals mirroring robot.yaml
 
-assert r.offset_deg == pytest.approx(48.3, abs=0.4)     # absolute tolerance
-assert r.direction == pytest.approx(1, abs=1e-9)        # very tight tolerance
-
-# Use math functions where appropriate
-
-assert math.isfinite(t)
-assert math.isnan(value)
+SENSORS = {'x_lidar': True, 'x_lidar_x': 0.10, ...}
+GEOM = {'hip_offset': 0.055, 'thigh': 0.105, 'calf': 0.105, 'hip_x': 0.09, 'hip_y': 0.06}
+H = 0.150
 ```
 
-**Exception Testing:**
+- Synthetic worlds are generated in code: rooms as segment lists sampled into scans (`room()`, `sample()`, `scanFloor()` in `ros2_ws/src/dog_perception/test/test_localization.cpp` and `test_core.cpp`); hidden servo errors from a seed (`sim.hidden_errors(seed)`).
+- Shipped config is used as a real fixture: `test_urdf.py` loads `ros2_ws/src/dog_bringup/config/robot.yaml`; `test_robot_setup.py` copies it to `tmp_path`. A test therefore fails when someone commits an inconsistent `robot.yaml`/`servos.yaml`: keep those files valid.
+- **Location:** No shared fixtures directory. Only `tools/autocal/tests/conftest.py` exists (path setup). Recorded data for reports lives in `tools/sim_video/report/data/*.json` and is not used by tests.
 
-```python
+## Coverage
 
-# Using pytest.raises
+**Requirements:** None enforced; no coverage tool is configured, no threshold in CI.
 
-def test_joint_that_does_not_move_is_reported():
-    with pytest.raises(ValueError):
-        fit_joint('j', ServoCal(), [1300, 1400, 1500], [10.0, 10.0, 10.0])
-```
-
-**Array/Matrix Assertions:**
-
-```python
-
-# NumPy assertions
-
-assert np.allclose(pts[:, 2], -H, atol=1e-9)
-assert np.allclose(feet[:, 2], -0.150, atol=1e-6)
-
-# Element-wise assertions with pytest.approx
-
-for leg in geo.VIEWS[view]['legs']:
-    assert got[f'{leg}_thigh_joint'] == pytest.approx(th + i * 3, abs=1e-6)
-```
+**View Coverage:** Not available. To add: build with `--cmake-args -DCMAKE_CXX_FLAGS="--coverage"` and use `gcov`/`lcov`, or `pytest --cov` (needs `pytest-cov`); nothing in the repo depends on it.
 
 ## Test Types
 
 **Unit Tests:**
 
-- Scope: Single function/method in isolation
-- Examples: `test_direct_fit_recovers_direction_offset_and_scale()`, `test_linkage_matches_cpp()`
-- Focus: Verify computation correctness
+- Scope: one core class or module, deterministic, milliseconds to seconds. All C++ tests except `test_submaps` (up to 300 s timeout because of pose-graph work) and all Python tests in `dog_web`, `dog_description`, `dog_perception`, `tools/*`.
 
-**Integration Tests:**
+**Integration Tests (launch_testing, real ROS processes, mock hardware):**
 
-- Scope: Multiple components working together
-- Examples: `test_full_calibration_recovers_hidden_errors()`, `test_hazard_guard()`
-- Focus: End-to-end workflows
+- `ros2_ws/src/dog_bringup/test/test_mock_bringup.py`: starts `robot.launch.py backend:=mock web:=true`, then walks through calibration channel over WebSocket, stand-up via topic, walking, `cmd_vel` timeout, web drive, e-stop and lie-down; ends with a `@launch_testing.post_shutdown_test()` class asserting exit codes `[0, -2, -15]`.
+- `ros2_ws/src/dog_hardware/test/test_power_monitor.py`: stall -> e-stop, sagging rail -> `lie`; also launches a second node with an absent sensor and asserts it exits 0.
+- `ros2_ws/src/dog_teleop/test/test_gamepad_fifo.py`: gamepad + joy_teleop chain from raw bytes.
+- **Each launch test must set a unique `ROS_DOMAIN_ID`** in its `add_launch_test(... ENV ROS_DOMAIN_ID=NN)` because colcon runs packages in parallel and all use the `/dog` namespace. Taken: 41 (`dog_hardware`), 42 (`dog_teleop`), 43 (`dog_bringup`). Use 44+ for new ones; CI simulation runs use 60-77 (`terrain_sweep --domain`, `ROS_DOMAIN_ID=71..77`, each with its own `GZ_PARTITION`).
+- Set explicit `TIMEOUT` (60-120 s) on every `add_launch_test`.
 
-**Property-Based Tests:**
+**Simulation checks (Gazebo, CI jobs `simulation` and `terrain`):**
 
-- Round-trip tests: `test_round_trip(link)` - verify encoding then decoding preserves value
-- Example:
-  ```python
-  def test_round_trip(link):
-      c = ServoCal(...)
-      for deg in range(-130, -49, 5):
-          assert c.pulse_to_joint(c.joint_to_pulse(deg)) == pytest.approx(deg, abs=1e-6)
-  ```
+- `walk_check` runs a fixed maneuver routine (forward/back/sideways/turns/lie) against ground-truth odometry; thresholds are deliberately loose (`min_ratio` 0.4, tilt < 20 deg, body height >= `MIN_BODY_HEIGHT`) and only catch sign errors, falls, broken gaits. `terrain_sweep` re-runs it per terrain/level in a fresh simulation and retries once when the robot never left `passive`. `perception_check` and `localization_check` assert guard behavior and map accuracy with `--expect` / `--expect-guard`.
+- Conventions: one PASS/FAIL line per check (`'%-6s %-12s %s' % ('PASS'|'FAIL', name, detail)`), a JSON result file via `--out`/`--trace`, exit code 0 = all passed. Time budgets use simulated time (odometry stamps), not wall time, so slow CI runners do not change commanded distances (`WalkCheck.spin` in `ros2_ws/src/dog_gazebo/dog_gazebo/walk_check.py`).
+- Loosen thresholds only with a comment citing the measurement and doc (see the `--backward-ratio` comments in `.github/workflows/ci.yml` referencing `docs/TERRAIN.md`).
+- These need Gazebo and take minutes: `--packages-skip dog_gazebo` in the `build-test` job; the separate `simulation` and `terrain` jobs run them.
 
 **E2E Tests:**
 
-- Not explicitly present in isolated test files
-- Shell-based E2E in `test_servo_config_reader.sh` for hardware integration
+- The Gazebo checks and `test_mock_bringup.py` are the end-to-end tests. There is no real-hardware automated test; on-robot verification is manual per `docs/DEPLOYMENT.md`.
+- Untracked `test_servo_config_reader.sh` (repo root) is a manual SSH-to-robot smoke script for the older `robot_dog_ws`; it is not part of CI.
 
-## Common Testing Patterns
+## Common Patterns
 
-**Test Helper Functions:**
-
-```python
-
-# Helper in test file for common setup
-
-def run(robot, views=procedure.ORDER, passes=2, frames=2):
-    results = {}
-    for _ in range(passes):
-        for view in views:
-            cam = sim.VirtualCamera(robot, view)
-            cal = procedure.Calibrator(robot, cam, ...)
-            res = cal.calibrate_view(view)
-            cal.apply(res)
-            results.update(res)
-    return results, cal
-
-# Used in multiple tests
-
-def test_full_calibration_recovers_hidden_errors(seed):
-    robot = sim.FakeRobot(true)
-    results, cal = run(robot)  # Helper call
-    # assertions
-```
-
-**Async-like Testing (with Simulated Time):**
+**Async / polling ROS tests (no fixed sleeps):**
 
 ```python
+def spin_until(self, predicate, timeout, publish=None):
+    end = time.time() + timeout
+    while time.time() < end:
+        if publish:
+            publish()
+        rclpy.spin_once(self.node, timeout_sec=0.05)
+        if predicate():
+            return True
+    return False
 
-# Sequential calls with state progression
-
-def test_hazard_guard_crawl_window_matches_the_cpp_guard():
-    g = core.HazardGuard()
-    assert g.command(0, (0.0, 0.0), 0.0)[2] != 'crawl'    # t=0
-    vx, _, state, _ = g.command(1, (0.2, 0.0), 0.0)       # t=1
-    assert state == 'crawl'
-    assert g.command(2, (0.85, 0.0), 0.0)[2] == 'crawl'  # t=2
-    assert g.command(3, (0.95, 0.0), 0.0)[2] != 'crawl'  # t=3
+self.assertTrue(self.spin_until(lambda: self.state == 'stand', 8.0,
+                publish=lambda: self.cmd_pub.publish(String(data='stand'))),
+                f'locomotion not ready, state={self.state}')
 ```
 
-**Nested Validation Testing:**
+Every launch test defines its own `spin_until` (copy the shape from `test_mock_bringup.py`). Always give the assertion a failure message with the observed value. Negative checks use the same helper and expect `False` (`assertFalse(self.spin_until(lambda: self.state != 'estop', 1.0))`). Publish repeatedly inside the loop for topics with volatile QoS; use `TRANSIENT_LOCAL` subscription for latched `state`.
+
+**Async (asyncio) tests without pytest-asyncio:**
 
 ```python
+async def _scenario(tmp_path):
+    server = Server(str(tmp_path), on_client)
+    port = await server.start('127.0.0.1', 0)
+    try:
+        ...
+    finally:
+        await server.stop()
 
-# Verify expected structure within assertions
-
-def test_validation_catches_what_would_break_the_robot():
-    base = rs.load(rs.CONFIG)
-    v = dict(base, stand_height=260)
-    # Check both level and message content
-    assert any('нога достаёт' in t 
-               for lv, t in rs.validate(v)[0] if lv == 'error')
+def test_server_end_to_end(tmp_path):
+    asyncio.run(_scenario(tmp_path))
 ```
 
-**Parametrized Complex Scenarios:**
+Use `asyncio.run` inside a sync `test_` function; bound waits with `asyncio.wait_for(..., 2.0)`.
+
+**Error Testing:**
+
+```cpp
+c.direction = 0;
+EXPECT_FALSE(c.validate().empty());       // validate() returns a message; assert non-empty
+```
 
 ```python
-@pytest.mark.parametrize('seed', [1, 2])
-def test_full_calibration_recovers_hidden_errors(seed):
-    true = sim.hidden_errors(seed)
-    robot = sim.FakeRobot(true)
-    # Test runs with different seeds
+with pytest.raises(ValueError):
+    fit_joint('j', ServoCal(), [1300, 1400, 1500], [10.0, 10.0, 10.0])
+
+a = protocol.handle_message(text, LIM)   # handlers return errors, they do not raise
+assert a.errors and a.twist is None
 ```
 
-## Coverage
+Assert on message substrings only when the message is part of the contract (Russian validation text in `test_robot_setup.py`, `'passive'` in the calibration refusal in `test_mock_bringup.py`).
 
-**Requirements:** Not enforced; no `.coveragerc` or pytest plugin configuration
+**Floating point tolerances:** `1e-9` for closed-form math, `1e-12` for exact round trips, `1e-3` to `2e-3` for physical/geometry (metres), looser for simulation. State the tolerance's reason in a comment when it is not obvious.
 
-**View Coverage:**
+## Gaps to Know Before Adding Code
 
-```bash
-
-# No standard coverage tool configured
-
-# If needed in future:
-
-python -m pytest --cov=robotdog_autocal --cov-report=term-missing
-```
-
-## Test Environment
-
-**Dependencies:**
-
-- pytest
-- NumPy (for numerical tests)
-- OpenCV with ArUco (optional, skipped if missing): `pytest.importorskip('cv2')`
-- YAML (for configuration tests)
-
-**Optional Feature Skipping:**
-
-```python
-
-# Skip test if dependency missing
-
-pytest.importorskip('cv2')
-
-# Graceful degradation in module
-
-try:
-    import cv2
-except ImportError:
-    cv2 = None
-```
-
-## Key Testing Principles
-
-**Determinism:**
-
-- Use seeded random numbers: `np.random.default_rng(0)`
-- Avoid time-dependent assertions
-- Use fixtures for consistent state
-
-**Clarity:**
-
-- Test names describe what's being tested: `test_side_views_recover_thigh_and_calf`
-- One logical assertion per test (may have multiple `assert` statements)
-- Use helper functions to reduce repetition
-
-**Integration-Focused:**
-
-- Tests use real implementations, not mocks
-- Verify against reference implementations (C++ values in `test_servo_model.py`)
-- End-to-end scenarios preferred over isolated units
+- `ros2_ws/src/dog_gazebo/` (bridges, `terrain.py`, `sim.launch.py`) has no unit tests; regressions surface only in the Gazebo CI jobs.
+- ROS node classes (`LocomotionNode`, `ServoDriverNode`, `perception_node.cpp`, `localization_node.cpp`, `web_teleop.py`) are covered only through launch tests of `dog_bringup`/`dog_hardware`/`dog_teleop`; put new logic in the cores so it is unit-testable.
+- `dog_web/static/app.js` (browser UI) and `tools/sim_video/` have no tests.
+- No linters or coverage gates run in CI, so style and dead code are unchecked by machines.
 
 ---
 

@@ -1,5 +1,5 @@
 ---
-last_mapped_commit: 104fd262ee2afbd8c9ca25310c9647ab91815a75
+last_mapped_commit: d269bd16b0d0f69f3ab623b9cecc4ba545b70517
 last_mapped_at: 2026-09-29
 ---
 # Technology Stack
@@ -10,184 +10,120 @@ last_mapped_at: 2026-09-29
 
 **Primary:**
 
-- **C++ (17)** — Locomotion control, hardware drivers, perception core, teleoperation
-  - Used in: `ros2_ws/src/dog_hardware/`, `ros2_ws/src/dog_control/`, `ros2_ws/src/dog_teleop/`, `ros2_ws/src/dog_perception/`
-  - Compilation flags: `-Wall -Wextra -Wpedantic` with `-DCMAKE_BUILD_TYPE=Release` for robot
-  
-- **Python (3.x)** — Web interface, simulation utilities, robot setup, calibration tools
-  - Used in: `ros2_ws/src/dog_web/`, `ros2_ws/src/dog_gazebo/`, `ros2_ws/src/dog_description/`, `tools/`
-  - Tested with Python 3.12 in CI
+- C++17 - Robot runtime: kinematics, gait, locomotion state machine, hardware drivers (I2C), perception, localization, teleop. Standard set per package with `set(CMAKE_CXX_STANDARD 17)` in `ros2_ws/src/*/CMakeLists.txt`; warnings `-Wall -Wextra -Wpedantic`.
+  - `ros2_ws/src/dog_control/`, `ros2_ws/src/dog_hardware/`, `ros2_ws/src/dog_perception/`, `ros2_ws/src/dog_teleop/`
+- Python 3.12 (Jazzy / Ubuntu 24.04) and 3.14 (Lyrical / Ubuntu 26.04) - ROS packages for URDF generation, Gazebo glue and checks, the web teleop server, launch files (`ros2_ws/src/dog_description/`, `ros2_ws/src/dog_gazebo/`, `ros2_ws/src/dog_web/`, `ros2_ws/src/dog_bringup/launch/robot.launch.py`), plus the offline tools in `tools/`.
 
 **Secondary:**
 
-- **Shell (Bash)** — Build and deployment scripts, CI workflows, testing harnesses
-  - Used in: `docker/entrypoint.sh`, `test_servo_config_reader.sh`, `.github/workflows/ci.yml`
-
-- **XML** — ROS package descriptors and configuration
-  - All packages use `package.xml` format 3
+- JavaScript (vanilla, no build step, no framework) - Browser teleop page: `ros2_ws/src/dog_web/static/app.js`, `ros2_ws/src/dog_web/static/index.html`, `ros2_ws/src/dog_web/static/style.css`.
+- YAML - ROS parameter files and robot geometry: `ros2_ws/src/dog_bringup/config/*.yaml`.
+- SDF / URDF (generated) - Gazebo world `ros2_ws/src/dog_gazebo/worlds/flat.sdf`; URDF generated at launch by `ros2_ws/src/dog_description/dog_description/urdf.py` (no xacro).
+- Bash - `docker/entrypoint.sh`, `test_servo_config_reader.sh` (root, ad-hoc on-robot test script for the v1 workspace).
+- Legacy (ignored by colcon via `legacy/COLCON_IGNORE`): v1 C++/Python/Rust-stub ROS 2 workspace, Flask-style web tools, in `legacy/v1/`. Do not add code there.
 
 ## Runtime
 
 **Environment:**
 
-- **ROS 2 (Jazzy & Lyrical)** — Middleware for inter-process communication, message passing, node coordination
-  - Base image: `ros:${ROS_DISTRO}-ros-base` (lightweight, no Gazebo in production Docker image)
-  - Simulation image: `osrf/ros:${ROS_DISTRO}-simulation` (includes Gazebo)
-  - Used across all packages; message types: `geometry_msgs`, `sensor_msgs`, `std_msgs`, `nav_msgs`
-
-- **Gazebo (Harmonic & Jetty)** — Physics simulation for gait validation, terrain testing, perception validation
-  - Only loaded in simulation environment; not in production robot Docker image
-  - Used for walk_check validation and terrain sweep testing in CI
+- ROS 2 **Jazzy Jalisco** (default, LTS to 2029) and **Lyrical Luth** (supported, tested in CI). Selected by Docker build arg `ROS_DISTRO` (`docker/Dockerfile`, `docker-compose.yml`).
+- Robot: Banana Pi BPI-M4 Zero (Allwinner H618, 4x Cortex-A53, arm64, 2-4 GB RAM) running Armbian (Debian 12); ROS runs inside Docker because ROS binaries target Ubuntu (`docs/PLATFORM.md`).
+- Simulation: PC amd64, Gazebo Sim 8 (Harmonic) with Jazzy, Gazebo Sim 10 (Jetty) with Lyrical, via `osrf/ros:<distro>-simulation`.
+- Middleware: DDS via ROS 2 defaults; `ROS_DOMAIN_ID=0` on the robot (`docker-compose.yml`), per-check domains and `GZ_PARTITION` values in simulation (`.github/workflows/ci.yml`, `ros2_ws/src/dog_gazebo/dog_gazebo/terrain_sweep.py`).
 
 **Package Manager:**
 
-- **colcon** — ROS 2 build system orchestrator
-  - Manages workspace builds, testing, and artifact collection
-  - Configured with parallel workers (limited to 1 for Pi: 2 GB RAM constraint)
-  - Build flags: `MAKEFLAGS="-j${BUILD_JOBS}"`, `CMAKE_BUILD_TYPE=Release`
-
-- **pip** — Python package management
-  - Used in CI for test dependencies and tools
-  - No `requirements.txt` for main workspace; ROS dependencies declared in `package.xml`
+- ROS: `colcon` + `ament_cmake` (C++) / `ament_python` (Python); dependencies declared in each `ros2_ws/src/*/package.xml` and resolved from the base ROS image (no `rosdep install` step).
+- Python tools: `pip` (`tools/autocal/requirements.txt`).
+- Lockfile: none (no `requirements.lock`, no `poetry.lock`; versions come from the pinned base Docker image tags).
 
 ## Frameworks
 
 **Core:**
 
-- **ROS 2 rclcpp** (2.x, via Jazzy/Lyrical) — C++ ROS client library for nodes, publishers, subscribers, services
-  - Hardware drivers, control, teleoperation, perception all use `rclcpp::Node`
-  - Example: `ros2_ws/src/dog_hardware/src/servo_driver_node.cpp`
-
-- **ROS 2 rclpy** (2.x, via Jazzy/Lyrical) — Python ROS client library
-  - Web interface, description generation, Gazebo simulation use `rclpy.node.Node`
-  - Example: `ros2_ws/src/dog_web/dog_web/web_teleop.py`
-
-- **launch & launch_ros** — ROS 2 launch system for multi-node orchestration
-  - Configured in: `ros2_ws/src/dog_bringup/launch/robot.launch.py`
-  - Parameters passed at runtime (e.g., `backend:=pca9685`, `web:=true`, `gamepad:=true`)
+- ROS 2 `rclcpp` (Jazzy 28.1.x, Lyrical 32.x) - node framework for C++ packages.
+- ROS 2 `rclpy` - Python nodes (`dog_web`, `dog_gazebo`).
+- `tf2_ros` - transforms in `ros2_ws/src/dog_perception/`.
+- `robot_state_publisher` - consumes generated URDF (`ros2_ws/src/dog_bringup/launch/robot.launch.py`).
+- Message packages used: `geometry_msgs`, `nav_msgs`, `sensor_msgs`, `std_msgs`, `rcl_interfaces`.
+- Custom web stack: standard-library `asyncio` HTTP + RFC 6455 WebSocket server in `ros2_ws/src/dog_web/dog_web/wsserver.py` (deliberately no aiohttp/websockets/Flask dependency).
 
 **Testing:**
 
-- **Gtest (ament_cmake_gtest)** — C++ unit tests for kinematics, gait, hardware, perception
-  - Test command: `colcon test --packages-skip dog_gazebo`
-  - 109 tests across hardware, control, teleop, web, perception
-
-- **pytest (Python)** — Python unit tests for web, robot setup, autocal, perception
-  - Integrated via `ament_cmake_pytest` in ROS packages
-  - CI command: `pip install pytest` + `python -m pytest -q`
-
-- **launch_testing_ament_cmake / launch_testing_ros** — Integration tests for multi-node scenarios
-  - Mock bringup test: `ros2_ws/src/dog_bringup/test/test_mock_bringup.py`
-  - Separate DDS domain (ROS_DOMAIN_ID=43) to avoid colcon parallel test conflicts
+- GoogleTest via `ament_cmake_gtest` - C++ unit tests in `ros2_ws/src/*/test/test_*.cpp`.
+- `launch_testing` (`launch_testing_ament_cmake`, `launch_testing_ros`) - integration tests such as `ros2_ws/src/dog_hardware/test/test_power_monitor.py`, `ros2_ws/src/dog_bringup/test/test_mock_bringup.py`.
+- `pytest` - Python tests (`ros2_ws/src/dog_web/test/`, `ros2_ws/src/dog_description/test/`, `tools/autocal/tests/`, `tools/robot_setup/test/`); registered via `extras_require={'test': ['pytest']}` in `setup.py` (needed on Python 3.14).
+- Simulation acceptance checks (not unit tests): `walk_check`, `terrain_sweep`, `perception_check`, `localization_check` in `ros2_ws/src/dog_gazebo/dog_gazebo/`.
 
 **Build/Dev:**
 
-- **CMake 3.16+** — C++ project build configuration
-  - Declarative dependency resolution via `find_package()` (ament_cmake, rclcpp, message types)
-  - Per-package CMakeLists.txt in `ros2_ws/src/dog_*/`
-
-- **ament_cmake_python** — Dual C++/Python builds (e.g., dog_perception has core.cpp + Python numpy twin)
-  - Allows data processing tools to share logic with the C++ perception node
+- CMake >= 3.16 (`cmake_minimum_required(VERSION 3.16)`), GCC 13.3 (Jazzy image) / 15.2 (Lyrical image).
+- Docker + Docker Compose - `docker/Dockerfile` (robot, `ros:<distro>-ros-base`), `docker/Dockerfile.sim` (`osrf/ros:<distro>-simulation`), `docker-compose.yml`.
+- Gazebo plugins: `gz-sim-physics-system`, `gz-sim-user-commands-system`, `gz-sim-scene-broadcaster-system`, `gz-sim-imu-system`, `gz-sim-sensors-system` (`ros2_ws/src/dog_gazebo/worlds/flat.sdf`); `ros_gz_sim` and `ros_gz_bridge` (`parameter_bridge`) in `ros2_ws/src/dog_gazebo/launch/sim.launch.py`.
+- RViz config: `ros2_ws/src/dog_bringup/config/dog.rviz`.
 
 ## Key Dependencies
 
-**ROS 2 Infrastructure (Jazzy/Lyrical, included in base image):**
+**Critical (ROS, from base image):**
 
-- `rclcpp`, `rclpy` — Pub/sub, services, parameters, logging
-- `geometry_msgs` — Twist (velocity commands), Pose, Transform
-- `sensor_msgs` — JointState (servo positions), Imu (MPU6050), LaserScan (lidar), PointCloud2 (perception)
-- `std_msgs` — Bool (e-stop), Int32, Float32
-- `nav_msgs` — Odometry
-- `tf2_ros` — Transform broadcasts for perception → locomotion feedback
-- `robot_state_publisher` — Publishes URDF joint state transforms for visualization
-- `ros_gz_sim`, `ros_gz_bridge` — Gazebo integration (simulation only)
+- `rclcpp` / `rclpy` - all nodes.
+- `ros_gz_sim`, `ros_gz_bridge` - simulation only (`dog_gazebo` is skipped in the robot image: `--packages-skip dog_gazebo`).
+- `python3-yaml` - `dog_description` URDF generator reads `robot.yaml`.
+- `python3-numpy` - `dog_gazebo`, tests in `dog_perception` and `dog_description`.
 
-**System Libraries (Linux, included in base image):**
+**Critical (Linux kernel APIs, no third-party libs):**
 
-- `linux/i2c-dev.h`, `sys/ioctl.h` — I2C bus communication for PCA9685 servo driver and MPU6050 IMU
-- Standard C++ stdlib (string, vector, memory, chrono, etc.)
+- `linux/i2c-dev.h` + `ioctl(I2C_SLAVE)` in `ros2_ws/src/dog_hardware/src/servo_bus.cpp` - PCA9685, MPU6050, INA226/INA219 access.
+- Linux joystick API (`/dev/input/js0`) in `ros2_ws/src/dog_teleop/src/gamepad_node.cpp`.
 
-**Python (declared in tools, CI only):**
+**Python tools (not ROS):**
 
-- `numpy >= 1.24` — Numerical arrays for perception geometry, gait math (dual C++/Python in dog_perception)
-- `opencv-contrib-python >= 4.6` — ArUco marker detection for servo calibration (`tools/autocal/requirements.txt`)
-  - Alternative: `opencv-contrib-python-headless` on headless systems
-- `pyyaml` — Configuration parsing for robot geometry and servo calibration (`tools/robot_setup/robot_setup.py`)
+- `numpy>=1.24`, `opencv-contrib-python>=4.6` (ArUco; `-headless` variant on servers) - `tools/autocal/requirements.txt`.
+- `pyyaml` - `tools/robot_setup/robot_setup.py`.
+- `matplotlib`, `imageio-ffmpeg`, `opencv-contrib-python`, `numpy` - `tools/sim_video/` (versions not pinned; see `tools/sim_video/README.md`).
+- `pytest` - tool tests.
 
-**Hardware Driver Support (no explicit packages; Linux kernel provides):**
+**Infrastructure:**
 
-- `/dev/i2c-0` — I2C device node for PCA9685 (servo controller, address 0x40) and MPU6050 (IMU, addresses 0x68/0x69)
-- `/dev/input/js*` — Linux joystick API for gamepad input (dog_teleop reads this via raw device file)
-- `/dev/input/event*` — Keyboard input in terminal or web server
+- Docker BuildKit + QEMU (`docker/setup-qemu-action@v3`, `docker/setup-buildx-action@v3`, `docker/build-push-action@v6`) - arm64 image build in CI.
 
 ## Configuration
 
 **Environment:**
 
-- **ROS_DOMAIN_ID** — Separates ROS 2 DDS networks
-  - Default: `0` for production robot
-  - CI tests: `43` (isolated to avoid parallel test conflicts)
-  - Declared in `docker-compose.yml` and test launch files
-
-- **ROS_DISTRO** — Runtime distro selection
-  - Docker build arg: `ARG ROS_DISTRO=jazzy`
-  - Supports: Jazzy (default), Lyrical (alternative)
-  - Source path: `/opt/ros/${ROS_DISTRO}/setup.bash`
+- Runtime tunables are ROS parameters in YAML, not env vars: `ros2_ws/src/dog_bringup/config/robot.yaml` (geometry, gait, limits, sensors), `servos.yaml` (PCA9685 channels, pulse ranges, offsets), `imu.yaml`, `power.yaml`, `teleop.yaml`, `teleop_ps.yaml`.
+- `docker-compose.yml` bind-mounts `ros2_ws/src/dog_bringup/config` read-only over the installed config so edits apply without rebuilding.
+- Launch arguments (`backend:=pca9685|mock`, `gamepad`, `gamepad_profile:=xbox|ps`, `web`, `rviz`, `imu`, `power`) in `ros2_ws/src/dog_bringup/launch/robot.launch.py`; sim arguments (`headless`, `terrain`, `level`, `perception`, `localization`, `dead_reckoning`, `gyro_bias`, `seed`, `map`) in `ros2_ws/src/dog_gazebo/launch/sim.launch.py`.
+- Env vars used: `ROS_DOMAIN_ID`, `ROS_DISTRO`, `GZ_PARTITION`. No `.env` files detected; no secrets required.
+- ROS namespace is `/dog` (`NS = 'dog'` in `ros2_ws/src/dog_bringup/launch/robot.launch.py`).
 
 **Build:**
 
-- `docker/Dockerfile` — Multi-stage runtime image for Banana Pi (arm64) or PC (amd64)
-  - Base: `ros:${ROS_DISTRO}-ros-base` (minimized, no extra packages like xacro/joy/ros2_control)
-  - Build jobs limited: `ARG BUILD_JOBS=2` (2 GB RAM on Pi)
-  - Skips dog_gazebo during build: `--packages-skip dog_gazebo`
-
-- `docker/Dockerfile.sim` — Optional simulation image for PC development
-  - Includes full Gazebo stack
-
-- `.github/workflows/ci.yml` — GitHub Actions CI/CD
-  - Matrix test: Ubuntu 24.04 containers with Jazzy and Lyrical
-  - Builds, unit tests, integration tests, Gazebo walk_check, terrain sweep
-
-**Runtime Parameters (robot.launch.py):**
-
-- `backend:=pca9685` — Hardware driver (PCA9685 for real robot, `mock` for simulation, `auto` to probe)
-- `gamepad:=true` — Enable gamepad teleoperation node
-- `web:=true` — Enable web server on port 8080
-- `rviz:=true` — Launch RViz visualization (dev/debugging only)
-- Servo calibration and geometry parameters loaded from `ros2_ws/src/dog_bringup/config/`
-
-**Device Access:**
-
-- I2C: `/dev/i2c-0` mounted as `ro` in docker-compose (servo controller + IMU)
-- Input devices: `/dev/input/*` mounted, with `device_cgroup_rules` to permit dynamic plugging
-- No network exposure in production (host network mode for ROS 2 DDS discovery)
+- `ros2_ws/src/*/CMakeLists.txt`, `ros2_ws/src/*/setup.py`, `ros2_ws/src/*/setup.cfg`, `ros2_ws/src/*/package.xml`.
+- Docker build args: `ROS_DISTRO` (default `jazzy`), `BUILD_JOBS` (default 2 for the 2 GB Pi). Release builds use `-DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF`.
+- No linter/formatter config detected (no `.clang-format`, `.flake8`, `pyproject.toml`, `.prettierrc`).
+- Build outputs ignored by git: `ros2_ws/build/`, `install/`, `log/` (`.gitignore`).
 
 ## Platform Requirements
 
 **Development:**
 
-- **Ubuntu 24.04** (CI baseline; WSL2 supported for local development)
-- **ROS 2 Jazzy or Lyrical** installed or docker image pulled
-- **colcon** + **CMake 3.16+**
-- **Python 3.12** recommended (CI tested version)
-- **Gazebo Harmonic or Jetty** (optional, for simulation)
-- **Git** for version control
+- Linux (WSL2 works) with either Docker or a native ROS 2 Jazzy/Lyrical install with `colcon`.
+- Simulation needs the `ros-<distro>-ros-gz` stack / `osrf/ros:<distro>-simulation` image (amd64 only).
+- Tools only: Python 3.8+ (`tools/robot_setup/robot_setup.py`), Python 3.12 in CI for `tools/autocal`.
 
-**Production (Banana Pi BPI-M4 Zero):**
+**Production:**
 
-- **Armbian** Linux (stripped, minimal overhead)
-- **Docker** runtime
-- **I2C interface** enabled on `/dev/i2c-0` (PCA9685 at 0x40, MPU6050 at 0x68)
-- **USB or Bluetooth gamepad** (optional; keyboard/web always available)
-- **Network connectivity** for web UI (`--net=host` in docker-compose)
-- **2 GB RAM** (build-time constraint; runtime is lighter)
+- Banana Pi BPI-M4 Zero, Docker, `network_mode: host`, `/dev/i2c-0` passed through, `/dev/input` mounted for the gamepad (`docker-compose.yml`).
+- Hardware: PCA9685 (I2C 0x40) driving 12x MG996R servos; MPU6050 IMU (0x68/0x69); optional INA226/INA219 current sensor (0x41/0x44/0x45); optional LD19-class lidars, GS2 line lidar, VL53L1X ToF (perception sensors are simulated only; no hardware drivers detected) - see `docs/HARDWARE.md`, `docs/HEAD.md`.
+- Web teleop served on port 8080 (`web_teleop` params in `ros2_ws/src/dog_bringup/config/teleop.yaml`).
 
-**Hardware Sensors/Actuators:**
+## Stray / Untracked Files at Repo Root
 
-- **12 × MG996R servos** (PCA9685 PWM driver at 50 Hz)
-- **MPU6050 IMU** (accelerometer + gyroscope on I2C)
-- **Optional:** Cross-mounted single-beam lidars, GS2 line lidar, VL53L1X ToF sensors (all via ROS topics, not direct hardware)
-- **Optional:** USB camera (for autocal tool; not used in main control loop)
+- `robot_configurator.py` - standalone v1-era validator for `servo_config.json` (FK, limits, inversions); untracked, not part of the ROS workspace.
+- `robot_dog_ws/` - untracked partial v1 workspace (`dog_hardware`, `dog_hardware_cpp`, `dog_web` servo-config reader files); not built by colcon (`ros2_ws` is the only workspace).
+- `test_servo_config_reader.sh` - untracked on-robot test script targeting `~/robot_dog_ws` (v1 layout).
+- `__pycache__/` - compiled bytecode from a Python 3.13 run of a legacy script.
 
 ---
 
