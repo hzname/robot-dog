@@ -19,8 +19,8 @@
 
 ### Калибровка и запуск на железе (CAL)
 
-- [ ] **CAL-01**: Все 12 серв откалиброваны на настоящем роботе по `docs/CALIBRATION.md`; поза стоя симметрична, ни одна серва не упирается в предел
-- [ ] **CAL-03**: Стадии 5–10 `docs/DEPLOYMENT.md` выполнены по порядку с go/no-go и записанным результатом на каждой (люлька и лабораторный блок с ограничением тока для первого включения)
+- [ ] **CAL-01**: Все 12 серв откалиброваны на настоящем роботе вручную по `docs/CALIBRATION.md` и перепроверены камерой (`tools/autocal`); поза стоя симметрична, ни одна серва не упирается в предел, расхождение двух способов больше 2° разобрано
+- [ ] **CAL-03**: Стадии 5–8 `docs/DEPLOYMENT.md` (сервы по одной, калибровка, IMU и датчик тока, первые движения на подставке) выполнены по порядку с go/no-go и записанным результатом на каждой; первое включение в люльке на лабораторном блоке с ограничением тока. Стадии 9–10 закрывают FLOOR-01, FLOOR-02 и GAIT-07
 - [ ] **CAL-04**: Живая правка калибровки (`ros2 param set`, веб `cal_set`) не сдвигает включённую серву больше чем на ~10° рывком: такой шаг отклоняется или отрабатывается плавно
 - [ ] **CAL-05**: Калибровка хранится в файле-надстройке `servos.local.yaml`, который `git pull` не перезаписывает; контейнер читает именно его
 - [ ] **CAL-06**: `robot_setup --check` проверяет симметрию зеркальных пар, разброс смещений и то, что ни одна серва не стоит на пределе в позе стоя
@@ -129,16 +129,59 @@
 
 ## Traceability
 
-Какие фазы покрывают какие требования. Заполняется при создании дорожной карты.
+Какие фазы покрывают какие требования. Заполнено при создании дорожной карты (2026-09-29).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| GAIT-01 | Phase 1 | Pending |
+| GAIT-02 | Phase 1 | Pending |
+| GAIT-06 | Phase 1 | Pending |
+| CAL-16 | Phase 1 | Pending |
+| CAL-17 | Phase 1 | Pending |
+| GAIT-03 | Phase 2 | Pending |
+| GAIT-04 | Phase 2 | Pending |
+| GAIT-05 | Phase 2 | Pending |
+| SAF-01 | Phase 3 | Pending |
+| SAF-02 | Phase 3 | Pending |
+| SAF-03 | Phase 3 | Pending |
+| SAF-04 | Phase 3 | Pending |
+| SAF-12 | Phase 3 | Pending |
+| SAF-16 | Phase 3 | Pending |
+| DIA-03 | Phase 3 | Pending |
+| SAF-05 | Phase 4 | Pending |
+| SAF-06 | Phase 4 | Pending |
+| SAF-08 | Phase 4 | Pending |
+| DIA-01 | Phase 4 | Pending |
+| DIA-02 | Phase 4 | Pending |
+| CAL-04 | Phase 5 | Pending |
+| CAL-05 | Phase 5 | Pending |
+| CAL-06 | Phase 5 | Pending |
+| CAL-07 | Phase 5 | Pending |
+| TEL-02 | Phase 5 | Pending |
+| TEL-03 | Phase 5 | Pending |
+| TEL-04 | Phase 5 | Pending |
+| TEL-06 | Phase 5 | Pending |
+| TEL-11 | Phase 5 | Pending |
+| CAL-09 | Phase 6 | Pending |
+| CAL-10 | Phase 6 | Pending |
+| CAL-11 | Phase 6 | Pending |
+| SAF-09 | Phase 6 | Pending |
+| SAF-17 | Phase 6 | Pending |
+| CAL-01 | Phase 7 | Pending |
+| CAL-03 | Phase 7 | Pending |
+| CAL-08 | Phase 7 | Pending |
+| SAF-07 | Phase 7 | Pending |
+| SAF-18 | Phase 7 | Pending |
+| TEL-05 | Phase 7 | Pending |
+| GAIT-07 | Phase 8 | Pending |
+| FLOOR-01 | Phase 8 | Pending |
+| FLOOR-02 | Phase 8 | Pending |
 
 **Coverage:**
 - v1 requirements: 43 total
-- Mapped to phases: 0
-- Unmapped: 43 ⚠️
+- Mapped to phases: 43 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-09-29*
-*Last updated: 2026-09-29 after initial definition*
+*Last updated: 2026-09-29 after roadmap creation (traceability filled)*
