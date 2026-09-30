@@ -374,7 +374,7 @@ double ina219BusVolts(uint16_t raw);
 double ina219ShuntVolts(uint16_t raw) {return static_cast<int16_t>(raw) * 10e-6;}
 double ina219BusVolts(uint16_t raw) {return (raw >> 3) * 4e-3;}
 ```
-Новое: `constexpr uint16_t kIna219FastConfig = 0x199F;  // 0.1 Ohm shunt: +-3.2 A, new result every 1.064 ms` и `kIna219Fast80mv = 0x0999` (10 мОм, ±8 А), из RESEARCH «Конфигурация INA219». Регистры калибровки/тока/мощности не использовать: `I = V_shunt / R` на хосте (`power_sensor.cpp` 74-82). Запись конфигурации и read-back по образцу `power_sensor.cpp` 132-136 (`write16(0x00, cfg) && read16(0x00, v)`), но проверять именно быструю конфигурацию.
+Новое: `constexpr uint16_t kIna219FastConfig = 0x199F;  // 0.1 Ohm shunt: +-3.2 A, new result every 1.064 ms` и `kIna219Fast80mv = 0x099F` (10 мОм, ±8 А), из RESEARCH «Конфигурация INA219». Регистры калибровки/тока/мощности не использовать: `I = V_shunt / R` на хосте (`power_sensor.cpp` 74-82). Запись конфигурации и read-back по образцу `power_sensor.cpp` 132-136 (`write16(0x00, cfg) && read16(0x00, v)`), но проверять именно быструю конфигурацию.
 
 ---
 

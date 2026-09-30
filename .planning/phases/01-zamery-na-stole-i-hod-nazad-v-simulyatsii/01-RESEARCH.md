@@ -460,7 +460,7 @@ double minimalPeriod(const LocomotionParams & p, const ServoSpeedModel & s, doub
 
 ```text
 (BRNG 0 -> 0x0000) | (PG /8 -> 0x1800) | (BADC 0011 -> 0x0180) | (SADC 0011 -> 0x0018) | MODE 111 -> 0x0007  => 0x199F
-0.1 Ом: PG /8 (±320 мВ = ±3.2 А), LSB 0.1 мА;   10 мОм: PG /2 -> 0x0999 (±80 мВ = ±8 А), LSB 1 мА
+0.1 Ом: PG /8 (±320 мВ = ±3.2 А), LSB 0.1 мА;   10 мОм: PG /2 -> 0x099F (±80 мВ = ±8 А), LSB 1 мА
 ```
 Результат каждые 2 × 532 µs = 1.064 мс (≈ 940 Гц); опрос 1 кГц даёт новый шунт почти каждый тик, эффективное временное разрешение ~1 мс. Регистр калибровки и регистры тока/мощности **не использовать**: ток считается на хосте `I = V_shunt / R` (как `power_sensor.cpp`), калибровка не нужна.
 
@@ -674,7 +674,7 @@ double minimalPeriod(const LocomotionParams & p, const ServoSpeedModel & s, doub
 ```cpp
 // Source: TI INA219 SBOS448G Tables 3-6; 0x199F = 16 V, PG /8, 12 bit, 1 sample, continuous shunt+bus
 constexpr uint16_t kIna219FastConfig = 0x199F;   // 0.1 Ohm shunt: +-3.2 A, new result every 1.064 ms
-constexpr uint16_t kIna219Fast80mv   = 0x0999;   // 10 mOhm shunt: PG /2, +-8 A
+constexpr uint16_t kIna219Fast80mv   = 0x099F;   // 10 mOhm shunt: PG /2, +-8 A
 ```
 
 ### Мост: люфт
