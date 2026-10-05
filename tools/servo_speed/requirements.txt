@@ -1,0 +1,2 @@
+numpy>=1.24
+# matplotlib is needed only for the optional --plot graph of analyze.py
