@@ -13,6 +13,12 @@
 //                  (NaN = default), gait (0 trot, 1 crawl), sideways velocity m/s
 //                  to go round an obstacle]; dropped
 //                  after guard_timeout without messages
+// Gait period: from gait.period, or with gait.auto_period computed from
+// servo.max_speed [rad/s], servo.margin and servo.knee_ratio at start and on
+// live changes (D-12). Changes of gait.period, gait.min_period [s], servo.*
+// and gait.auto_period via `ros2 param set` are accepted only in PASSIVE,
+// STAND and LYING - WALK and transitions reject them; when no period up to
+// 1.5 s fits, the node exits with code 1.
 // Publishes:
 //   joint_commands sensor_msgs/JointState 12 joint positions [rad]
 //   state          std_msgs/String        current mode, or "estop" (latched)
@@ -26,6 +32,8 @@
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -45,6 +53,20 @@
 namespace dog_control
 {
 
+namespace
+{
+// Copy of the helper in servo_driver_node.cpp (dog_hardware is Phase 3
+// territory): numbers from YAML or `ros2 param set` may arrive as integer or
+// double.
+double asNumber(const rclcpp::Parameter & p)
+{
+  if (p.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER) {
+    return static_cast<double>(p.as_int());
+  }
+  return p.as_double();  // throws InvalidParameterTypeException otherwise
+}
+}  // namespace
+
 const std::vector<std::string> kJointNames = {
   "lf_hip_joint", "lf_thigh_joint", "lf_calf_joint",
   "rf_hip_joint", "rf_thigh_joint", "rf_calf_joint",
@@ -60,6 +82,17 @@ public:
   {
     const LocomotionParams p = loadParams();
     controller_ = std::make_unique<LocomotionController>(p);
+    gait_period_ = p.gait.period;
+    gait_auto_ = p.auto_period;
+    gait_min_period_ = p.min_period;
+    servo_ = p.servo;
+    if (gait_auto_) {
+      RCLCPP_INFO(get_logger(),
+        "gait period %.4f s computed from servo.max_speed %.2f, margin %.2f, knee_ratio %.3f",
+        controller_->gaitPeriod(), servo_.max_speed, servo_.margin, servo_.knee_ratio);
+    } else {
+      RCLCPP_INFO(get_logger(), "gait period %.4f s (manual gait.period)", controller_->gaitPeriod());
+    }
     rate_ = declare_parameter("control_rate", 50.0);
     cmd_timeout_ = declare_parameter("cmd_vel_timeout", 0.5);
     guard_timeout_ = declare_parameter("guard_timeout", 1.0);
@@ -214,6 +247,8 @@ public:
     // Node clock: follows /clock when use_sim_time is set (Gazebo).
     timer_ = rclcpp::create_timer(
       this, get_clock(), rclcpp::Duration::from_seconds(1.0 / rate_), [this]() {tick();});
+    param_cb_ = add_on_set_parameters_callback(
+      [this](const std::vector<rclcpp::Parameter> & params) {return onParams(params);});
     publishState();
     RCLCPP_INFO(get_logger(), "locomotion ready at %.0f Hz (send \"stand\" on ~/command)", rate_);
   }
@@ -243,6 +278,11 @@ private:
     p.gait.duty = declare_parameter("gait.duty", p.gait.duty);
     p.gait.step_height = declare_parameter("gait.step_height", p.gait.step_height);
     p.gait.max_step = declare_parameter("gait.max_step", p.gait.max_step);
+    p.auto_period = declare_parameter("gait.auto_period", p.auto_period);
+    p.min_period = declareNumber("gait.min_period", p.min_period);
+    p.servo.max_speed = declareNumber("servo.max_speed", p.servo.max_speed);
+    p.servo.margin = declareNumber("servo.margin", p.servo.margin);
+    p.servo.knee_ratio = declareNumber("servo.knee_ratio", p.servo.knee_ratio);
     p.crawl.shift_time = declare_parameter("crawl.shift_time", p.crawl.shift_time);
     p.crawl.swing_time = declare_parameter("crawl.swing_time", p.crawl.swing_time);
     p.crawl.max_stride = declare_parameter("crawl.max_stride", p.crawl.max_stride);
@@ -286,6 +326,81 @@ private:
     p.max_accel.vy = declare_parameter("limits.accel_vy", p.max_accel.vy);
     p.max_accel.wz = declare_parameter("limits.accel_wz", p.max_accel.wz);
     return p;
+  }
+
+  double declareNumber(const std::string & name, double default_value)
+  {
+    rcl_interfaces::msg::ParameterDescriptor desc;
+    desc.dynamic_typing = true;
+    const auto v = declare_parameter(name, rclcpp::ParameterValue(default_value), desc);
+    return asNumber(rclcpp::Parameter(name, v));
+  }
+
+  rcl_interfaces::msg::SetParametersResult onParams(const std::vector<rclcpp::Parameter> & params)
+  {
+    rcl_interfaces::msg::SetParametersResult result;
+    result.successful = true;
+    // The whole set applies atomically: one reconfigureGait call with the
+    // merged values (T-01-08-03).
+    double period = gait_period_;
+    bool auto_period = gait_auto_;
+    double min_period = gait_min_period_;
+    ServoSpeedModel servo = servo_;
+    bool seen = false;
+    for (const auto & param : params) {
+      const auto & name = param.get_name();
+      if (name == "gait.auto_period") {
+        if (param.get_type() != rclcpp::ParameterType::PARAMETER_BOOL) {
+          result.successful = false;
+          result.reason = "gait.auto_period: expected a boolean";
+          return result;
+        }
+        auto_period = param.as_bool();
+        seen = true;
+      } else if (name == "gait.period" || name == "gait.min_period" || name == "servo.max_speed" ||
+        name == "servo.margin" || name == "servo.knee_ratio")
+      {
+        double v = 0.0;
+        try {
+          v = asNumber(param);
+        } catch (const rclcpp::exceptions::InvalidParameterTypeException & e) {
+          result.successful = false;
+          result.reason = name + ": " + e.what();
+          return result;
+        }
+        if (name == "gait.period") {period = v;}
+        else if (name == "gait.min_period") {min_period = v;}
+        else if (name == "servo.max_speed") {servo.max_speed = v;}
+        else if (name == "servo.margin") {servo.margin = v;}
+        else {servo.knee_ratio = v;}
+        seen = true;
+      }
+    }
+    if (!seen || (period == gait_period_ && auto_period == gait_auto_ && min_period == gait_min_period_ &&
+      servo.max_speed == servo_.max_speed && servo.margin == servo_.margin &&
+      servo.knee_ratio == servo_.knee_ratio))
+    {
+      return result;  // nothing of ours changed: leave the controller alone
+    }
+    if (controller_->reconfigureGait(period, auto_period, min_period, servo)) {
+      gait_period_ = period;
+      gait_auto_ = auto_period;
+      gait_min_period_ = min_period;
+      servo_ = servo;
+      RCLCPP_INFO(get_logger(), "gait period %.4f s after parameter change", controller_->gaitPeriod());
+      return result;
+    }
+    result.successful = false;
+    if (!controller_->gaitReconfigurable()) {
+      result.reason = "period change rejected in mode " + std::string(modeName(controller_->mode()));
+    } else {
+      std::ostringstream msg;
+      msg << "no gait period up to " << kMaxAutoPeriod << " s fits servo.margin * servo.max_speed"
+          << " (or the manual period is not a finite number above 0)";
+      result.reason = msg.str();
+    }
+    RCLCPP_WARN(get_logger(), "gait period change rejected: %s", result.reason.c_str());
+    return result;
   }
 
   void tick()
@@ -374,6 +489,11 @@ private:
   }
 
   std::unique_ptr<LocomotionController> controller_;
+  double gait_period_{0.0};
+  bool gait_auto_{false};
+  double gait_min_period_{0.0};
+  ServoSpeedModel servo_;
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_;
   double rate_{50.0};
   double cmd_timeout_{0.5};
   bool cmd_vel_active_{false};
@@ -420,7 +540,13 @@ private:
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<dog_control::LocomotionNode>());
+  int code = 0;
+  try {
+    rclcpp::spin(std::make_shared<dog_control::LocomotionNode>());
+  } catch (const std::exception & e) {
+    RCLCPP_FATAL(rclcpp::get_logger("locomotion"), "%s", e.what());
+    code = 1;
+  }
   rclcpp::shutdown();
-  return 0;
+  return code;
 }
