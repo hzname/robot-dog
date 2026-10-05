@@ -159,6 +159,14 @@ public:
   const TrotGait & gait() const {return gait_;}
   /// Gait period in force [s]: gait.period or the computed one (TrotGait clamps it to >= 0.1 s).
   double gaitPeriod() const {return gait_.params().period;}
+  /// True in PASSIVE, STAND and LYING: the modes where reconfigureGait() is accepted.
+  bool gaitReconfigurable() const;
+  /// Live change of the gait period source (D-12): rebuilds the trot with the
+  /// period from gait.period or, with auto_period, from servo.*. Returns false
+  /// and changes nothing outside PASSIVE, STAND, LYING (a gait in motion or a
+  /// transition must not jump), when no period in [min_period, kMaxAutoPeriod]
+  /// fits, or when a manual period is not finite and above 0.
+  bool reconfigureGait(double period, bool auto_period, double min_period, const ServoSpeedModel & servo);
   /// Number of IK targets clamped to the workspace in the last update.
   int unreachableCount() const {return unreachable_;}
 

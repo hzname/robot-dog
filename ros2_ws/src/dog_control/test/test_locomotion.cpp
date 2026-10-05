@@ -777,3 +777,136 @@ TEST(Locomotion, NoFitThrows)
   LocomotionController good(ok);
   EXPECT_DOUBLE_EQ(good.gaitPeriod(), 0.7);
 }
+
+TEST(Locomotion, ReconfigureAcceptedWhenStanding)
+{
+  const double nan = std::nan("");
+  LocomotionParams p = pinnedParams();
+  p.auto_period = false;
+  p.gait.period = 0.55;
+  p.min_period = 0.55;
+  p.servo = ServoSpeedModel{6.0, 0.8, 1.0};
+  LocomotionController c(p);
+  c.request("stand");
+  run(c, 2.0);
+  ASSERT_EQ(c.mode(), Mode::STAND);
+  // The guard's swing height must survive the rebuild (it is not reset).
+  c.setGuard(nan, {0.045, nan, nan, nan});
+  run(c, 1.0);
+  EXPECT_NEAR(c.stepHeight(0), 0.045, 1e-9);
+  ASSERT_TRUE(c.reconfigureGait(0.55, true, 0.55, {5.0, 0.8, 1.0}));
+  EXPECT_NEAR(c.gaitPeriod(), 0.7200, 1e-9);
+  EXPECT_NEAR(c.stepHeight(0), 0.045, 1e-9);
+  // Standing still: the next tick gives exactly the same joints.
+  const auto standing = c.joints();
+  c.update(kDt);
+  for (int j = 0; j < dog_control::kNumJoints; ++j) {EXPECT_NEAR(c.joints()[j], standing[j], 1e-9) << j;}
+  EXPECT_EQ(c.mode(), Mode::STAND);
+  // Walking: the phase grows with the new 0.72 s period.
+  c.setVelocity({0.1, 0.0, 0.0});
+  run(c, 1.0);
+  EXPECT_EQ(c.mode(), Mode::WALK);
+  EXPECT_NEAR(phaseAdvance(c), kDt / 0.72, 1e-9);
+  // Back to a manual period once stopped.
+  c.setVelocity({});
+  run(c, 2.0);
+  EXPECT_EQ(c.mode(), Mode::STAND);
+  EXPECT_TRUE(c.reconfigureGait(0.8, false, 0.55, {5.0, 0.8, 1.0}));
+  EXPECT_DOUBLE_EQ(c.gaitPeriod(), 0.8);
+  // PASSIVE is accepted too.
+  c.setEstop(true);
+  EXPECT_EQ(c.mode(), Mode::PASSIVE);
+  EXPECT_TRUE(c.reconfigureGait(0.55, true, 0.55, {6.0, 0.8, 1.0}));
+  EXPECT_NEAR(c.gaitPeriod(), 0.6000, 1e-9);
+
+  // LYING: the third accepted mode.
+  LocomotionParams q = pinnedParams();
+  q.auto_period = false;
+  q.gait.period = 0.55;
+  q.min_period = 0.55;
+  q.servo = ServoSpeedModel{6.0, 0.8, 1.0};
+  LocomotionController d(q);
+  ASSERT_TRUE(d.request("lie"));
+  ASSERT_EQ(d.mode(), Mode::LYING);
+  EXPECT_TRUE(d.reconfigureGait(0.55, true, 0.55, {6.0, 0.8, 1.0}));
+  EXPECT_NEAR(d.gaitPeriod(), 0.6000, 1e-9);
+}
+
+TEST(Locomotion, ReconfigureRejectedWhenWalking)
+{
+  LocomotionParams p = pinnedParams();
+  p.auto_period = false;
+  p.gait.period = 0.55;
+  p.min_period = 0.55;
+  p.servo = ServoSpeedModel{6.0, 0.8, 1.0};
+  LocomotionController c(p);
+  c.request("stand");
+  run(c, 2.0);
+  c.setVelocity({0.1, 0.0, 0.0});
+  run(c, 1.0);
+  ASSERT_EQ(c.mode(), Mode::WALK);
+  EXPECT_FALSE(c.gaitReconfigurable());
+  EXPECT_FALSE(c.reconfigureGait(0.55, true, 0.55, {5.0, 0.8, 1.0}));
+  EXPECT_DOUBLE_EQ(c.gaitPeriod(), 0.55);
+  EXPECT_TRUE(c.gait().stepping());
+  EXPECT_NEAR(phaseAdvance(c), kDt / 0.55, 1e-9);  // the step is not reset
+
+  // STANDING_UP: the transition blocks it.
+  LocomotionController u(p);
+  ASSERT_TRUE(u.request("stand"));
+  ASSERT_EQ(u.mode(), Mode::STANDING_UP);
+  u.update(kDt);
+  EXPECT_FALSE(u.gaitReconfigurable());
+  EXPECT_FALSE(u.reconfigureGait(0.55, true, 0.55, {5.0, 0.8, 1.0}));
+  EXPECT_DOUBLE_EQ(u.gaitPeriod(), 0.55);
+  EXPECT_FALSE(u.gait().stepping());
+
+  // LYING_DOWN, GREETING, SURVEY: a fresh controller in STAND each time.
+  for (int which = 0; which < 3; ++which) {
+    LocomotionController d(p);
+    d.request("stand");
+    run(d, 2.0);
+    ASSERT_EQ(d.mode(), Mode::STAND);
+    const char * cmd = which == 0 ? "lie" : (which == 1 ? "greet" : "survey");
+    ASSERT_TRUE(d.request(cmd));
+    const Mode m = d.mode();
+    ASSERT_TRUE(m == Mode::LYING_DOWN || m == Mode::GREETING || m == Mode::SURVEY) << dog_control::modeName(m);
+    EXPECT_FALSE(d.gaitReconfigurable());
+    EXPECT_FALSE(d.reconfigureGait(0.55, true, 0.55, {5.0, 0.8, 1.0}));
+    EXPECT_DOUBLE_EQ(d.gaitPeriod(), 0.55);
+    EXPECT_FALSE(d.gait().stepping());
+  }
+
+  // The mode blocks, not the values: the same call is accepted in STAND.
+  c.setVelocity({});
+  run(c, 2.0);
+  ASSERT_EQ(c.mode(), Mode::STAND);
+  EXPECT_TRUE(c.gaitReconfigurable());
+  EXPECT_TRUE(c.reconfigureGait(0.55, true, 0.55, {5.0, 0.8, 1.0}));
+  EXPECT_NEAR(c.gaitPeriod(), 0.7200, 1e-9);
+}
+
+TEST(Locomotion, ReconfigureNoFitKeepsTheGait)
+{
+  const double nan = std::nan("");
+  LocomotionParams p = pinnedParams();
+  p.auto_period = false;
+  p.gait.period = 0.55;
+  p.min_period = 0.55;
+  p.servo = ServoSpeedModel{6.0, 0.8, 1.0};
+  LocomotionController c(p);
+  c.request("stand");
+  run(c, 2.0);
+  ASSERT_EQ(c.mode(), Mode::STAND);
+  // A refused call changes nothing and leaves the controller usable.
+  EXPECT_FALSE(c.reconfigureGait(0.55, true, 0.55, {1.0, 0.8, 1.0}));
+  EXPECT_DOUBLE_EQ(c.gaitPeriod(), 0.55);
+  EXPECT_FALSE(c.reconfigureGait(0.55, true, 0.55, {nan, 0.8, 1.0}));
+  EXPECT_DOUBLE_EQ(c.gaitPeriod(), 0.55);
+  EXPECT_FALSE(c.reconfigureGait(nan, false, 0.55, {6.0, 0.8, 1.0}));
+  EXPECT_DOUBLE_EQ(c.gaitPeriod(), 0.55);
+  EXPECT_FALSE(c.reconfigureGait(0.0, false, 0.55, {6.0, 0.8, 1.0}));
+  EXPECT_DOUBLE_EQ(c.gaitPeriod(), 0.55);
+  EXPECT_TRUE(c.reconfigureGait(0.7, false, 0.55, {6.0, 0.8, 1.0}));
+  EXPECT_DOUBLE_EQ(c.gaitPeriod(), 0.7);
+}

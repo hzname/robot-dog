@@ -91,6 +91,49 @@ LocomotionController::LocomotionController(const LocomotionParams & params)
   guard_step_.fill(std::numeric_limits<double>::quiet_NaN());
 }
 
+bool LocomotionController::gaitReconfigurable() const
+{
+  switch (mode_) {
+    case Mode::PASSIVE:
+    case Mode::STAND:
+    case Mode::LYING:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool LocomotionController::reconfigureGait(
+  double period, bool auto_period, double min_period, const ServoSpeedModel & servo)
+{
+  if (!gaitReconfigurable()) {
+    return false;  // a gait in motion or a transition must not jump
+  }
+  LocomotionParams q = p_;
+  q.gait.period = period;
+  q.auto_period = auto_period;
+  q.min_period = min_period;
+  q.servo = servo;
+  const double effective = effectivePeriod(q);
+  if (effective == 0.0) {
+    return false;
+  }
+  GaitParams g = q.gait;
+  g.period = effective;
+  // The rebuilt trot starts at the neutral stance; the per-leg step heights
+  // (a leg raised by the guard) are put back so a swing is not reset.
+  std::array<double, kNumLegs> heights{};
+  for (int leg = 0; leg < kNumLegs; ++leg) {
+    heights[leg] = gait_.stepHeight(leg);
+  }
+  gait_ = TrotGait(g, neutralFeet(q));
+  for (int leg = 0; leg < kNumLegs; ++leg) {
+    gait_.setStepHeight(leg, heights[leg]);
+  }
+  p_ = q;
+  return true;
+}
+
 Vec3 LocomotionController::hipPosition(int leg) const
 {
   return {legFront(leg) * p_.hip_x, legSide(leg) * p_.hip_y, 0.0};
