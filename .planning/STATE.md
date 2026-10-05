@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Замеры на столе и ход назад в симуляции
 status: executing
-stopped_at: Completed 01-08-PLAN.md
-last_updated: "2026-10-05T18:45:43.698Z"
+stopped_at: Completed 01-09-PLAN.md
+last_updated: "2026-10-05T19:08:21.336Z"
 last_activity: 2026-10-05
 last_activity_desc: Phase 01 execution started
-state_head: 6e9105f78ad7fc254be6ac229397ef782cd2b98a
+state_head: 839513cc9b65f48ab625627dfd50f424383d1262
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 8
+  completed_plans: 9
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 01 (Замеры на столе и ход назад в симуляции) — EXECUTING
-Plan: 9 of 17
+Plan: 10 of 17
 Status: Ready to execute
 Last activity: 2026-10-05 — Phase 01 execution started
 
@@ -66,6 +66,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P06 | 23 min | 3 tasks | 6 files |
 | Phase 01 P07 | 6 min | 4 tasks | 7 files |
 | Phase 01 P08 | 34 min | 4 tasks | 5 files |
+| Phase 01 P09 | 13 min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -103,6 +104,10 @@ Recent decisions affecting current work:
 - [Phase 01]: Plan 01-08: the auto period is computed at construction and on live changes only in PASSIVE/STAND/LYING; WALK and transitions answer successful=false with 'period change rejected in mode <mode>', so a walking gait never jumps (D-12, T-01-08-01)
 - [Phase 01]: Plan 01-08: no period up to kMaxAutoPeriod (1.5 s) is a startup refusal (RCLCPP_FATAL, exit 1) and a refused live change; reconfigureGait keeps the guard's per-leg step heights, so a raised swing is not reset
 - [Phase 01]: Plan 01-08: pinnedParams() in both dog_control test files carries auto_period=false, min_period 0.55 and servo {6.0, 0.8, 1.0}, so the six new tests and ServoLimits.PeakMatchesController cannot move when plan 01-15 syncs the shipped defaults (OI-1)
+- [Phase 01]: Plan 01-09: Ramp carries the leftover dt across phase boundaries and computes cmd_us from the in-phase time, so plannedDurationS() (136.194 s on the defaults) matches the run to within one tick at dt 0.001 and 0.0071; strokes 0 and 1 are exactly the plausibility window (D-08, D-10)
+- [Phase 01]: Plan 01-09: SafetyGuard judges every reading unfiltered, updates the whole state and returns one event by priority (saturation, overcurrent, PCA, INA, tick overrun, implausible shunt, timeout) once; an invalid configuration fails closed with INA_ERRORS on the first update and error readings never clear the overcurrent window (D-10)
+- [Phase 01]: Plan 01-09: FakeI2cBus::writeBytes fixed to wire semantics (regs[first + (i - 1)]): the release frame {0xFA,0,0,0,0x10} lands on ALL_LED_OFF_H, not PRE_SCALE; no prior test exercised writeBytes (fix 839513c, WINDOWS id 3)
+- [Phase 01]: Plan 01-09: Pca9685Out preflight reads only (MODE1 awake with auto-increment, PRE_SCALE 121, no foreign live channel) and the destructor releases an armed chip with up to 3 attempts; a refused or never-armed object writes nothing (D-09, D-10)
 
 ### Pending Todos
 
@@ -126,6 +131,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-05T18:45:16.316Z
-Stopped at: Completed 01-08-PLAN.md
+Last session: 2026-10-05T19:08:21.298Z
+Stopped at: Completed 01-09-PLAN.md
 Resume file: None

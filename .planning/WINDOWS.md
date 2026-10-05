@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 1
 waived_count: 0
-fixed_count: 1
-total_count: 2
-last_updated: 2026-10-05T18:42:27.625Z
+fixed_count: 2
+total_count: 3
+last_updated: 2026-10-05T19:06:57.803Z
 ---
 
 # Broken Windows Ledger
@@ -17,6 +17,7 @@ last_updated: 2026-10-05T18:42:27.625Z
 |----|-------|------|------|------|-------------|--------|--------|-------------|-------------|
 | 1 | 01 | deviation | ros2_ws/src/dog_gazebo/test/test_acceptance_stats.py |  | test_main_threshold_warns_on_falls asserts the plan's exact fall(s) message template ('has 1 fall(s)'), not the literal word 'falls' | open |  | 2026-10-05T09:04:01.291Z |  |
 | 2 | 01 | deviation | .planning/phases/01-zamery-na-stole-i-hod-nazad-v-simulyatsii/01-08-PLAN.md |  | Task 3 verify #2's CMakeLists/package.xml clause compares to main, which dependency plan 01-04 legitimately changed (68885c2); plan 01-08 ran the equivalent check against the plan base - both files untouched by this plan | fixed |  | 2026-10-05T18:42:21.292Z | 2026-10-05T18:42:27.625Z |
+| 3 | 01 | deviation | ros2_ws/src/dog_bench/src/i2c_bus.cpp |  | FakeI2cBus::writeBytes filled registers one past the addressed one (regs[first + i]); fixed so data[1] lands on the addressed register as on the real wire - the bench release buffer must write ALL_LED_OFF_H (0xFD), not PRE_SCALE (0xFE) (fix in 839513c) | fixed |  | 2026-10-05T19:06:49.670Z | 2026-10-05T19:06:57.803Z |
 
 ````json
 [
@@ -44,6 +45,19 @@ last_updated: 2026-10-05T18:42:27.625Z
     "reason": "",
     "recorded_at": "2026-10-05T18:42:21.292Z",
     "resolved_at": "2026-10-05T18:42:27.625Z",
+    "milestone": null
+  },
+  {
+    "id": 3,
+    "kind": "deviation",
+    "phase": "01",
+    "file": "ros2_ws/src/dog_bench/src/i2c_bus.cpp",
+    "line": null,
+    "description": "FakeI2cBus::writeBytes filled registers one past the addressed one (regs[first + i]); fixed so data[1] lands on the addressed register as on the real wire - the bench release buffer must write ALL_LED_OFF_H (0xFD), not PRE_SCALE (0xFE) (fix in 839513c)",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-05T19:06:49.670Z",
+    "resolved_at": "2026-10-05T19:06:57.803Z",
     "milestone": null
   }
 ]
