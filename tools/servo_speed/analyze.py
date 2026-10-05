@@ -54,6 +54,8 @@ EPS_SIGMAS = 3.0    # eps floor: repetition sigmas
 EPS_REL = 0.02      # eps floor: fraction of the plateau current
 MIN_PAIRS = 3       # consecutive pairs that must stay at or below eps
 MIN_STROKES = 2     # valid strokes per direction for a usable speed
+AGREE_TOL = 0.15    # v_sat vs v_dur plateau: agreement tolerance
+PLATEAU_TOL = 0.07  # top-three v_dur scatter allowed when v_sat is None
 SHUNT_LSB_V = 10e-6  # [V] shunt register LSB
 BUS_LSB_V = 0.004    # [V] bus register LSB
 
@@ -201,7 +203,8 @@ def _kernel(strokes, meta, dirs):
                  for dd in dirs]
         distances.append(float(np.sqrt(np.mean(parts))))
 
-    means = [float(np.mean([st['plateau'] for st in by_speed[si]]))
+    means = [float(np.mean([st['plateau'] for st in by_speed[si]
+                            if st['direction'] in dirs]))
              for si in usable[-3:]]
     i_plateau = float(np.median(means))
     if i_plateau <= 0:
@@ -210,6 +213,11 @@ def _kernel(strokes, meta, dirs):
     eps = max(EPS_SIGMAS * sigma_rep, EPS_REL * i_plateau)
     usable_speeds = [speeds[si] for si in usable]
     v_sat = find_saturation(usable_speeds, distances, eps)
+    v_dur = []
+    for si in usable:
+        ds = [st['angle_rad'] / st['duration_s']
+              for st in by_speed[si] if st['direction'] in dirs]
+        v_dur.append(float(np.median(ds)))
     return {
         'usable_speeds': usable_speeds,
         'distances': distances,
@@ -217,7 +225,44 @@ def _kernel(strokes, meta, dirs):
         'sigma_rep': sigma_rep,
         'i_plateau': i_plateau,
         'v_sat': v_sat,
+        'v_dur': v_dur,
     }
+
+
+def plateau_duration(speeds, v_dur, v_sat):
+    """Plateau of the duration-derived speed (the second, independent estimate).
+
+    With a v_sat: median v_dur over speeds >= v_sat. Without: median of the
+    three largest speeds when their scatter (max - min)/median is within
+    PLATEAU_TOL, else None (the plateau was not reached).
+    """
+    if v_sat is not None:
+        vals = [d for s, d in zip(speeds, v_dur) if s >= v_sat]
+        if not vals:
+            return None
+        return float(np.median(vals))
+    top = [d for _s, d in list(zip(speeds, v_dur))[-3:]]
+    if len(top) < 3:
+        return None
+    med = float(np.median(top))
+    if med <= 0 or (max(top) - min(top)) / med > PLATEAU_TOL:
+        return None
+    return med
+
+
+def cross_check(v_sat, v_dur_plateau, tol=AGREE_TOL):
+    """Cross-check the kink against the duration plateau (D-08).
+
+    Returns ``(agreement, servo_max_speed, flag)``: with both values and a
+    relative difference within ``tol`` the kink wins; on disagreement the
+    smaller (safe side) wins with the flag; a missing value is
+    ``not_saturated``.
+    """
+    if v_sat is None or v_dur_plateau is None:
+        return False, None, 'not_saturated'
+    if abs(v_sat - v_dur_plateau) / max(v_sat, v_dur_plateau) <= tol:
+        return True, float(v_sat), None
+    return False, float(min(v_sat, v_dur_plateau)), 'v_sat_v_dur_disagree'
 
 
 def analyze(rows, meta):
@@ -225,13 +270,65 @@ def analyze(rows, meta):
     strokes, rejected = extract_strokes(rows, meta)
     res = _kernel(strokes, meta, (1, -1))
     i_plateau = res['i_plateau']
+    shunt_ohm = float(meta['shunt_ohm'])
+    usable = res['usable_speeds']
+    v_sat = res['v_sat']
+    v_dur_plateau = plateau_duration(usable, res['v_dur'], v_sat)
+    agreement, servo_max, cross_flag = cross_check(v_sat, v_dur_plateau)
+
+    per_direction = {}
+    for dd, name in ((1, 'up'), (-1, 'down')):
+        try:
+            kdir = _kernel(strokes, meta, (dd,))
+            per_direction[name] = {
+                'v_sat_rad_s': None if kdir['v_sat'] is None else float(kdir['v_sat']),
+                'v_dur_plateau_rad_s': plateau_duration(kdir['usable_speeds'],
+                                                        kdir['v_dur'], kdir['v_sat']),
+                'plateau_current_a': float(kdir['i_plateau'] * SHUNT_LSB_V / shunt_ohm),
+            }
+        except ValueError:
+            per_direction[name] = {'v_sat_rad_s': None,
+                                   'v_dur_plateau_rad_s': None,
+                                   'plateau_current_a': None}
+
+    flags = []
+    if cross_flag is not None:
+        flags.append(cross_flag)
+    if len(usable) < MIN_PAIRS + 1:
+        flags.append('insufficient_data')
+    if v_sat is not None and usable and v_sat == usable[0]:
+        flags.append('saturated_at_first_speed')
+    up_v = per_direction['up']['v_sat_rad_s']
+    down_v = per_direction['down']['v_sat_rad_s']
+    if (up_v is None) != (down_v is None):
+        flags.append('direction_mismatch')
+    elif up_v is not None:
+        pos = {v: i for i, v in enumerate(usable)}
+        if up_v not in pos or down_v not in pos or abs(pos[up_v] - pos[down_v]) > 1:
+            flags.append('direction_mismatch')
+    stop_reason = meta.get('stop_reason')
+    if stop_reason not in (None, '', 'completed'):
+        flags.append('run_incomplete:%s' % stop_reason)
+    groups = {row[1] for row in rows if row[1] >= 0}
+    if groups and rejected > 0.2 * len(groups):
+        flags.append('many_strokes_rejected')
+
+    bus_vals = [(row[5] >> 3) * BUS_LSB_V for row in rows if row[5] is not None]
+
     return {
-        'v_sat_rad_s': None if res['v_sat'] is None else float(res['v_sat']),
-        'v_sat_status': 'ok' if res['v_sat'] is not None else 'not_saturated',
-        'speeds_rad_s': [float(s) for s in res['usable_speeds']],
+        'v_sat_rad_s': None if v_sat is None else float(v_sat),
+        'v_sat_status': 'ok' if v_sat is not None else 'not_saturated',
+        'v_dur_plateau_rad_s': v_dur_plateau,
+        'v_dur_rad_s': [float(d) for d in res['v_dur']],
+        'agreement': bool(agreement),
+        'servo_max_speed_rad_s': None if servo_max is None else float(servo_max),
+        'flag': '; '.join(flags) if flags else None,
+        'plateau_current_a': float(i_plateau * SHUNT_LSB_V / shunt_ohm),
+        'noise_floor': float(res['sigma_rep'] / i_plateau),
+        'bus_v_mean': float(np.mean(bus_vals)) if bus_vals else None,
+        'per_direction': per_direction,
+        'speeds_rad_s': [float(s) for s in usable],
         'distance_rel': [float(d / i_plateau) for d in res['distances']],
         'eps_rel': float(res['eps'] / i_plateau),
-        'noise_floor': float(res['sigma_rep'] / i_plateau),
-        'plateau_current_a': float(i_plateau * SHUNT_LSB_V / meta['shunt_ohm']),
         'strokes': {'used': len(strokes), 'rejected': int(rejected)},
     }

@@ -1,8 +1,9 @@
 """End-to-end checks of the servo speed analyzer on synthetic traces.
 
 Covers the tracer path synth_run -> analyze -> v_sat, the find_saturation
-core rule, the determinism of the generator and the row contracts of the
-plain and ramp_timing synthetic runs (D-08).
+core rule, the duration cross-check, per-direction output, flags and the
+invariance of the result to the shunt scale, start desync and dropped rows,
+plus the determinism and row contracts of the generator (D-08, D-09).
 """
 
 import functools
@@ -12,7 +13,7 @@ import math
 
 import pytest
 
-from analyze import analyze, find_saturation
+from analyze import analyze, cross_check, find_saturation
 from synth import DEFAULT_SPEEDS, EXTENDED_SPEEDS, synth_run
 
 TICK = 0.001
@@ -24,6 +25,11 @@ def _run(v_max, **kw):
     return synth_run(v_max, **kw)
 
 
+def _expected_index(speeds, v_max):
+    """Index of the first grid speed >= v_max."""
+    return next(i for i, v in enumerate(speeds) if v >= v_max - 1e-9)
+
+
 def test_tracer_synth_to_v_sat_within_one_grid_step():
     """analyze(*synth_run(6.0)) finds the kink within one grid step of v_max."""
     rows, meta = _run(6.0)
@@ -31,7 +37,7 @@ def test_tracer_synth_to_v_sat_within_one_grid_step():
     assert result['v_sat_status'] == 'ok'
     grid = meta['speeds_rad_s']
     idx = grid.index(result['v_sat_rad_s'])
-    first = next(i for i, v in enumerate(grid) if v >= 6.0 - 1e-9)
+    first = _expected_index(grid, 6.0)
     assert first <= idx <= first + 1
 
 
@@ -131,3 +137,126 @@ def test_synth_ramp_timing_contract():
     for group in neg[1:]:  # REST: constant at -amp
         assert len(group) == pytest.approx(meta['rest_s'] / TICK, abs=2)
         assert all(row[3] == pytest.approx(rest_cmd, abs=1e-6) for row in group)
+
+
+# ---------- duration cross-check, flags, per-direction output, invariance ----------
+
+@pytest.mark.parametrize(
+    'args, expected',
+    [
+        ((6.0, 5.8), (True, 6.0, None)),
+        ((6.5, 5.0), (False, 5.0, 'v_sat_v_dur_disagree')),
+        ((5.0, 6.5), (False, 5.0, 'v_sat_v_dur_disagree')),
+        ((6.0, None), (False, None, 'not_saturated')),
+        ((None, 7.0), (False, None, 'not_saturated')),
+        ((10.0, 8.6), (True, 10.0, None)),
+        ((10.0, 8.4), (False, 8.4, 'v_sat_v_dur_disagree')),
+    ],
+    ids=['agree-3pct', 'disagree-down', 'disagree-up', 'no-dur', 'no-kink',
+         'agree-at-15pct', 'disagree-at-16pct'],
+)
+def test_cross_check_cases(args, expected):
+    assert cross_check(*args) == expected
+
+
+@pytest.mark.parametrize('v_max, speeds', [(3.5, DEFAULT_SPEEDS), (4.5, DEFAULT_SPEEDS),
+                                           (6.0, DEFAULT_SPEEDS), (7.5, EXTENDED_SPEEDS)])
+@pytest.mark.parametrize('noise', [0.008, 0.015, 0.03])
+def test_kink_within_one_grid_step(v_max, speeds, noise):
+    r = analyze(*_run(v_max, noise_a=noise, speeds=speeds))
+    assert r['v_sat_status'] == 'ok' and r['v_sat_rad_s'] is not None
+    first = _expected_index(speeds, v_max)
+    assert first <= list(speeds).index(r['v_sat_rad_s']) <= first + 1
+    assert r['v_dur_plateau_rad_s'] == pytest.approx(v_max, rel=0.10)
+    assert r['agreement'] is True
+    assert r['servo_max_speed_rad_s'] == r['v_sat_rad_s']
+    assert r['flag'] is None
+
+
+@pytest.mark.parametrize('v_max, speeds', [(4.0, DEFAULT_SPEEDS), (6.0, DEFAULT_SPEEDS),
+                                           (8.0, EXTENDED_SPEEDS)])
+@pytest.mark.parametrize('noise', [0.008, 0.03])
+def test_ramp_timing_kink(v_max, speeds, noise):
+    r = analyze(*_run(v_max, ramp_timing=True, noise_a=noise, speeds=speeds))
+    assert r['v_sat_status'] == 'ok' and r['v_sat_rad_s'] is not None
+    first = _expected_index(speeds, v_max)
+    assert first <= list(speeds).index(r['v_sat_rad_s']) <= first + 1
+    assert r['v_dur_plateau_rad_s'] == pytest.approx(v_max, rel=0.10)
+    assert r['agreement'] is True
+    assert r['servo_max_speed_rad_s'] == r['v_sat_rad_s']
+    assert r['flag'] is None
+    assert r['strokes']['rejected'] <= 3  # stroke 0 after APPROACH may be dropped
+
+
+def test_soft_kink_flags_disagreement():
+    r = analyze(*_run(6.0, kp=100.0, a_max=3000.0))
+    assert r['agreement'] is False
+    assert r['servo_max_speed_rad_s'] == r['v_dur_plateau_rad_s']
+    assert r['servo_max_speed_rad_s'] <= r['v_sat_rad_s']
+    assert 'v_sat_v_dur_disagree' in r['flag']
+
+
+@pytest.mark.parametrize('v_max', [12.0, 7.5])
+def test_grid_without_saturation(v_max):
+    r = analyze(*_run(v_max))
+    assert r['v_sat_status'] == 'not_saturated'
+    assert r['v_sat_rad_s'] is None
+    assert r['servo_max_speed_rad_s'] is None
+    assert 'not_saturated' in r['flag']
+    if v_max == 7.5:
+        # above ~7 rad/s the default grid has only two pairs left: v_dur is a lower bound
+        assert r['v_dur_plateau_rad_s'] == pytest.approx(7.5, rel=0.10)
+
+
+@pytest.mark.parametrize('scale', [0.1, 10.0])
+def test_shunt_scale_invariance(scale):
+    base = analyze(*_run(6.0))
+    r = analyze(*_run(6.0, shunt_scale=scale))
+    assert r['v_sat_rad_s'] == base['v_sat_rad_s']
+    assert r['v_dur_plateau_rad_s'] == pytest.approx(base['v_dur_plateau_rad_s'], rel=0.005)
+    assert r['noise_floor'] == pytest.approx(base['noise_floor'], rel=0.10)
+    for a, b in zip(r['distance_rel'], base['distance_rel']):
+        assert a == pytest.approx(b, rel=0.10)
+    assert r['plateau_current_a'] == pytest.approx(base['plateau_current_a'] * scale, rel=0.02)
+
+
+def test_jitter_does_not_move_the_kink():
+    r0 = analyze(*_run(6.0, jitter_max_s=0.0))
+    r = analyze(*_run(6.0, jitter_max_s=0.02))
+    assert r['v_sat_rad_s'] == r0['v_sat_rad_s']
+    assert r['v_dur_plateau_rad_s'] == pytest.approx(r0['v_dur_plateau_rad_s'], rel=0.03)
+
+
+def test_drop_fraction_shifts_index_at_most_one_step():
+    base = analyze(*_run(6.0))
+    r = analyze(*_run(6.0, drop_fraction=0.1))
+    grid = list(DEFAULT_SPEEDS)
+    assert abs(grid.index(r['v_sat_rad_s']) - grid.index(base['v_sat_rad_s'])) <= 1
+
+
+def test_per_direction_and_bus_conditions():
+    r = analyze(*_run(6.0))
+    up = r['per_direction']['up']
+    down = r['per_direction']['down']
+    for side in (up, down):
+        assert {'v_sat_rad_s', 'v_dur_plateau_rad_s', 'plateau_current_a'} <= set(side)
+    assert up['v_sat_rad_s'] == r['v_sat_rad_s']
+    assert down['v_sat_rad_s'] == r['v_sat_rad_s']
+    assert up['plateau_current_a'] >= down['plateau_current_a'] + 0.04  # leg weight helps one way
+    assert 5.90 <= r['bus_v_mean'] <= 5.98
+
+
+def test_incomplete_run_gets_flag():
+    r = analyze(*_run(6.0, stop_reason='overcurrent'))
+    assert 'run_incomplete:overcurrent' in r['flag']
+
+
+def test_plateau_current_level_and_key_contract():
+    r = analyze(*_run(6.0))
+    assert r['plateau_current_a'] == pytest.approx(0.46, abs=0.03)
+    for key in ('v_sat_rad_s', 'v_sat_status', 'v_dur_plateau_rad_s', 'v_dur_rad_s',
+                'agreement', 'servo_max_speed_rad_s', 'flag', 'plateau_current_a',
+                'noise_floor', 'bus_v_mean', 'per_direction', 'speeds_rad_s',
+                'distance_rel', 'eps_rel', 'strokes'):
+        assert key in r, key
+    json.dumps(r)
