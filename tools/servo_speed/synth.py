@@ -34,7 +34,11 @@ carries across strokes and the command the servo sees is delayed by
 U(0, jitter_max_s) per stroke (and one delay for the whole APPROACH).
 """
 
+import argparse
+import csv
+import json
 import math
+import sys
 
 import numpy as np
 
@@ -217,3 +221,47 @@ def synth_run(v_max, seed=0, noise_a=0.008, shunt_scale=1.0,
         'stop_reason': stop_reason,
     }
     return rows, meta
+
+
+def write_run(path, rows, meta):
+    """Write the recording CSV and <path>.meta.json; returns the meta path.
+
+    t_s keeps 6 decimals (1 us), cmd_us 1 decimal (0.1 us); an empty field
+    means the bus was not read in that tick (None).
+    """
+    with open(path, 'w', newline='', encoding='utf-8') as fh:
+        writer = csv.writer(fh)
+        writer.writerow(['t_s', 'stroke_id', 'direction', 'cmd_us', 'shunt_raw', 'bus_raw'])
+        for t_s, stroke_id, direction, cmd_us, shunt_raw, bus_raw in rows:
+            writer.writerow(['%.6f' % t_s, stroke_id, direction, '%.1f' % cmd_us,
+                             shunt_raw, '' if bus_raw is None else bus_raw])
+    meta_path = path + '.meta.json'
+    with open(meta_path, 'w', encoding='utf-8') as fh:
+        json.dump(meta, fh, indent=2, sort_keys=True)
+    return meta_path
+
+
+def main(argv=None):
+    """CLI: write one synthetic run for the offline check (see the README)."""
+    parser = argparse.ArgumentParser(
+        description='Write a synthetic servo speed run for tools/servo_speed.')
+    parser.add_argument('--v-max', type=float, required=True,
+                        help='servo speed limit [rad/s]')
+    parser.add_argument('--out', required=True,
+                        help='output CSV (<out>.meta.json gets the metadata)')
+    parser.add_argument('--seed', type=int, default=0, help='generator seed (default 0)')
+    parser.add_argument('--noise-a', type=float, default=0.008,
+                        help='current noise sigma [A] (default 0.008)')
+    parser.add_argument('--shunt-scale', type=float, default=1.0,
+                        help='shunt scale factor, noise included (default 1.0)')
+    args = parser.parse_args(argv)
+    rows, meta = synth_run(args.v_max, seed=args.seed, noise_a=args.noise_a,
+                           shunt_scale=args.shunt_scale)
+    meta_path = write_run(args.out, rows, meta)
+    print('wrote %s' % args.out)
+    print('wrote %s' % meta_path)
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

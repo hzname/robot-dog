@@ -30,7 +30,12 @@ absolute shunt value cancels). A grid that never saturates reports
 ``not_saturated`` and null instead of the top grid speed.
 """
 
+import argparse
+import csv
+import json
 import math
+import os
+import sys
 
 import numpy as np
 
@@ -56,8 +61,12 @@ MIN_PAIRS = 3       # consecutive pairs that must stay at or below eps
 MIN_STROKES = 2     # valid strokes per direction for a usable speed
 AGREE_TOL = 0.15    # v_sat vs v_dur plateau: agreement tolerance
 PLATEAU_TOL = 0.07  # top-three v_dur scatter allowed when v_sat is None
+MAX_ROWS = 5000000  # row cap of load_csv (a full ramp recording is ~1e5 rows)
 SHUNT_LSB_V = 10e-6  # [V] shunt register LSB
 BUS_LSB_V = 0.004    # [V] bus register LSB
+
+CSV_FIELDS = ('t_s', 'stroke_id', 'direction', 'cmd_us', 'shunt_raw', 'bus_raw')
+CSV_HEADER = ','.join(CSV_FIELDS)
 
 
 def find_saturation(speeds, distances, eps, min_pairs=MIN_PAIRS):
@@ -265,8 +274,109 @@ def cross_check(v_sat, v_dur_plateau, tol=AGREE_TOL):
     return False, float(min(v_sat, v_dur_plateau)), 'v_sat_v_dur_disagree'
 
 
+def _float_field(text, lineno, field):
+    try:
+        value = float(text)
+    except ValueError:
+        raise ValueError('line %d: %s is not a number' % (lineno, field))
+    if not math.isfinite(value):
+        raise ValueError('line %d: %s must be finite' % (lineno, field))
+    return value
+
+
+def _int_field(text, lineno, field):
+    try:
+        return int(text)
+    except ValueError:
+        raise ValueError('line %d: %s is not an integer' % (lineno, field))
+
+
+def load_csv(path):
+    """Read a recording CSV into rows (t_s, stroke_id, direction, cmd_us,
+    shunt_raw, bus_raw); an empty bus_raw becomes None. ValueError names the
+    file line and the field; see the module docstring for the contract."""
+    rows = []
+    with open(path, newline='', encoding='utf-8') as fh:
+        reader = csv.reader(fh)
+        try:
+            header = next(reader)
+        except StopIteration:
+            raise ValueError('line 1: expected header %s' % CSV_HEADER)
+        if [cell.strip() for cell in header] != list(CSV_FIELDS):
+            raise ValueError('line 1: header must be %s' % CSV_HEADER)
+        for lineno, parts in enumerate(reader, start=2):
+            if len(rows) >= MAX_ROWS:
+                raise ValueError('line %d: more than %d data rows' % (lineno, MAX_ROWS))
+            if len(parts) != len(CSV_FIELDS):
+                raise ValueError('line %d: expected %d fields' % (lineno, len(CSV_FIELDS)))
+            t_s = _float_field(parts[0], lineno, 't_s')
+            stroke_id = _int_field(parts[1], lineno, 'stroke_id')
+            direction = _int_field(parts[2], lineno, 'direction')
+            cmd_us = _float_field(parts[3], lineno, 'cmd_us')
+            shunt_raw = _int_field(parts[4], lineno, 'shunt_raw')
+            bus_raw = None
+            if parts[5].strip() != '':
+                bus_raw = _int_field(parts[5], lineno, 'bus_raw')
+            if stroke_id < -1:
+                raise ValueError('line %d: stroke_id %d is below -1' % (lineno, stroke_id))
+            if stroke_id >= 0:
+                if direction not in (1, -1):
+                    raise ValueError('line %d: direction %d inside a stroke must be '
+                                     '+1 or -1' % (lineno, direction))
+            elif direction not in (-1, 0, 1):
+                raise ValueError('line %d: direction %d outside a stroke must be '
+                                 '-1, 0 or +1' % (lineno, direction))
+            rows.append((t_s, stroke_id, direction, cmd_us, shunt_raw, bus_raw))
+    return rows
+
+
+def validate_meta(meta):
+    """Validate run metadata; ValueError names the offending field.
+
+    Required: shunt_ohm, us_per_deg, speeds_rad_s (strictly ascending, at
+    least 4), strokes_per_speed (even, at least 4); bool is never a number.
+    amp_deg, center_us, channel, hold_s, rest_s, ina_config and stop_reason
+    stay optional.
+    """
+    if not isinstance(meta, dict):
+        raise ValueError('meta must be a JSON object')
+    for field in ('shunt_ohm', 'us_per_deg', 'speeds_rad_s', 'strokes_per_speed'):
+        if field not in meta:
+            raise ValueError('meta field "%s" is required' % field)
+    for field in ('shunt_ohm', 'us_per_deg'):
+        value = meta[field]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError('"%s" must be a number' % field)
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError('"%s" must be positive' % field)
+    speeds = meta['speeds_rad_s']
+    if not isinstance(speeds, list) or len(speeds) < 4:
+        raise ValueError('"speeds_rad_s" must list at least 4 speeds')
+    for value in speeds:
+        if isinstance(value, bool) or not isinstance(value, (int, float)) \
+                or not math.isfinite(value):
+            raise ValueError('"speeds_rad_s" must contain finite numbers')
+    for low, high in zip(speeds[:-1], speeds[1:]):
+        if not low < high:
+            raise ValueError('"speeds_rad_s" must be strictly ascending')
+    strokes_per_speed = meta['strokes_per_speed']
+    if isinstance(strokes_per_speed, bool) or not isinstance(strokes_per_speed, int):
+        raise ValueError('"strokes_per_speed" must be an integer')
+    if strokes_per_speed < 4 or strokes_per_speed % 2:
+        raise ValueError('"strokes_per_speed" must be even and at least 4')
+
+
+def load_meta(path):
+    """Read a <csv>.meta.json file and validate it."""
+    with open(path, encoding='utf-8') as fh:
+        meta = json.load(fh)
+    validate_meta(meta)
+    return meta
+
+
 def analyze(rows, meta):
     """Full analysis of one recording; returns a json.dumps-ready dict."""
+    validate_meta(meta)
     strokes, rejected = extract_strokes(rows, meta)
     res = _kernel(strokes, meta, (1, -1))
     i_plateau = res['i_plateau']
@@ -332,3 +442,96 @@ def analyze(rows, meta):
         'eps_rel': float(res['eps'] / i_plateau),
         'strokes': {'used': len(strokes), 'rejected': int(rejected)},
     }
+
+
+def plot_result(result, path):
+    """Write the two-panel graph of one result.
+
+    Top: distance between neighbour traces vs the upper speed of the pair,
+    log Y, with the eps line and the v_sat line. Bottom: duration-derived
+    speed vs the grid, the y = x diagonal and the v_dur plateau. matplotlib
+    is imported here only, so the analysis itself stays numpy-only.
+    """
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+
+    speeds = result['speeds_rad_s']
+    fig, (top, bottom) = plt.subplots(2, 1, figsize=(8.0, 8.0))
+    top.semilogy(speeds[1:], result['distance_rel'], marker='o')
+    top.axhline(result['eps_rel'], color='red', linestyle='--', label='eps')
+    if result['v_sat_rad_s'] is not None:
+        top.axvline(result['v_sat_rad_s'], color='green', linestyle='--',
+                    label='v_sat')
+    top.set_xlabel('commanded speed [rad/s]')
+    top.set_ylabel('trace distance (relative)')
+    top.set_title('Distance between neighbour traces vs speed')
+    top.legend()
+    bottom.plot(speeds, result['v_dur_rad_s'], marker='o', label='v_dur')
+    bottom.plot(speeds, speeds, linestyle=':', color='gray', label='v_dur = v_cmd')
+    if result['v_dur_plateau_rad_s'] is not None:
+        bottom.axhline(result['v_dur_plateau_rad_s'], color='orange', linestyle='--',
+                       label='v_dur plateau')
+    bottom.set_xlabel('commanded speed [rad/s]')
+    bottom.set_ylabel('duration-derived speed [rad/s]')
+    bottom.set_title('Stroke duration vs speed')
+    bottom.legend()
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+
+
+def _fmt(value):
+    return 'None' if value is None else '%g' % value
+
+
+def main(argv=None):
+    """CLI: analyze a recording CSV; exit 0 ok / 1 not saturated / 2 input error."""
+    parser = argparse.ArgumentParser(
+        description='Find the servo saturation speed from INA219 current traces (CAL-17).')
+    parser.add_argument('--csv', required=True,
+                        help='recording CSV: %s' % CSV_HEADER)
+    parser.add_argument('--meta', help='run metadata JSON (default: <csv>.meta.json)')
+    parser.add_argument('--out', help='write the result JSON here')
+    parser.add_argument('--plot', help='write the graph here (requires matplotlib)')
+    args = parser.parse_args(argv)
+    meta_path = args.meta if args.meta else args.csv + '.meta.json'
+    try:
+        protected = (os.path.realpath(args.csv), os.path.realpath(meta_path))
+        for target in (args.out, args.plot):
+            if target and os.path.realpath(target) in protected:
+                print('analyze: --out/--plot must not overwrite --csv/--meta',
+                      file=sys.stderr)
+                return 2
+        rows = load_csv(args.csv)
+        meta = load_meta(meta_path)
+        result = analyze(rows, meta)
+        if args.plot:
+            try:
+                plot_result(result, args.plot)
+            except ImportError:
+                print('analyze: --plot needs matplotlib: '
+                      'python3 -m pip install matplotlib', file=sys.stderr)
+                return 2
+        if args.out:
+            with open(args.out, 'w', encoding='utf-8') as fh:
+                json.dump(result, fh, indent=2, sort_keys=True)
+    except (ValueError, OSError) as exc:
+        print('analyze: %s' % exc, file=sys.stderr)
+        return 2
+    if result['v_sat_rad_s'] is None:
+        print('v_sat: not saturated')
+    else:
+        print('v_sat = %s rad/s (%s)' % (_fmt(result['v_sat_rad_s']),
+                                         result['v_sat_status']))
+    print('v_dur plateau = %s rad/s' % _fmt(result['v_dur_plateau_rad_s']))
+    print('agreement: %s' % ('yes' if result['agreement'] else 'no'))
+    print('servo.max_speed candidate = %s rad/s' % _fmt(result['servo_max_speed_rad_s']))
+    if result['flag']:
+        print('WARN flag: %s' % result['flag'])
+    print('bus_v_mean = %s' % _fmt(result['bus_v_mean']))
+    return 0 if result['v_sat_status'] == 'ok' else 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())
