@@ -20,8 +20,12 @@ target_include_directories(dog_bench_core PUBLIC
   $<INSTALL_INTERFACE:include>)
 set_target_properties(dog_bench_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+add_executable(servo_speed_test src/servo_speed_test_main.cpp)
+target_link_libraries(servo_speed_test dog_bench_core)
+
 install(TARGETS dog_bench_core EXPORT export_dog_bench
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
+install(TARGETS servo_speed_test DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
 
 if(BUILD_TESTING)
