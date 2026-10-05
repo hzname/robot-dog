@@ -32,6 +32,28 @@
       duty: 0.65            # stance fraction (0.5 = pure trot, rocks ~15 deg in sim)
       step_height: 0.02     # swing apex [m]
       max_step: 0.06        # longest stance stroke [m] -> vx cap 0.17 m/s
+      auto_period: false    # true: period computed from servo.max_speed and servo.margin, never shorter than min_period; false: gait.period as written (D-12)
+      min_period: 0.55      # [s] lower bound of the computed period, the trot checked in docs/SIMULATION.md; faster servos do not shorten it (D-12)
+
+    # Servo speed contract (D-13): description.servo_velocity (simulation),
+    # servo.max_speed (period) and max_joint_speed in servos.yaml (driver)
+    # are one measured number in three places; the contract test
+    # tools/robot_setup/test/test_yaml_contract.py fails when they diverge.
+    servo:
+      max_speed: 6.0        # [rad/s] assumed servo speed the period is computed from; equals description.servo_velocity and max_joint_speed in servos.yaml (three places, one number)
+      margin: 0.8           # [-] share of max_speed the servo speed peak may take; 0.8 is fixed by the bench measurement (D-11)
+      knee_ratio: 1.0       # [servo rad per joint rad] worst servo-to-knee-joint speed ratio of the rod drive; 1.0 = direct drive; robot_setup --check computes it from the rod lengths (D-20)
+
+    # Realistic servo profile: enabled only by the launch argument
+    # servo_model:=real (plan 01-10); the ideal model stays the default (D-15).
+    # The numbers are reference values, not bench measurements (D-16); the
+    # source of each is named in its comment.
+    servo_sim:
+      backlash_deg: 1.5     # [deg] middle of the 1-2 deg MG996R gear backlash (docs/TERRAIN.md)
+      delay_ms: 40.0        # [ms] middle of the 30-50 ms command delay (GAIT-05)
+      friction_nm: 0.06     # [N*m] joint friction ~= 5 % of the 1.079 N*m stall torque; estimate from the 0.15 A idle current
+      bus_voltage: 6.0      # [V] servo bus voltage in simulation, static, without sag
+      bus_voltage_ref: 6.0  # [V] voltage servo_velocity and servo_effort are given for
 
     # Crawl: three feet down at any time, for steps, stairs and high bars
     # (25-70 mm); chosen by the perception guard or with the "crawl" command.
@@ -223,13 +245,16 @@
       body_width: 0.10
       body_height: 0.05
       body_mass: 0.80       # trunk + electronics + battery + 4 hip servos [kg] (estimate)
+      body_com_x: 0.0       # [m] trunk centre of mass forward of the body centre; 0 = at the centre (balance on a rod, docs/DEPLOYMENT.md stage 1; write "measured DATE" after the measurement)
       hip_mass: 0.06        # hip link incl. thigh servo (MG996R 55 g)
       thigh_mass: 0.08      # thigh incl. knee servo
       calf_mass: 0.03
       foot_radius: 0.012
       servo_effort: 1.1     # [N*m] MG996R ~11 kg*cm @ 6 V
+      # Physical servo speed in simulation; with servo.max_speed and max_joint_speed
+      # (servos.yaml) it is one number (test tools/robot_setup/test/test_yaml_contract.py, D-13).
       servo_velocity: 6.0   # [rad/s] MG996R 0.14 s/60deg @ 6 V no-load, ~6 loaded
-      sim_p_gain: 25.0      # Gazebo joint position loop gain [1/s]
+      sim_p_gain: 25.0      # Gazebo joint position loop gain [1/s]; not used in the velocity-command mode (joint_command_bridge sends velocities), value kept
       hip_limits_deg: [-40.0, 40.0]
       thigh_limits_deg: [-45.0, 135.0]
       calf_limits_deg: [-165.0, -15.0]
