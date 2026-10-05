@@ -2,25 +2,60 @@
 
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "dog_control/locomotion.hpp"
 #include "dog_control/odometry.hpp"
 
 using dog_control::BodyPose;
+using dog_control::BodyVelocity;
 using dog_control::DeadReckoning;
 using dog_control::GaitType;
 using dog_control::forwardKinematics;
 using dog_control::kNumLegs;
+using dog_control::kSpeedTolerance;
 using dog_control::legSide;
 using dog_control::LocomotionController;
 using dog_control::LocomotionParams;
 using dog_control::Mode;
+using dog_control::ServoSpeedModel;
 using dog_control::Vec3;
 
 namespace
 {
 constexpr double kDt = 0.02;
+
+// Pinned reference set (the v1 robot as shipped before Phase 1): these tests check the
+// algorithm, so they must not move when plan 01-15 syncs the shipped defaults with the measured robot.
+LocomotionParams pinnedParams()
+{
+  LocomotionParams p;
+  p.leg.hip = 0.055;
+  p.leg.thigh = 0.105;
+  p.leg.calf = 0.105;
+  p.hip_x = 0.09;
+  p.hip_y = 0.06;
+  p.foot_offset_x = 0.0;
+  p.foot_offset_y = 0.0;
+  p.knee_direction = -1;
+  p.stand_height = 0.15;
+  p.lie_height = 0.08;
+  p.min_height = 0.10;
+  p.max_height = 0.18;
+  p.max_velocity = {0.15, 0.08, 0.6};
+  p.max_accel = {0.5, 0.3, 2.0};
+  p.gait.period = 0.55;
+  p.gait.duty = 0.65;
+  p.gait.step_height = 0.02;
+  p.gait.max_step = 0.06;
+  p.gait.phase_offsets = {0.0, 0.5, 0.5, 0.0};
+  p.auto_period = false;
+  p.min_period = 0.55;
+  p.servo = ServoSpeedModel{6.0, 0.8, 1.0};
+  return p;
+}
 
 void run(LocomotionController & c, double seconds)
 {
@@ -32,6 +67,56 @@ Vec3 footInBody(const LocomotionController & c, const LocomotionParams & p, int 
   const auto & q = c.joints();
   const Vec3 f = forwardKinematics(p.leg, legSide(leg), {q[leg * 3], q[leg * 3 + 1], q[leg * 3 + 2]});
   return f + c.hipPosition(leg);
+}
+
+// The five extreme commands of the JointSpeedsFitTheServos procedure, in its order.
+const std::array<BodyVelocity, 5> kExtremeCommands{{
+  {0.15, 0.0, 0.0},
+  {-0.15, 0.0, 0.0},
+  {0.0, 0.08, 0.0},
+  {0.0, 0.0, 0.6},
+  {0.15, 0.08, 0.6},
+}};
+
+// The JointSpeedsFitTheServos procedure, unchanged: stand (2 s), ramp (1 s),
+// then the max joint speed over the 4 s window; the knee (j % 3 == 2) is
+// scaled into the space of the servos (D-20).
+struct SpeedMeasure
+{
+  double peak{0.0};    // [rad/s] in the space of the servos
+  int unreachable{0};  // IK targets clamped in the last tick of the window
+};
+
+SpeedMeasure measureServoSpeeds(const LocomotionParams & p, const BodyVelocity & cmd, double knee_ratio)
+{
+  LocomotionController c(p);
+  c.request("stand");
+  run(c, 2.0);
+  c.setVelocity(cmd);
+  run(c, 1.0);  // accelerate
+  auto prev = c.joints();
+  SpeedMeasure out;
+  for (int i = 0; i < 200; ++i) {
+    c.update(kDt);
+    for (int j = 0; j < dog_control::kNumJoints; ++j) {
+      double speed = std::abs(c.joints()[j] - prev[j]) / kDt;
+      if (j % 3 == 2) {speed *= knee_ratio;}
+      out.peak = std::max(out.peak, speed);
+    }
+    prev = c.joints();
+  }
+  out.unreachable = c.unreachableCount();
+  return out;
+}
+
+// One controller tick; the gain of gait().phase() modulo 1 (the phase grows
+// by dt / period and wraps).
+double phaseAdvance(LocomotionController & c)
+{
+  const double before = c.gait().phase();
+  c.update(kDt);
+  const double d = c.gait().phase() - before;
+  return d - std::floor(d);
 }
 }  // namespace
 
@@ -575,4 +660,120 @@ TEST(Locomotion, SurveyLooksAroundWithTheFeetWhereTheyStand)
   EXPECT_NEAR(max_pitch, p.survey.pitch_down_deg * M_PI / 180.0, 1e-3);
   EXPECT_NEAR(max_yaw, p.survey.yaw_deg * M_PI / 180.0, 1e-3);
   for (int j = 0; j < 12; ++j) {EXPECT_NEAR(c.joints()[j], standing[j], 1e-6) << j;}
+}
+
+TEST(Locomotion, AutoPeriodAtStart)
+{
+  // D-12: with auto_period the period comes from servo.* at construction;
+  // 6.0 rad/s, margin 0.8, min_period 0.55 give 0.6000 s (the plan 01-04 table).
+  LocomotionParams p = pinnedParams();
+  p.auto_period = true;
+  p.min_period = 0.55;
+  p.servo = ServoSpeedModel{6.0, 0.8, 1.0};
+  LocomotionController c(p);
+  EXPECT_NEAR(c.gaitPeriod(), 0.6000, 1e-9);
+  EXPECT_NEAR(c.gait().params().period, 0.6000, 1e-9);
+  c.request("stand");
+  run(c, 2.0);
+  c.setVelocity({0.1, 0.0, 0.0});
+  run(c, 1.0);
+  EXPECT_EQ(c.mode(), Mode::WALK);
+  EXPECT_NEAR(phaseAdvance(c), kDt / 0.6, 1e-9);
+
+  // auto_period off: the manual gait.period stays an explicit override.
+  LocomotionParams m = pinnedParams();
+  m.auto_period = false;
+  m.gait.period = 0.7;
+  m.servo = ServoSpeedModel{6.0, 0.8, 1.0};
+  LocomotionController d(m);
+  EXPECT_DOUBLE_EQ(d.gaitPeriod(), 0.7);
+  d.request("stand");
+  run(d, 2.0);
+  d.setVelocity({0.1, 0.0, 0.0});
+  run(d, 1.0);
+  EXPECT_EQ(d.mode(), Mode::WALK);
+  EXPECT_NEAR(phaseAdvance(d), kDt / 0.7, 1e-9);
+}
+
+TEST(Locomotion, JointSpeedsFitTheServosAuto)
+{
+  // The period is computed from the assumed servo speed (D-13) and the peak
+  // stays under margin * max_speed (D-11) on every row of the pinned table.
+  const std::array<double, 6> speeds{3.5, 4.0, 5.0, 6.0, 6.35, 7.0};
+  const std::array<double, 6> periods{1.0300, 0.9050, 0.7200, 0.6000, 0.5575, 0.5500};
+  for (int i = 0; i < 6; ++i) {
+    LocomotionParams p = pinnedParams();
+    p.auto_period = true;
+    p.min_period = 0.55;
+    p.servo = ServoSpeedModel{speeds[i], 0.8, 1.0};
+    LocomotionController c(p);
+    EXPECT_NEAR(c.gaitPeriod(), periods[i], 1e-9) << "speed " << speeds[i];
+    EXPECT_GE(c.gaitPeriod(), p.min_period);
+    for (const auto & cmd : kExtremeCommands) {
+      const SpeedMeasure m = measureServoSpeeds(p, cmd, p.servo.knee_ratio);
+      EXPECT_LE(m.peak, 0.8 * speeds[i] + kSpeedTolerance) << "speed " << speeds[i];
+      EXPECT_EQ(m.unreachable, 0) << "speed " << speeds[i];
+    }
+  }
+  // The knee rod drive is faster than the joint (D-20): the scaled knee peak
+  // makes the period grow past the 0.55 s lower bound so it still fits 6.4.
+  LocomotionParams k = pinnedParams();
+  k.auto_period = true;
+  k.min_period = 0.55;
+  k.servo = ServoSpeedModel{8.0, 0.8, 1.388};
+  LocomotionController c(k);
+  EXPECT_GT(c.gaitPeriod(), 0.55 + 1e-9);
+  for (const auto & cmd : kExtremeCommands) {
+    const SpeedMeasure m = measureServoSpeeds(k, cmd, k.servo.knee_ratio);
+    EXPECT_LE(m.peak, 6.4 + kSpeedTolerance);
+  }
+}
+
+TEST(Locomotion, NoFitThrows)
+{
+  const double nan = std::nan("");
+  LocomotionParams p = pinnedParams();
+  p.auto_period = true;
+  p.servo = ServoSpeedModel{1.0, 0.8, 1.0};
+  try {
+    LocomotionController c(p);
+    FAIL() << "1.0 rad/s with margin 0.8 must not fit up to kMaxAutoPeriod";
+  } catch (const std::runtime_error & e) {
+    const std::string msg = e.what();
+    EXPECT_NE(msg.find("servo.max_speed"), std::string::npos) << msg;
+    EXPECT_NE(msg.find("gait.auto_period"), std::string::npos) << msg;
+  }
+
+  LocomotionParams margin = p;
+  margin.servo = ServoSpeedModel{6.0, 0.0, 1.0};
+  EXPECT_THROW({LocomotionController c(margin);}, std::runtime_error);
+
+  LocomotionParams nan_speed = p;
+  nan_speed.servo = ServoSpeedModel{nan, 0.8, 1.0};
+  EXPECT_THROW({LocomotionController c(nan_speed);}, std::runtime_error);
+
+  LocomotionParams no_ratio = p;
+  no_ratio.servo = ServoSpeedModel{6.0, 0.8, 0.0};
+  EXPECT_THROW({LocomotionController c(no_ratio);}, std::runtime_error);
+
+  LocomotionParams short_min = p;
+  short_min.min_period = 0.05;
+  short_min.servo = ServoSpeedModel{6.0, 0.8, 1.0};
+  EXPECT_THROW({LocomotionController c(short_min);}, std::runtime_error);
+
+  // Manual mode: a period that is not finite and above 0 has no fallback.
+  for (const double period : {0.0, -1.0, nan}) {
+    LocomotionParams m = pinnedParams();
+    m.auto_period = false;
+    m.gait.period = period;
+    EXPECT_THROW({LocomotionController c(m);}, std::runtime_error) << "period " << period;
+  }
+
+  // Manual mode never reads servo.*: NaN there must not throw.
+  LocomotionParams ok = pinnedParams();
+  ok.auto_period = false;
+  ok.gait.period = 0.7;
+  ok.servo = ServoSpeedModel{nan, nan, nan};
+  LocomotionController good(ok);
+  EXPECT_DOUBLE_EQ(good.gaitPeriod(), 0.7);
 }

@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <sstream>
+#include <stdexcept>
+#include <string>
 
 namespace dog_control
 {
@@ -30,6 +33,38 @@ std::array<Vec3, kNumLegs> neutralFeet(const LocomotionParams & p)
   }
   return out;
 }
+
+// Period in force [s] (D-12): the manual gait.period, or the smallest period
+// that fits servo.margin * servo.max_speed up to kMaxAutoPeriod. 0.0 when the
+// manual period is not finite and above 0 or nothing fits.
+double effectivePeriod(const LocomotionParams & p)
+{
+  if (!p.auto_period) {
+    return std::isfinite(p.gait.period) && p.gait.period > 0.0 ? p.gait.period : 0.0;
+  }
+  return minimalPeriod(p, p.servo, p.min_period, kMaxAutoPeriod);
+}
+
+// Gait params with the effective period; throws std::runtime_error when there
+// is none (the constructor fails fast, reconfigureGait refuses).
+GaitParams gaitParamsFor(const LocomotionParams & p)
+{
+  GaitParams g = p.gait;
+  g.period = effectivePeriod(p);
+  if (g.period == 0.0) {
+    std::ostringstream msg;
+    if (p.auto_period) {
+      msg << "no gait period up to " << kMaxAutoPeriod << " s fits servo.max_speed " << p.servo.max_speed
+          << " * servo.margin " << p.servo.margin << " (servo.knee_ratio " << p.servo.knee_ratio
+          << ", gait.min_period " << p.min_period << " s): raise servo.max_speed or servo.margin, "
+          << "or set gait.auto_period: false and choose gait.period";
+    } else {
+      msg << "gait.period '" << p.gait.period << "' (use a finite number above 0 s, or gait.auto_period: true)";
+    }
+    throw std::runtime_error(msg.str());
+  }
+  return g;
+}
 }  // namespace
 
 const char * modeName(Mode m)
@@ -48,7 +83,7 @@ const char * modeName(Mode m)
 }
 
 LocomotionController::LocomotionController(const LocomotionParams & params)
-: p_(params), gait_(params.gait, neutralFeet(params)), crawl_(params.crawl, neutralFeet(params)),
+: p_(params), gait_(gaitParamsFor(params), neutralFeet(params)), crawl_(params.crawl, neutralFeet(params)),
   greet_(params.greet, neutralFeet(params), params.stand_height, params.leg.thigh, params.leg.calf),
   survey_(params.survey)
 {

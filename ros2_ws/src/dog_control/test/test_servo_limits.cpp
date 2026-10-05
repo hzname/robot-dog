@@ -48,6 +48,9 @@ LocomotionParams pinnedParams()
   p.gait.step_height = 0.02;
   p.gait.max_step = 0.06;
   p.gait.phase_offsets = {0.0, 0.5, 0.5, 0.0};
+  p.auto_period = false;
+  p.min_period = 0.55;
+  p.servo = ServoSpeedModel{6.0, 0.8, 1.0};
   return p;
 }
 

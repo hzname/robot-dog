@@ -6,6 +6,9 @@
 //   STAND --greet--> GREETING (sit, paws up, wave, back up) --> STAND
 //   STAND --survey--> SURVEY (body looks up / down, left / right, for the lidars) --> STAND
 //   any --estop--> PASSIVE (no joint output until "stand" after release)
+//
+// The gait period comes from gait.period or, with gait.auto_period, from the
+// assumed servo speed (servo.*); it changes only in PASSIVE, STAND and LYING.
 #pragma once
 
 #include <array>
@@ -17,6 +20,7 @@
 #include "dog_control/greet.hpp"
 #include "dog_control/survey.hpp"
 #include "dog_control/kinematics.hpp"
+#include "dog_control/servo_limits.hpp"
 
 namespace dog_control
 {
@@ -79,6 +83,10 @@ struct LocomotionParams
 
   BodyVelocity max_velocity{0.15, 0.08, 0.6};
   BodyVelocity max_accel{0.5, 0.3, 2.0};
+
+  bool auto_period{false};  // true: the gait period is computed from servo.* (D-12); false: gait.period stays in force
+  double min_period{0.55};  // [s] the computed period is never shorter (0.50 s gave 35 % backwards, docs/SIMULATION.md)
+  ServoSpeedModel servo;    // assumed servo speed the period is computed for (D-13)
 
   GaitParams gait;
   CrawlParams crawl;
@@ -149,6 +157,8 @@ public:
   const std::array<double, kNumJoints> & joints() const {return joints_;}
   const BodyVelocity & velocity() const {return vel_;}
   const TrotGait & gait() const {return gait_;}
+  /// Gait period in force [s]: gait.period or the computed one (TrotGait clamps it to >= 0.1 s).
+  double gaitPeriod() const {return gait_.params().period;}
   /// Number of IK targets clamped to the workspace in the last update.
   int unreachableCount() const {return unreachable_;}
 
