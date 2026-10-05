@@ -1,18 +1,18 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 1
+current_phase: 01
 current_phase_name: Замеры на столе и ход назад в симуляции
 status: executing
-stopped_at: Phase 1 planned (17 plans, 9 waves); next /gsd-execute-phase 1
-last_updated: "2026-10-01T13:15:11.253Z"
-last_activity: 2026-10-01
-last_activity_desc: Phase 1 спланирована (17 планов, 9 волн)
-state_head: 325f32f4350b162096bd27b04f04b9d305f41c1f
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-10-05T08:37:40.425Z"
+last_activity: 2026-10-05
+last_activity_desc: Phase 01 execution started
+state_head: 0cf0836be4034c895a9fbb4fdaa1589ac53a1244
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-29)
 
 **Core value:** Робот надёжно и безопасно ходит по полу с геймпада, не падая и не убивая свои сервы.
-**Current focus:** Phase 1 — Замеры на столе и ход назад в симуляции; параллельно Phase 3 — Защита драйвера серв
+**Current focus:** Phase 01 — Замеры на столе и ход назад в симуляции
 
 ## Current Position
 
-Phase: 1 of 8 (Замеры на столе и ход назад в симуляции) — READY TO EXECUTE
-Plan: 0 of 17 in current phase
+Phase: 01 (Замеры на столе и ход назад в симуляции) — EXECUTING
+Plan: 2 of 17
 Status: Ready to execute
-Last activity: 2026-10-01 — Phase 1 спланирована: 17 планов, 9 волн, проверки плана пройдены
+Last activity: 2026-10-05 — Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -54,6 +54,11 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: -
 
 *Updated after each plan completion*
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 01 P01 | 13 min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -67,6 +72,9 @@ Recent decisions affecting current work:
 - [Roadmap]: защёлка аварии драйвера (SAF-03) строится в Phase 3 раньше всего, что через неё эскалирует
 - [Roadmap]: keep-alive калибровки поставляется в одном изменении с watchdog драйвера (SAF-04)
 - [Roadmap]: защита по наклону включается только после проверки IMU (CAL-08, Phase 7); физический выключатель (SAF-09, Phase 6) обязателен до пола
+- [Phase 01]: Replaced the tokenized origin URL with the canonical HTTPS URL of the repository; the gh credential helper (account hzname, scope repo) now authenticates git and gh operations non-interactively
+- [Phase 01]: ci_dispatch.sh validates --ref/-f/--run-id/--wait-job before any network call; values pass only as argv and are never built into shell strings
+- [Phase 01]: run.sh rejects dog_hardware on purpose (phase 3 territory) and always builds with -Werror; Task 1 (branch creation) intentionally has no commit
 
 ### Pending Todos
 
@@ -90,6 +98,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-30T04:06:02.607Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-zamery-na-stole-i-hod-nazad-v-simulyatsii/01-CONTEXT.md
+Last session: 2026-10-05T08:37:40.396Z
+Stopped at: Completed 01-01-PLAN.md
+Resume file: None
