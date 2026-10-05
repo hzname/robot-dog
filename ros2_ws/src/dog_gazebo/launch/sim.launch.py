@@ -2,9 +2,12 @@
 
   ros2 launch dog_gazebo sim.launch.py              # GUI + web teleop on :8080
   ros2 launch dog_gazebo sim.launch.py headless:=true gamepad:=true
+  ros2 launch dog_gazebo sim.launch.py headless:=true servo_model:=real
 
 The same locomotion node and teleop nodes as on the robot are used; only the
-servo driver is replaced by Gazebo joint controllers.
+servo driver is replaced by Gazebo joint controllers. servo_model:=real adds
+the servo imperfections (backlash, delay, friction, bus-voltage factors,
+knee ratio); the ideal model stays the default (D-15).
 """
 
 import os
@@ -13,11 +16,12 @@ import tempfile
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
+from dog_description.servo_profile import bridge_settings, parse_override
 from dog_description.urdf import (build_urdf, joint_names, load_config, sensor_frames, sim_command_topic,
                                    sim_sensor_topic, stand_angles)
 from dog_gazebo import terrain
@@ -73,12 +77,19 @@ def _setup(context):
         spawn_z, spawn_pitch = terrain.spawn_pose(kind, level, spawn_z)
 
     geometry, description = load_config(robot_yaml)
+    model = cfg('servo_model')
+    speed = parse_override('servo_speed', cfg('servo_speed'), positive=True)
+    if speed is not None:
+        description['servo_velocity'] = speed  # physical servo speed in the URDF (D-13)
     with open(robot_yaml) as f:
         stand_h = yaml.safe_load(f)['/**']['ros__parameters']['stance']['stand_height']
     # Joint controllers hold a standing pose from the first step, like a robot
     # placed on the ground by hand, instead of dropping on straight legs.
     initial = stand_angles(geometry, stand_h)
-    urdf = build_urdf(geometry, description, gazebo=True, namespace=NS, initial=initial)
+    urdf = build_urdf(geometry, description, gazebo=True, namespace=NS, initial=initial,
+                      servo_model=model)
+    delay_ms = parse_override('servo_delay_ms', cfg('servo_delay_ms'))
+    backlash_deg, delay_s = bridge_settings(model, description.get('servo_sim'), delay_ms)
     sim_time = {'use_sim_time': True}
     overrides = {'slope.compensation': on('slope_compensation'), 'heading.hold': on('heading_hold')}
     if on('dead_reckoning'):
@@ -104,11 +115,13 @@ def _setup(context):
         Node(package='ros_gz_bridge', executable='parameter_bridge', name='gz_bridge',
              parameters=[{'config_file': _bridge_config(description.get('sensors'))}, sim_time]),
         Node(package='dog_gazebo', executable='joint_command_bridge', namespace=NS,
-             parameters=[sim_time]),
+             parameters=[sim_time, {'backlash_deg': backlash_deg, 'delay_s': delay_s}]),
         Node(package='dog_control', executable='locomotion_node', name='locomotion', namespace=NS,
              parameters=[robot_yaml, sim_time, overrides],
              output='screen'),
     ]
+    if model == 'ideal' and cfg('servo_delay_ms'):
+        actions.insert(0, LogInfo(msg='servo_delay_ms ignored: servo_model is ideal'))
     sensors = description.get('sensors', {})
     if sensors.get('tof'):
         actions.append(Node(package='dog_gazebo', executable='tof_bridge', namespace=NS,
@@ -162,6 +175,12 @@ def generate_launch_description():
                               description='hold the heading with the IMU gyro'),
         DeclareLaunchArgument('step_height', default_value='',
                               description='override gait.step_height [m] (robot.yaml by default)'),
+        DeclareLaunchArgument('servo_model', default_value='ideal',
+                              description='ideal | real (backlash, delay, friction, bus voltage)'),
+        DeclareLaunchArgument('servo_speed', default_value='',
+                              description='override description.servo_velocity [rad/s] (robot.yaml by default)'),
+        DeclareLaunchArgument('servo_delay_ms', default_value='',
+                              description='override the command delay [ms], real only (robot.yaml by default)'),
         DeclareLaunchArgument('perception', default_value='false',
                               description='start dog_perception (X lidars + ToF processing)'),
         DeclareLaunchArgument('perception_reference', default_value='auto',
