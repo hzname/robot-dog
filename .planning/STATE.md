@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Замеры на столе и ход назад в симуляции
 status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-10-05T08:49:12.524Z"
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-10-05T09:03:46.616Z"
 last_activity: 2026-10-05
 last_activity_desc: Phase 01 execution started
-state_head: 50cb5bf7271a742ff039fc67a00b73d9a9bb649c
+state_head: 39fb28ef265502f68476969751179c3b60b6948c
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 1
+  completed_plans: 3
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 01 (Замеры на столе и ход назад в симуляции) — EXECUTING
-Plan: 3 of 17
+Plan: 4 of 17
 Status: Ready to execute
 Last activity: 2026-10-05 — Phase 01 execution started
 
@@ -60,6 +60,7 @@ Progress: [░░░░░░░░░░] 0%
 |------|----------|-------|-------|
 | Phase 01 P01 | 13 min | 3 tasks | 2 files |
 | Phase 01 P02 | 7 min | 4 tasks | 4 files |
+| Phase 01 P03 | 6 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,9 @@ Recent decisions affecting current work:
 - [Phase 01]: The Phase 1 config contract is fixed by plan 01-02: robot.yaml carries gait.auto_period/gait.min_period, the servo.* and servo_sim.* blocks (reference values with a source and unit each) and description.body_com_x; plans 01-04, 01-08, 01-10 and 01-15 consume these names without redefining them — Names and formats must be fixed by one plan; otherwise parallel plans redefine them. All values keep the current behaviour (auto_period off, nodes ignore undeclared YAML keys) so existing simulation results stay comparable (D-12, D-15).
 - [Phase 01]: The three servo speeds (description.servo_velocity, servo.max_speed, servos.yaml max_joint_speed) are pinned as one number by tools/robot_setup/test/test_yaml_contract.py, which the existing robot-setup CI job already runs; a divergence fails CI instead of warming up under-specced servos (D-13) — A single number duplicated in YAML diverges silently; catching it in the tool job keeps the period computed from the speed the servo really has (Core Value: not killing servos).
 - [Phase 01]: robot_setup keeps measurement entry unblocked: sensor geometry errors for simulated-only sensors become warnings via SENSORS_ON_ROBOT = frozenset() (D-18), and knee_ratio_max ports the driver Linkage with C++ golden values, warning when robot.yaml servo.knee_ratio is below the computed ratio (D-20) — The robot carries no perception sensors (docs/HEAD.md), so their template geometry must not block entering real body measurements; the knee rod drive makes the servo faster than the joint (up to 1.39x), and a too-low knee_ratio would understate the period and the servo peak.
+- [Phase 01]: acceptance_stats stays pure stdlib on top of terrain_sweep.never_stood; test_constants_match_walk_check pins MIN_BODY_HEIGHT 0.108 and FALL_TILT_DEG 60.0 to walk_check.py, and the acceptance constants (MIN_RATIO 0.40, MAX_DYAW5_DEG 10.0, MAX_TILT_DEG 20.0, MIN_REPEATS 5, floor 0.2) are never retuned (D-01, D-03, D-07)
+- [Phase 01]: run_record is the single translator of walk_check --trace JSON into runs[]; a fall in the last manoeuvre is caught by tilt_deg > 60.0 without the skipped-record flag, and missing data (dyaw5, backward ratio, tilt_deg, z) is always a failure reason, never a skipped check (GAIT-01)
+- [Phase 01]: D-05 thresholds are per distro, ideal model only, from cell flat_A_bwd10 with n >= 5; the threshold CLI exits 0 (derived) / 1 (not derivable) / 2 (unreadable file, schema not 1, unknown distro) and writes nothing to disk (GAIT-02)
 
 ### Pending Todos
 
@@ -102,6 +106,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-05T08:49:12.490Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-10-05T09:03:46.586Z
+Stopped at: Completed 01-03-PLAN.md
 Resume file: None
