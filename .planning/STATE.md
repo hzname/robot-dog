@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Замеры на столе и ход назад в симуляции
 status: executing
-stopped_at: Completed 01-10-PLAN.md
-last_updated: "2026-10-05T20:09:31.403Z"
+stopped_at: Completed 01-11-PLAN.md
+last_updated: "2026-10-05T20:23:38.211Z"
 last_activity: 2026-10-05
 last_activity_desc: Phase 01 execution started
-state_head: 074558bfa42e260e5c3cd4bfc8061ec06ed56a18
+state_head: fcb8685b3dee1eeec943072ea6731660418219e5
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 10
+  completed_plans: 11
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 01 (Замеры на столе и ход назад в симуляции) — EXECUTING
-Plan: 11 of 17
+Plan: 12 of 17
 Status: Ready to execute
 Last activity: 2026-10-05 — Phase 01 execution started
 
@@ -68,6 +68,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P08 | 34 min | 4 tasks | 5 files |
 | Phase 01 P09 | 13 min | 3 tasks | 12 files |
 | Phase 01 P10 | 58 min | 4 tasks | 6 files |
+| Phase 01 P11 | 6 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -113,6 +114,10 @@ Recent decisions affecting current work:
 - [Phase 01]: Plan 01-10: the ideal-model guard is PINNED_DESC + GOLDEN_SHA256 (sha256 of the plain and Gazebo URDF strings, taken on the untouched tree); the pin does not follow DEFAULT_DESCRIPTION, so plan 01-15 can sync code defaults without reddening it (D-15)
 - [Phase 01]: Plan 01-10: with zeros the bridge forwards each position in the same call with the previous order and numbers and creates no timer; the 500 Hz drain timer exists only when delay_s > 0 (D-15)
 - [Phase 01]: Plan 01-10: knee_ratio k gives the knee joint velocity/k and effort*k, rounded once from the exact numbers, and the calf cmd_max follows the joint's own velocity (D-20); servo_speed overrides only description.servo_velocity (D-13)
+- [Phase 01]: Plan 01-11: walk_check_args is pure (argparse/math) and maneuver_plan keeps the old run() table bit for bit, slope -0.14 * T included; dyaw5_deg is recorded right after the commanded spin, before the 1.5 s coast, so the 5 s drift criterion is measurable (D-01, D-02, GAIT-01)
+- [Phase 01]: Plan 01-11: acceptance.py only orchestrates - fresh run_level per repeat, one relaunch on never_stood (.retry.sim.log), no_stand replaced up to 2*n attempts, error not replaced (it takes a repeat slot, so a systematic failure does not double the job time); records go through run_record only (D-03, D-24)
+- [Phase 01]: Plan 01-11: mode B cells run with heading_hold:=false slope_compensation:=false and every cell passes --min-ratio 0 --backward-ratio 0; no threshold lives in acceptance.py (grep gate + test) and the verdict is acceptance_stats (D-06, D-07, D-17)
+- [Phase 01]: Plan 01-11: --dry-run prints every run_level launch (domain=80+i%10, the launch and walk_check tails); the tests call the CLI only with --dry-run and a fake runner, the real run is the plan 01-13 CI job (D-04, D-24)
 
 ### Pending Todos
 
@@ -136,6 +141,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-05T20:09:31.364Z
-Stopped at: Completed 01-10-PLAN.md
+Last session: 2026-10-05T20:23:38.174Z
+Stopped at: Completed 01-11-PLAN.md
 Resume file: None
