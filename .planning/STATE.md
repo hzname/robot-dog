@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Замеры на столе и ход назад в симуляции
 status: executing
-stopped_at: Completed 01-11-PLAN.md
-last_updated: "2026-10-05T20:23:38.211Z"
+stopped_at: Completed 01-12-PLAN.md
+last_updated: "2026-10-05T21:37:35.434Z"
 last_activity: 2026-10-05
 last_activity_desc: Phase 01 execution started
-state_head: fcb8685b3dee1eeec943072ea6731660418219e5
+state_head: efa2cfd992236163516fc6328fae93833da2e900
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 11
+  completed_plans: 12
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 01 (Замеры на столе и ход назад в симуляции) — EXECUTING
-Plan: 12 of 17
+Plan: 13 of 17
 Status: Ready to execute
 Last activity: 2026-10-05 — Phase 01 execution started
 
@@ -69,6 +69,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P09 | 13 min | 3 tasks | 12 files |
 | Phase 01 P10 | 58 min | 4 tasks | 6 files |
 | Phase 01 P11 | 6 min | 3 tasks | 6 files |
+| Phase 01 P12 | 60 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -118,6 +119,9 @@ Recent decisions affecting current work:
 - [Phase 01]: Plan 01-11: acceptance.py only orchestrates - fresh run_level per repeat, one relaunch on never_stood (.retry.sim.log), no_stand replaced up to 2*n attempts, error not replaced (it takes a repeat slot, so a systematic failure does not double the job time); records go through run_record only (D-03, D-24)
 - [Phase 01]: Plan 01-11: mode B cells run with heading_hold:=false slope_compensation:=false and every cell passes --min-ratio 0 --backward-ratio 0; no threshold lives in acceptance.py (grep gate + test) and the verdict is acceptance_stats (D-06, D-07, D-17)
 - [Phase 01]: Plan 01-11: --dry-run prints every run_level launch (domain=80+i%10, the launch and walk_check tails); the tests call the CLI only with --dry-run and a fake runner, the real run is the plan 01-13 CI job (D-04, D-24)
+- [Phase 01]: Plan 01-12: the tracer recording runs the first four grid speeds (3.0..4.5) because analyze.load_meta (01-06) requires a grid of at least four speeds; the task-1 verify id range was refined 10 -> 40, keeping both loaders exercised on a genuine recording
+- [Phase 01]: Plan 01-12: release() is attempted once and retried once on failure (persistent failure = exit 3); the CSV/meta are written only after the release and only when the measurement loop had started
+- [Phase 01]: Plan 01-12: SignalGuard keeps its handler state process-wide (one instance); the fatal handler writes ALL_LED_OFF into the descriptor armed by openEmergencyFd (the single I2C_SLAVE ioctl in the package) and _exit(3)
 
 ### Pending Todos
 
@@ -141,6 +145,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-05T20:23:38.174Z
-Stopped at: Completed 01-11-PLAN.md
+Last session: 2026-10-05T21:37:25.064Z
+Stopped at: Completed 01-12-PLAN.md
 Resume file: None

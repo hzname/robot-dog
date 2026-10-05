@@ -37,7 +37,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Скрипт приёмки хода назад выводит минимум и медиану по ≥ 5 повторам (ровный пол, волны 10 мм, камни 10 мм); порог `--backward-ratio` в CI поднят выше 0.2 только после измерения разброса
   5. После правок походки `walk_check` проходит 8/8 на обоих дистрибутивах, пиковая скорость сустава при предельных командах < 5.5 рад/с
 
-**Plans**: 11/17 plans executed
+**Plans**: 12/17 plans executed
 
 Plans:
 **Wave 1**
@@ -62,7 +62,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 01-12-PLAN.md — `dog_bench`: сессия замера, `dry-run` и `run`, CSV
+- [x] 01-12-PLAN.md — `dog_bench`: сессия замера, `dry-run` и `run`, CSV
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -228,7 +228,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Замеры на столе и ход назад в симуляции | 11/17 | In Progress|  |
+| 1. Замеры на столе и ход назад в симуляции | 12/17 | In Progress|  |
 | 2. Устойчивость хода в симуляции | 0/TBD | Not started | - |
 | 3. Защита драйвера серв | 0/TBD | Not started | - |
 | 4. Защита корпуса и диагностика | 0/TBD | Not started | - |
