@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Замеры на столе и ход назад в симуляции
 status: executing
-stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-10-05T09:20:37.527Z"
+stopped_at: Completed 01-05-PLAN.md
+last_updated: "2026-10-05T09:35:36.899Z"
 last_activity: 2026-10-05
 last_activity_desc: Phase 01 execution started
-state_head: 68885c2fb0d62c8661eb19b725e240f7caa616e1
+state_head: 4182c3ae3bddd987f8a767cd35bc943e103421ac
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 01 (Замеры на столе и ход назад в симуляции) — EXECUTING
-Plan: 5 of 17
+Plan: 6 of 17
 Status: Ready to execute
 Last activity: 2026-10-05 — Phase 01 execution started
 
@@ -62,6 +62,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P02 | 7 min | 4 tasks | 4 files |
 | Phase 01 P03 | 6 min | 3 tasks | 4 files |
 | Phase 01 P04 | 8 min | 3 tasks | 4 files |
+| Phase 01 P05 | 10 min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,9 @@ Recent decisions affecting current work:
 - [Phase 01]: peakServoSpeed and minimalPeriod are tested against pinnedParams() (the v1 robot as shipped), never against code defaults, so the plan 01-15 defaults sync cannot redden the algorithm tests (OI-1)
 - [Phase 01]: The pinned period table uses the guard-window fits (4.0 -> 0.9050, 6.35 -> 0.5575); exactly 0.55 s is returned from 6.4 rad/s and the window rejects the fragile first fits 0.8975 and 0.550 (D-11)
 - [Phase 01]: minimalPeriod returns 0.0 for no-fit and every degenerate input (NaN, inf, margin*max_speed or knee_ratio not positive, min_period below the TrotGait clamp of 0.1 s, max_period < min_period); plan 01-08 turns 0.0 into a startup refusal
+- [Phase 01]: The dog_bench I2C layer keeps the address inside every ioctl(I2C_RDWR) message (no separate address ioctl); FakeI2cBus::failRange accumulates failing transaction ranges — the planned Selftest tests need two disjoint single failures — The bench tool must never write to the PCA9685 at 0x40; accumulation is what the planned CountsConsecutiveErrors test relies on (fix 7a457e2)
+- [Phase 01]: runSelftest measures intervals between tick starts (pause counted from the tick start) and judges median <= 1.5 ms and p99 (rank ceil(0.99 n) - 1) <= 5 ms; three consecutive failed transactions abort and the statistics still cover the intervals collected so far; below kSelftestMinSamples = 100 it refuses without touching the bus — Intervals between tick starts carry the transaction cost and scheduler stalls; refusing too few samples keeps the p99 meaningful
+- [Phase 01]: servo_speed_test checks every argument before opening the bus; --help wins over all other checks and exits 0; dry-run and run pass validation and then refuse with exit 2 because no PWM code is linked (exit code 3 reserved for plan 01-12) — No code in dog_bench can enable a servo; the 20 wrong argument sets all exit 2 and 0x40/0x50/0x70 never reach the bus
 
 ### Pending Todos
 
@@ -110,6 +114,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-05T09:20:37.495Z
-Stopped at: Completed 01-04-PLAN.md
+Last session: 2026-10-05T09:35:36.866Z
+Stopped at: Completed 01-05-PLAN.md
 Resume file: None
