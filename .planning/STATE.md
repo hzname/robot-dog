@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Замеры на столе и ход назад в симуляции
 status: executing
-stopped_at: Completed 01-07-PLAN.md
-last_updated: "2026-10-05T17:54:44.414Z"
+stopped_at: Completed 01-08-PLAN.md
+last_updated: "2026-10-05T18:45:43.698Z"
 last_activity: 2026-10-05
 last_activity_desc: Phase 01 execution started
-state_head: 3f04d9e653376e3bc01f35a1dfe0db830c953ae8
+state_head: 6e9105f78ad7fc254be6ac229397ef782cd2b98a
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 6
+  completed_plans: 8
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 01 (Замеры на столе и ход назад в симуляции) — EXECUTING
-Plan: 8 of 17
+Plan: 9 of 17
 Status: Ready to execute
 Last activity: 2026-10-05 — Phase 01 execution started
 
@@ -65,6 +65,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P05 | 10 min | 3 tasks | 11 files |
 | Phase 01 P06 | 23 min | 3 tasks | 6 files |
 | Phase 01 P07 | 6 min | 4 tasks | 7 files |
+| Phase 01 P08 | 34 min | 4 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -99,6 +100,9 @@ Recent decisions affecting current work:
 - [Phase 01]: A1: docs/TERRAIN.md keeps 8/8 in the 6-degree slope row with an explicit (уклон: stand, 6 манёвров, lie) mark; 10/10 (stand, 8 манёвров, lie) is recorded for the flat floor (walk_check.py runs 8 checks on slope, 10 on flat) — a blind replacement would have written a wrong count
 - [Phase 01]: The measurement sheet fixes the D-22 check as Step 1.0 with an explicit STOP: a mismatch of the hip axis, the three-joint leg scheme, the knee direction or the axis height difference (>5 mm) stops the process and returns to the owner; the kinematics is never changed silently (PR-06)
 - [Phase 01]: Docs now describe servo_model:=real and the auto period (period table from plan 01-04); dog_hardware was not touched — the driver speed clamp goes to Phase 3 via docs/REVIEW.md item 26 (PR-03)
+- [Phase 01]: Plan 01-08: the auto period is computed at construction and on live changes only in PASSIVE/STAND/LYING; WALK and transitions answer successful=false with 'period change rejected in mode <mode>', so a walking gait never jumps (D-12, T-01-08-01)
+- [Phase 01]: Plan 01-08: no period up to kMaxAutoPeriod (1.5 s) is a startup refusal (RCLCPP_FATAL, exit 1) and a refused live change; reconfigureGait keeps the guard's per-leg step heights, so a raised swing is not reset
+- [Phase 01]: Plan 01-08: pinnedParams() in both dog_control test files carries auto_period=false, min_period 0.55 and servo {6.0, 0.8, 1.0}, so the six new tests and ServoLimits.PeakMatchesController cannot move when plan 01-15 syncs the shipped defaults (OI-1)
 
 ### Pending Todos
 
@@ -122,6 +126,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-05T17:54:33.062Z
-Stopped at: Completed 01-07-PLAN.md
+Last session: 2026-10-05T18:45:16.316Z
+Stopped at: Completed 01-08-PLAN.md
 Resume file: None
