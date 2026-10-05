@@ -14,6 +14,7 @@ kept as *.bak. Needs Python 3.8+ and PyYAML.
 
 import argparse
 import difflib
+import functools
 import http.server
 import json
 import math
@@ -168,6 +169,9 @@ def load(config_dir):
     if names is not None and list(names) != list(TOF):
         raise SystemExit(f'sensors.tof_names = {names}: форма рассчитана на {list(TOF)}')
     v['total_mass'] = 0
+    # servo.knee_ratio is not a form field: it goes to validate() as-is through the dict
+    knee_ratio = r.get('servo', {}).get('knee_ratio')
+    v['servo_knee_ratio'] = float(knee_ratio) if knee_ratio is not None else None
     return v
 
 
@@ -262,6 +266,103 @@ def linkage_closes(a, b, c, d):
     return abs(b - c) <= e <= b + c
 
 
+# ------------------------------------------------------------------ knee ratio
+KNEE_CENTER_DEG = -90.0  # [deg] knee angle at the servo centre pulse (calf offset_deg in
+# servos.yaml); the walking range -105.7..-80.5 deg is -15.7..+9.5 deg from this centre
+
+
+def _wrap_deg(a):
+    """Angle [deg] into (-180, 180], as the driver's Linkage wraps it."""
+    while a > 180.0:
+        a -= 360.0
+    while a <= -180.0:
+        a += 360.0
+    return a
+
+
+def _knee_lever(a, b, c, d, theta, branch):
+    """Joint-arm angle [rad] for the servo-arm angle theta [rad]; None when unsolvable."""
+    ax, ay = a * math.cos(theta), a * math.sin(theta)
+    dx, dy = d - ax, -ay
+    r = math.hypot(dx, dy)
+    if r < 1e-9:
+        return None
+    ratio = (c * c - r * r - b * b) / (2.0 * b) / r
+    if ratio < -1.0 or ratio > 1.0:
+        return None
+    return math.atan2(dy, dx) + branch * math.acos(ratio)
+
+
+def _knee_branch(a, b, c, d):
+    """Solution branch, as Linkage::_branch in dog_hardware/servo_driver.hpp."""
+    t = math.pi / 2
+    p, m = _knee_lever(a, b, c, d, t, 1), _knee_lever(a, b, c, d, t, -1)
+    if m is None:
+        return 1
+    if p is None:
+        return -1
+    dp = abs(_wrap_deg(math.degrees(p - t)))
+    dm = abs(_wrap_deg(math.degrees(m - t)))
+    return 1 if dp <= dm else -1
+
+
+def _knee_delta(a, b, c, d, branch, servo_deg):
+    """Joint rotation [deg] for a servo rotation [deg] from its centre; None if unsolvable."""
+    p0 = _knee_lever(a, b, c, d, math.pi / 2, branch)
+    p = _knee_lever(a, b, c, d, math.pi / 2 + math.radians(servo_deg), branch)
+    if p0 is None or p is None:
+        return None
+    return _wrap_deg(math.degrees(p - p0))
+
+
+@functools.lru_cache(maxsize=8)
+def _knee_scan(a, b, c, d):
+    """[(joint delta [deg] from the centre, servo speed / joint speed)] over the servo range.
+
+    The servo arm sweeps -90..+90 deg in 0.05 deg steps; the derivative is a central
+    difference with a 0.01 deg step. None when the centre pose is unsolvable.
+    """
+    branch = _knee_branch(a, b, c, d)
+    if _knee_delta(a, b, c, d, branch, 0.0) is None:
+        return None
+    out = []
+    step, h = 0.05, 0.01
+    for i in range(int(round(2 * 90.0 / step)) + 1):
+        s = -90.0 + i * step
+        g_lo = _knee_delta(a, b, c, d, branch, s - h)
+        g_hi = _knee_delta(a, b, c, d, branch, s + h)
+        g = _knee_delta(a, b, c, d, branch, s)
+        if g is None or g_lo is None or g_hi is None:
+            continue
+        dd = (g_hi - g_lo) / (2.0 * h)
+        if dd == 0.0:
+            continue
+        out.append((g, 1.0 / abs(dd)))
+    return tuple(out)
+
+
+def knee_ratio_max(servo_arm_mm, joint_arm_mm, rod_mm, axis_distance_mm, lo_deg=-105.7, hi_deg=-80.5):
+    """Worst servo-to-knee-joint speed ratio of the rod drive [servo rad per joint rad].
+
+    The maximum of 1/|d(joint)/d(servo)| over the knee angles lo_deg..hi_deg (the
+    walking range), the same four-bar linkage as dog_hardware/servo_driver.hpp;
+    measured on the 15/20/95/95 mm example: 1.388 (RESEARCH rounds to 1.40).
+    Direct drive returns 1.0; None when the linkage does not close in the range.
+    """
+    a = servo_arm_mm
+    if a <= 0:
+        return 1.0
+    b = joint_arm_mm if joint_arm_mm > 0 else a
+    c = rod_mm if rod_mm > 0 else axis_distance_mm
+    d = axis_distance_mm
+    scan = _knee_scan(a, b, c, d)
+    if scan is None:
+        return None
+    lo, hi = lo_deg - KNEE_CENTER_DEG, hi_deg - KNEE_CENTER_DEG
+    ratios = [r for delta, r in scan if lo <= delta <= hi]
+    return max(ratios) if ratios else None
+
+
 def validate(v):
     """[(level, text)] with level 'error' | 'warn' | 'info', and derived numbers."""
     out, info = [], {}
@@ -333,6 +434,18 @@ def validate(v):
             out.append(('info', f'{k}: рычаг сустава короче рычага сервы — ход сустава больше хода сервы'))
     if int(g['calf_coupled']) and g['calf_servo_arm_mm'] <= 0:
         out.append(('warn', 'колено «от корпуса» обычно бывает только с тягой (servo_arm_mm > 0)'))
+    if linkage_closes(g['calf_servo_arm_mm'], g['calf_joint_arm_mm'],
+                      g['calf_rod_mm'], g['calf_axis_distance_mm']):
+        ratio = knee_ratio_max(g['calf_servo_arm_mm'], g['calf_joint_arm_mm'],
+                               g['calf_rod_mm'], g['calf_axis_distance_mm'])
+        knee_cfg = v.get('servo_knee_ratio')
+        if ratio is not None and g['calf_servo_arm_mm'] > 0:
+            info['knee_ratio_max'] = round(ratio, 3)
+            out.append(('info', f'тяга колена: серва вращается до {ratio:.3f}× быстрее сустава '
+                                f'в рабочем диапазоне (servo.knee_ratio не меньше {ratio:.3f})'))
+        if ratio is not None and knee_cfg is not None and float(knee_cfg) < ratio - 0.005:
+            out.append(('warn', f'servo.knee_ratio = {float(knee_cfg):g} меньше вычисленного {ratio:.3f}: '
+                                'период и пик скорости серв колена тогда занижены (D-20)'))
     sensor_checks(g, out, info)
     return out, info
 
@@ -624,6 +737,11 @@ def serve(config_dir, port, open_browser):
 
         def do_POST(self):
             v = json.loads(self.rfile.read(int(self.headers.get('Content-Length', 0))) or b'{}')
+            # the web form does not send servo.knee_ratio: take it from robot.yaml so
+            # the knee-ratio warning works here too; render ignores the value
+            ratio = load(config_dir).get('servo_knee_ratio')
+            if ratio is not None:
+                v.setdefault('servo_knee_ratio', ratio)
             msgs, info = validate(v)
             if self.path == '/api/validate':
                 return self._send(200, json.dumps({'messages': msgs, 'info': info}, ensure_ascii=False),

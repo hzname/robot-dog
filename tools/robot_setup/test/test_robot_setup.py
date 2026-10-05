@@ -153,6 +153,47 @@ def test_sensor_fields_lists_and_flags(cfg):
     assert rs.load(cfg)['gs2'] == 0
 
 
+# reference values printed by the C++ Linkage of servo_driver.cpp, RESEARCH Pattern 2
+KNEE_RATIO_CPP = {-30: 1.605, -20: 1.427, -10: 1.357, 0: 1.334, 10: 1.344, 20: 1.392, 30: 1.507}
+
+
+@pytest.mark.parametrize('delta', sorted(KNEE_RATIO_CPP))
+def test_knee_ratio_matches_the_cpp_linkage(delta):
+    got = rs.knee_ratio_max(15, 20, 95, 95, lo_deg=-90 + delta - 0.05, hi_deg=-90 + delta + 0.05)
+    assert got == pytest.approx(KNEE_RATIO_CPP[delta], abs=0.003)
+
+
+def test_knee_ratio_of_the_shipped_example_and_special_cases():
+    ratio = rs.knee_ratio_max(15, 20, 95, 95)
+    assert ratio is not None and 1.37 <= ratio <= 1.41
+    assert rs.knee_ratio_max(15, 15, 95, 95) == pytest.approx(1.0, abs=0.01)
+    assert rs.knee_ratio_max(0, 0, 0, 0) == 1.0
+    assert rs.knee_ratio_max(15, 15, 300, 60) is None
+
+
+def test_load_reads_servo_knee_ratio():
+    assert rs.load(rs.CONFIG)['servo_knee_ratio'] == 1.0
+
+
+def test_knee_ratio_warning_in_validate_and_check(cfg, capsys):
+    v = rs.load(cfg)
+    v.update({'calf_servo_arm_mm': 15, 'calf_joint_arm_mm': 20, 'calf_rod_mm': 95,
+              'calf_axis_distance_mm': 95})
+    msgs = rs.validate(v)[0]
+    assert any(lv == 'warn' and 'servo.knee_ratio' in t and 'меньше вычисленного' in t for lv, t in msgs)
+    assert any(lv == 'info' and 'тяга колена' in t for lv, t in msgs)
+    assert not any(lv == 'warn' and 'servo.knee_ratio' in t
+                   for lv, t in rs.validate(dict(v, servo_knee_ratio=1.45))[0])
+    without = dict(v)
+    without.pop('servo_knee_ratio')
+    assert not any(lv == 'warn' and 'servo.knee_ratio' in t for lv, t in rs.validate(without)[0])
+    assert not any(lv == 'warn' and 'servo.knee_ratio' in t for lv, t in rs.validate(rs.load(rs.CONFIG))[0])
+    rs.save(cfg, v)
+    capsys.readouterr()
+    assert rs.main(['--check', '--config', cfg]) == 0
+    assert 'servo.knee_ratio' in capsys.readouterr().out
+
+
 def test_sensor_geometry_is_checked(cfg):
     v = rs.load(cfg)
     msgs = [t for lv, t in rs.validate(v)[0] if lv == 'info']
