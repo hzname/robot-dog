@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Замеры на столе и ход назад в симуляции
 status: executing
-stopped_at: Completed 01-05-PLAN.md
-last_updated: "2026-10-05T09:35:36.899Z"
+stopped_at: Completed 01-06-PLAN.md
+last_updated: "2026-10-05T17:42:34.272Z"
 last_activity: 2026-10-05
 last_activity_desc: Phase 01 execution started
-state_head: 4182c3ae3bddd987f8a767cd35bc943e103421ac
+state_head: 2baaecc0b0a221958cab4dcbfa264adc5b263f77
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 5
+  completed_plans: 6
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 01 (Замеры на столе и ход назад в симуляции) — EXECUTING
-Plan: 6 of 17
+Plan: 7 of 17
 Status: Ready to execute
 Last activity: 2026-10-05 — Phase 01 execution started
 
@@ -63,6 +63,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P03 | 6 min | 3 tasks | 4 files |
 | Phase 01 P04 | 8 min | 3 tasks | 4 files |
 | Phase 01 P05 | 10 min | 3 tasks | 11 files |
+| Phase 01 P06 | 23 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,9 @@ Recent decisions affecting current work:
 - [Phase 01]: The dog_bench I2C layer keeps the address inside every ioctl(I2C_RDWR) message (no separate address ioctl); FakeI2cBus::failRange accumulates failing transaction ranges — the planned Selftest tests need two disjoint single failures — The bench tool must never write to the PCA9685 at 0x40; accumulation is what the planned CountsConsecutiveErrors test relies on (fix 7a457e2)
 - [Phase 01]: runSelftest measures intervals between tick starts (pause counted from the tick start) and judges median <= 1.5 ms and p99 (rank ceil(0.99 n) - 1) <= 5 ms; three consecutive failed transactions abort and the statistics still cover the intervals collected so far; below kSelftestMinSamples = 100 it refuses without touching the bus — Intervals between tick starts carry the transaction cost and scheduler stalls; refusing too few samples keeps the p99 meaningful
 - [Phase 01]: servo_speed_test checks every argument before opening the bus; --help wins over all other checks and exits 0; dry-run and run pass validation and then refuse with exit 2 because no PWM code is linked (exit code 3 reserved for plan 01-12) — No code in dog_bench can enable a servo; the 20 wrong argument sets all exit 2 and 0x40/0x50/0x70 never reach the bus
+- [Phase 01]: tools/servo_speed contract is fixed by plan 01-06: CSV t_s,stroke_id,direction,cmd_us,shunt_raw,bus_raw and <csv>.meta.json with required shunt_ohm/us_per_deg/speeds_rad_s/strokes_per_speed; analyze CLI exit codes 0/1/2; result keys and flags per README; direction -1/0/+1 outside strokes. Plans 01-12 (session), 01-13 (CI job) and 01-14 (owner graph) consume these names without redefining them — The bench session writes the CSV and the job runs the same pytest; one plan must fix the format or the three plans drift (same rule as the phase-1 config contract from 01-02)
+- [Phase 01]: synth.py b_coef default is 0.0001, not the prototype 0.0002: at the sharper value the +/-1 ms front-phase jitter of the current edges inflated the ramp_timing saturated-pair distances past eps (6.0 rad/s, 8 mA, up direction 1.33x eps, kink lost); at 0.0001 the worst pair is 0.62x eps over a seed sweep and v_dur stays 2-4% low — The plan explicitly allows adjusting kp/a_max/tau_i/b_coef within reason when the analyzer tests fail; the reason is recorded in the synth.py docstring
+- [Phase 01]: analyze.py per-direction kernels compute I_plateau over that direction's own strokes; the mixed value made up/down plateau currents identical and hid the friction asymmetry (now up - down = 0.079 A, flag direction_mismatch is meaningful) — Per-direction report must carry its own sigma_rep, eps and I_plateau (D-08); the mixed average was a bug surfaced by the per_direction test
 
 ### Pending Todos
 
@@ -114,6 +118,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-05T09:35:36.866Z
-Stopped at: Completed 01-05-PLAN.md
+Last session: 2026-10-05T17:42:34.230Z
+Stopped at: Completed 01-06-PLAN.md
 Resume file: None
