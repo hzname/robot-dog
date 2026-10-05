@@ -252,3 +252,93 @@ jobs:
           platforms: linux/arm64
           push: false
           build-args: BUILD_JOBS=4
+
+  acceptance:
+    name: acceptance (${{ matrix.distro }}, ${{ matrix.servo_model }})
+    # Backward-walk acceptance statistics: workflow_dispatch only (D-04);
+    # one simulation per runner (D-24).
+    # Dispatch: gh workflow run ci.yml -f acceptance=true
+    if: github.event_name == 'workflow_dispatch' && inputs.acceptance
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [jazzy, lyrical]
+        servo_model: [ideal, real]
+    container:
+      image: osrf/ros:${{ matrix.distro }}-simulation
+    env:
+      DISTRO: ${{ matrix.distro }}
+      SERVO_MODEL: ${{ matrix.servo_model }}
+      REPEATS: ${{ inputs.repeats }}
+      CELLS: ${{ inputs.cells }}
+      STRICT: ${{ inputs.strict }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: ros2_ws
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pure modules (pytest)
+        run: |
+          if ! python3 -c 'import pytest' 2>/dev/null; then
+            apt-get update -qq && apt-get install -y -qq python3-pytest
+          fi
+          PYTHONPATH=src/dog_gazebo:src/dog_description python3 -m pytest -q src/dog_gazebo/test
+      - name: Build
+        run: |
+          source /opt/ros/$DISTRO/setup.bash
+          colcon build
+      - name: URDF to SDF (real servo model)
+        if: matrix.servo_model == 'real'
+        run: |
+          source install/setup.bash
+          python3 -m dog_description.urdf src/dog_bringup/config/robot.yaml --gazebo --servo-model real > real_servo.urdf
+          if ! command -v gz >/dev/null 2>&1 || ! gz sdf --help >/dev/null 2>&1; then
+            echo "gz sdf is not available in this image: the SDF friction check is skipped"
+            exit 0
+          fi
+          gz sdf -p real_servo.urdf > real_servo.sdf
+          grep -c friction real_servo.sdf || true
+          python3 - <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          root = ET.parse('real_servo.sdf').getroot()
+          n = sum(1 for d in root.iter('dynamics')
+                  if d.find('friction') is not None and d.find('friction').text
+                  and float(d.find('friction').text) > 0)
+          print('dynamics with friction:', n)
+          sys.exit(0 if n == 12 else 1)
+          PY
+      - name: Acceptance (backward walk statistics)
+        run: |
+          case "$REPEATS" in
+            ''|*[!0-9]*)
+              echo 'error: repeats must be digits only' >&2
+              exit 2
+              ;;
+          esac
+          source install/setup.bash
+          set -- --repeats "$REPEATS" --cells "$CELLS" --servo-model "$SERVO_MODEL" --distro "$DISTRO" --domain 80
+          if [ "$STRICT" = true ]; then set -- "$@" --strict; fi
+          ros2 run dog_gazebo acceptance "$@"
+      - name: Job summary
+        if: always()
+        run: |
+          f=acceptance_"$DISTRO"_"$SERVO_MODEL"_summary.md
+          if [ -f "$f" ]; then
+            cat "$f" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'no summary written' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: acceptance-${{ matrix.distro }}-${{ matrix.servo_model }}
+          path: |
+            ros2_ws/acceptance_*.json
+            ros2_ws/acceptance_*_summary.md
+            ros2_ws/*.sim.log
