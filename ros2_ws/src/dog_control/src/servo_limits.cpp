@@ -14,6 +14,7 @@ namespace
 constexpr double kTickDt = 0.02;  // [s] control tick; the procedure runs at 50 Hz
 constexpr double kWarmUp = 1.0;   // [s] acceleration before the measured window
 constexpr double kWindow = 4.0;   // [s] measured window
+constexpr double kMinGaitPeriod = 0.1;  // [s] TrotGait clamps its own period to this
 
 double approach(double current, double target, double max_delta)
 {
@@ -93,6 +94,16 @@ PeakSpeed peakForCommand(const LocomotionParams & p, const BodyVelocity & cmd, d
   }
   return out;
 }
+
+bool fits(const LocomotionParams & q, const ServoSpeedModel & s, double allowed)
+{
+  for (const BodyVelocity & cmd : extremeCommands(q)) {
+    if (peakForCommand(q, cmd, s.knee_ratio).peak > allowed + kSpeedTolerance) {
+      return false;
+    }
+  }
+  return true;
+}
 }  // namespace
 
 PeakSpeed peakServoSpeed(const LocomotionParams & p, const ServoSpeedModel & s)
@@ -103,6 +114,34 @@ PeakSpeed peakServoSpeed(const LocomotionParams & p, const ServoSpeedModel & s)
     if (peak.peak > out.peak) {out = peak;}
   }
   return out;
+}
+
+double minimalPeriod(const LocomotionParams & p, const ServoSpeedModel & s, double min_period, double max_period)
+{
+  const double allowed = s.margin * s.max_speed;
+  if (!std::isfinite(allowed) || allowed <= 0.0 || !std::isfinite(s.knee_ratio) || s.knee_ratio <= 0.0 ||
+      !std::isfinite(min_period) || !std::isfinite(max_period) ||
+      min_period < kMinGaitPeriod || max_period < min_period) {
+    return 0.0;
+  }
+  // Integer grid index: the period of point k is min_period + k * kPeriodScanStep,
+  // never an accumulated sum; a fitting point sits on the grid to kSpeedTolerance.
+  const int last = static_cast<int>(std::floor((max_period - min_period) / kPeriodScanStep + kSpeedTolerance));
+  const int window = static_cast<int>(std::ceil(kPeriodGuard / kPeriodScanStep - kSpeedTolerance));
+  LocomotionParams q = p;
+  int run_start = -1;
+  for (int k = 0; k <= last; ++k) {
+    q.gait.period = min_period + k * kPeriodScanStep;
+    if (fits(q, s, allowed)) {
+      if (run_start < 0) {run_start = k;}
+      if (k - run_start >= window || k == last) {
+        return min_period + run_start * kPeriodScanStep;
+      }
+    } else {
+      run_start = -1;
+    }
+  }
+  return 0.0;
 }
 
 }  // namespace dog_control

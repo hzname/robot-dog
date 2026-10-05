@@ -22,6 +22,19 @@ struct LocomotionParams;
 /// it does not (the verified 0.55 s period fits a 6.35 rad/s servo by 0.003).
 constexpr double kSpeedTolerance{1e-9};
 
+/// Upper bound of the automatic period search [s]: a core constant, not a
+/// YAML key (D-12).
+constexpr double kMaxAutoPeriod{1.5};
+
+/// Period scan step [s].
+constexpr double kPeriodScanStep{0.0025};
+
+/// Guard window [s]: the peak is not monotonic in the period (the 20 ms tick
+/// quantises the step phase; 167 monotonicity breaks on a 1 ms grid, rises up
+/// to 0.183 rad/s), so a period is accepted only when every period up to this
+/// much above it also fits (clipped at `max_period`).
+constexpr double kPeriodGuard{0.05};
+
 /// Assumed servo speed model: `max_speed` is the number the period is
 /// computed for (D-13), separate from the physical speed of the simulation.
 struct ServoSpeedModel
@@ -44,5 +57,16 @@ struct PeakSpeed
 /// IMU input (the JointSpeedsFitTheServos procedure at 50 Hz). Returns a zero
 /// peak for zero commands; never throws.
 PeakSpeed peakServoSpeed(const LocomotionParams & p, const ServoSpeedModel & s);
+
+/// Smallest period [s] of the grid `min_period + k * kPeriodScanStep` up to
+/// and including `max_period` at which the peak is at or below
+/// `s.margin * s.max_speed` (plus kSpeedTolerance) at that period and at every
+/// grid period up to kPeriodGuard above it (the window is clipped at
+/// `max_period`). Never shorter than `min_period` (D-12: the period only grows
+/// from the verified 0.55 s). Returns 0.0 when nothing fits, an input is not
+/// finite, `margin * max_speed` or `knee_ratio` is not positive, `min_period`
+/// is below 0.1 s (TrotGait clamps its period there) or `max_period` is below
+/// `min_period`; never throws.
+double minimalPeriod(const LocomotionParams & p, const ServoSpeedModel & s, double min_period, double max_period);
 
 }  // namespace dog_control
