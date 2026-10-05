@@ -1,14 +1,44 @@
 """The generated URDF must agree with the kinematics used by locomotion."""
 
+import hashlib
 import math
 import os
+import sys
 import xml.etree.ElementTree as ET
 
 import numpy as np
+import pytest
 
 from dog_description.urdf import build_urdf, joint_names, load_config
 
 GEOM = {'hip_offset': 0.055, 'thigh': 0.105, 'calf': 0.105, 'hip_x': 0.09, 'hip_y': 0.06}
+
+# The description the golden hashes were taken from: the literal DEFAULT_DESCRIPTION
+# of the tree before servo_model was added, without body_com_x (plan 01-10). The
+# guard must not follow DEFAULT_DESCRIPTION, which plan 01-15 may sync to a
+# measurement; it pins the ideal model of the shipped defaults (D-15).
+PINNED_DESC = {
+    'body_length': 0.23, 'body_width': 0.10, 'body_height': 0.05,
+    'body_mass': 0.80, 'hip_mass': 0.06, 'thigh_mass': 0.08, 'calf_mass': 0.03,
+    'foot_radius': 0.012, 'servo_effort': 1.1, 'servo_velocity': 6.0, 'sim_p_gain': 25.0,
+    'hip_limits_deg': [-40.0, 40.0], 'thigh_limits_deg': [-45.0, 135.0],
+    'calf_limits_deg': [-165.0, -15.0],
+}
+
+# SHA-256 of _ideal_cases() taken on the untouched urdf.py before plan 01-10:
+# the ideal model output must stay byte for byte the same (D-15).
+GOLDEN_SHA256 = {
+    'plain': 'b73643bda3555b22c94396ef7ae9eea6a4ee09d7836e83220643f8a5ad57bd36',
+    'gazebo': '54c0eef47c67ca32aa714e4ade91260051e5553dc25bbc54a525e790423faaf9',
+}
+
+
+def _ideal_cases():
+    """The two pinned ideal-model URDF strings: plain and the Gazebo variant."""
+    return {
+        'plain': build_urdf(GEOM, PINNED_DESC),
+        'gazebo': build_urdf(GEOM, PINNED_DESC, gazebo=True, initial=(0.0, 0.7, -1.4)),
+    }
 
 
 def _rot(axis, q):
@@ -98,3 +128,41 @@ def test_perception_sensors_in_urdf():
     assert len(root.findall(".//sensor[@type='gpu_lidar']")) == 7
     plain = ET.fromstring(build_urdf(geometry, description))
     assert not plain.findall('.//sensor') and plain.find("link[@name='lidar_left']") is not None
+
+
+def test_ideal_urdf_unchanged():
+    """D-15: the default ideal model keeps the pinned bytes; the servo_sim and
+    servo keys and an explicit servo_model='ideal' change nothing, <dynamics> never appears."""
+    for name, urdf in _ideal_cases().items():
+        assert hashlib.sha256(urdf.encode()).hexdigest() == GOLDEN_SHA256[name]
+    extra = dict(PINNED_DESC, servo_sim={'backlash_deg': 1.5}, servo={'knee_ratio': 1.0})
+    assert build_urdf(GEOM, extra, servo_model='ideal') == _ideal_cases()['plain']
+    assert (build_urdf(GEOM, extra, gazebo=True, initial=(0.0, 0.7, -1.4))
+            == _ideal_cases()['gazebo'])
+    assert '<dynamics' not in _ideal_cases()['plain']
+
+
+def test_unknown_servo_model_is_rejected():
+    with pytest.raises(ValueError, match='servo_model'):
+        build_urdf(GEOM, PINNED_DESC, servo_model='servo')
+
+
+def test_cli_servo_model_flag(monkeypatch, capsys):
+    """main() --servo-model real emits the 12 friction joints; the default emits none."""
+    from dog_description import urdf as urdf_module
+    cfg = os.path.join(os.path.dirname(__file__), '..', '..', 'dog_bringup', 'config', 'robot.yaml')
+    monkeypatch.setattr(sys, 'argv', ['generate_urdf', cfg, '--gazebo', '--servo-model', 'real'])
+    urdf_module.main()
+    assert capsys.readouterr().out.count('<dynamics') == 12
+    monkeypatch.setattr(sys, 'argv', ['generate_urdf', cfg, '--gazebo'])
+    urdf_module.main()
+    assert '<dynamics' not in capsys.readouterr().out
+
+
+def test_load_config_carries_servo_blocks():
+    """load_config() passes servo_sim and servo through to the description."""
+    cfg = os.path.join(os.path.dirname(__file__), '..', '..', 'dog_bringup', 'config', 'robot.yaml')
+    _, description = load_config(cfg)
+    assert set(description['servo_sim']) >= {'backlash_deg', 'delay_ms', 'friction_nm',
+                                             'bus_voltage', 'bus_voltage_ref'}
+    assert set(description['servo']) >= {'max_speed', 'margin', 'knee_ratio'}
