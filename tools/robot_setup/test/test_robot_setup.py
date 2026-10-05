@@ -38,6 +38,55 @@ def test_save_changes_only_values_and_keeps_comments(cfg):
     assert os.path.exists(os.path.join(cfg, 'robot.yaml.bak'))
 
 
+def test_body_com_x_is_a_form_field_in_the_body_group():
+    f = rs.FIELDS['body_com_x']
+    assert (f[2], f[3], f[4], f[5], f[6], f[7]) == ('мм', 'description', 'body_com_x', 1000, -60, 60)
+    group = next(g for g in rs.GROUPS if g[0] == 'body')
+    assert any(x[0] == 'body_com_x' for x in group[3])
+
+
+def test_body_com_x_is_loaded_saved_and_keeps_comments(cfg):
+    v = rs.load(cfg)
+    assert v['body_com_x'] == 0.0
+    v['body_com_x'] = 12.5
+    diff = rs.save(cfg, v)
+    text = open(os.path.join(cfg, 'robot.yaml')).read()
+    assert 'body_com_x: 0.0125' in text
+    assert '# [m] trunk centre of mass forward of the body centre' in text
+    assert yaml.safe_load(text)['/**']['ros__parameters']['description']['body_com_x'] == 0.0125
+    assert rs.load(cfg)['body_com_x'] == 12.5
+    removed = [ln for ln in diff.splitlines() if ln.startswith('-') and not ln.startswith('---')]
+    assert len(removed) == 1, diff
+
+
+def test_body_com_x_out_of_range_is_an_error():
+    v = rs.load(rs.CONFIG)
+    v['body_com_x'] = 70
+    assert any(lv == 'error' and 'вне' in t for lv, t in rs.validate(v)[0])
+
+
+def test_body_com_x_beyond_the_hip_axes_warns():
+    base = rs.load(rs.CONFIG)
+    msgs = rs.validate(dict(base, body_com_x=55, hip_x=50))[0]
+    assert any(lv == 'warn' and 'дальше осей бёдер' in t for lv, t in msgs)
+    assert not [m for m in msgs if m[0] == 'error']
+    assert not any(lv == 'warn' and 'дальше осей бёдер' in t for lv, t in rs.validate(dict(base, body_com_x=0))[0])
+
+
+def test_cli_enters_body_com_x_end_to_end(cfg, monkeypatch):
+    def fake_input(prompt=''):
+        if 'body_com_x' in prompt:
+            return '12,5'
+        if 'Сохранить' in prompt:
+            return 'y'
+        return ''
+
+    monkeypatch.setattr('builtins.input', fake_input)
+    assert rs.cli(cfg) == 0
+    r = yaml.safe_load(open(os.path.join(cfg, 'robot.yaml')))['/**']['ros__parameters']
+    assert r['description']['body_com_x'] == 0.0125
+
+
 def test_hip_limits_mirror_for_right_legs(cfg):
     v = rs.load(cfg)
     v['hip_out'], v['hip_in'] = 35, 10

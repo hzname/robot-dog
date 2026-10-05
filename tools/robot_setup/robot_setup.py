@@ -56,6 +56,8 @@ GROUPS = [
         ('body_height', 'Высота корпуса', 'мм', 'description', 'body_height', 1000, 10, 200, 'для модели'),
         ('foot_radius', 'Радиус стопы', 'мм', 'description', 'foot_radius', 1000, 0, 40,
          'резиновый наконечник; для модели'),
+        ('body_com_x', 'body_com_x — центр масс корпуса вперёд от центра', 'мм', 'description', 'body_com_x', 1000, -60, 60,
+         'баланс корпуса без ног на пруте, ±3 мм; «+» вперёд'),
     ]),
     ('stance', 'Стойка', ['measure_leg_side.svg'], [
         ('stand_height', 'stand_height — ось бедра над полом в стойке', 'мм', 'stance', 'stand_height', 1000, 50, 400,
@@ -312,6 +314,10 @@ def validate(v):
         out.append(('warn', 'hip_x больше половины длины корпуса: проверьте, это половина расстояния перёд–зад'))
     if g['hip_y'] > g['body_width'] / 2 + 60:
         out.append(('warn', 'hip_y сильно больше половины ширины корпуса: проверьте, это до оси отведения'))
+    com_x = g['body_com_x']
+    if abs(com_x) > g['hip_x']:
+        out.append(('warn', f'body_com_x = {com_x:g} мм дальше осей бёдер (hip_x = {g["hip_x"]:g} мм): '
+                            'проверьте мерку и знак («+» вперёд)'))
     m = g['body_mass'] + 4 * (g['hip_mass'] + g['thigh_mass'] + g['calf_mass'])
     info['model_mass_g'] = round(m)
     out.append(('info', f'масса по модели {m:.0f} г'))
