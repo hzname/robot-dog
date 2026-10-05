@@ -17,7 +17,8 @@ add_library(dog_bench_core
   src/selftest.cpp
   src/ramp.cpp
   src/safety.cpp
-  src/pwm_out.cpp)
+  src/pwm_out.cpp
+  src/session.cpp)
 target_include_directories(dog_bench_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
@@ -33,7 +34,7 @@ install(DIRECTORY include/ DESTINATION include)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
-  foreach(t ina219_fast selftest ramp safety pwm_out)
+  foreach(t ina219_fast selftest ramp safety pwm_out session)
     ament_add_gtest(test_${t} test/test_${t}.cpp)
     target_link_libraries(test_${t} dog_bench_core)
   endforeach()
