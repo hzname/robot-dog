@@ -185,11 +185,95 @@ def parse_args(argv=None, environ=None):
     return args
 
 
+# ---------- execution
+
+def _flush(args, cells_runs):
+    """Build the schema 1 result and write the JSON and the summary after
+    every repeat: a temp file plus os.replace, so an interrupted job keeps a
+    complete file (T-01-11-05)."""
+    result = stats.build_result(args.distro, args.servo_model, args.repeats,
+                                args.git_sha, cells_runs, args.floor_ratio)
+    for path, text in ((args.out, json.dumps(result, indent=1)),
+                       (args.summary, stats.render_summary(result))):
+        directory = os.path.dirname(path)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        tmp = path + '.tmp'
+        with open(tmp, 'w') as handle:
+            handle.write(text + '\n')
+        os.replace(tmp, path)
+    return result
+
+
+def execute(args, runner=run_level, clock=time.monotonic):
+    """Run every cell repeat by repeat, strictly one simulation at a time
+    (D-24); returns the last schema 1 result.
+
+    One attempt is one fresh run_level launch (plus one more, with
+    .retry.sim.log, if the robot never left passive). A no_stand attempt is
+    replaced (up to 2*n attempts per cell); an error is not replaced - it
+    takes one of the n repeat slots, so a systematic failure does not double
+    the job time. Records go through acceptance_stats.run_record only; no
+    thresholds live here (D-17).
+    """
+    cells_runs = {name: [] for name in args.cells}
+    stem = os.path.splitext(args.out)[0]
+    launch_no = 0
+    result = None
+    for name in args.cells:
+        cell = stats.CELLS[name]
+        extra = cell_walk_check_args(name)
+        launch_args = cell_launch_args(name, args.servo_model)
+        valid = 0
+        no_stand = 0
+        attempts = 0
+        while (valid < args.repeats and attempts - no_stand < args.repeats
+               and attempts < ATTEMPT_FACTOR * args.repeats):
+            attempts += 1
+            seed = seed_for(cell, attempts)
+            domain = domain_for(args.domain, launch_no)
+            launch_no += 1
+            sim_log = '%s_%s_r%02d.sim.log' % (stem, name, attempts)
+            start = clock()
+            data = runner(cell['terrain'], cell['level'], seed, domain, extra,
+                          launch_args=launch_args, keep=None, sim_log=sim_log)
+            if never_stood(data):
+                print('%s: robot never left passive - relaunching the simulation once'
+                      % name, flush=True)
+                data = runner(cell['terrain'], cell['level'], seed, domain, extra,
+                              launch_args=launch_args, keep=None,
+                              sim_log=sim_log.replace('.sim.log', '.retry.sim.log'))
+            wall_s = clock() - start
+            record = stats.run_record(data, wall_s)
+            cells_runs[name].append(record)
+            if record['status'] in ('ok', 'fell'):
+                valid += 1
+            elif record['status'] == 'no_stand':
+                no_stand += 1
+            ratio = record['ratio']
+            print('%-16s #%d/%d %-8s ratio=%s wall_s=%.1f'
+                  % (name, attempts, args.repeats, record['status'],
+                     'n/a' if ratio is None else '%.1f%%' % (100 * ratio), wall_s), flush=True)
+            result = _flush(args, cells_runs)
+    return result
+
+
 # ---------- CLI
 
 def main(argv=None, runner=None, clock=None, environ=None):
-    """Parse the CLI and serve --dry-run; the execution branch arrives with
-    the repeat runner (the next task of plan 01-11)."""
+    """Parse the CLI, run the repeats and return 0/1/2 (2 via argparse).
+
+    0: artifacts were produced (the verdict may still fail without --strict);
+    1: infrastructure failure (a cell without a valid repeat) or --strict
+    without a passing verdict. The verdict comes from acceptance_stats only
+    (D-06, D-07, D-17); simulations run one at a time (D-24) and outside
+    GitHub Actions a warning is printed (D-04).
+    """
+    env = os.environ if environ is None else environ
+    if runner is None:
+        runner = run_level
+    if clock is None:
+        clock = time.monotonic
     args = parse_args(argv, environ=environ)
     if args.dry_run:
         records = plan_runs(args.cells, args.repeats)
@@ -205,7 +289,26 @@ def main(argv=None, runner=None, clock=None, environ=None):
         print('planned: %d simulations (up to %d with replacements of no_stand)'
               % (len(records), ATTEMPT_FACTOR * len(records)), flush=True)
         return 0
-    raise SystemExit('acceptance: the execution branch arrives with the next task of plan 01-11')
+    if env.get('GITHUB_ACTIONS') != 'true':
+        print('warning: not running in GitHub Actions: simulations belong in CI '
+              '(D-04, D-24), local load distorts results (docs/TERRAIN.md)', file=sys.stderr)
+    try:
+        result = execute(args, runner=runner, clock=clock)
+    except KeyboardInterrupt:
+        raise
+    except Exception as exc:
+        print('FAIL: infrastructure: %s' % exc, flush=True)
+        return 1
+    if result['verdict']['failures']:
+        for failure in result['verdict']['failures']:
+            print('FAIL %s' % failure, flush=True)
+    else:
+        print('PASS verdict', flush=True)
+    if any(result['cells'][name]['summary']['n'] == 0 for name in args.cells):
+        return 1
+    if args.strict and result['verdict']['pass'] is not True:
+        return 1
+    return 0
 
 
 if __name__ == '__main__':
