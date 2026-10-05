@@ -228,11 +228,13 @@ bool FakeI2cBus::writeBytes(int addr, const uint8_t * data, std::size_t len)
   if (dev == nullptr || fails(number)) {return false;}
   const uint8_t first = data[0];
   if (!dev->drop_writes) {
+    // As on the wire: data[0] addresses the register, data[1] fills it, the
+    // following bytes fill the registers after it.
     for (std::size_t i = 1; i < len; ++i) {
-      dev->regs[static_cast<uint8_t>(first + i)] = data[i];
+      dev->regs[static_cast<uint8_t>(first + (i - 1))] = data[i];
     }
   }
-  dev->pointer = static_cast<uint8_t>(first + len - 1);
+  dev->pointer = static_cast<uint8_t>(first + (len > 1 ? len - 2 : 0));
   return true;
 }
 

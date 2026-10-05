@@ -29,8 +29,8 @@ public:
   [[nodiscard]] virtual bool readBare16(int addr, uint16_t & out) = 0;
   /// Write the register pointer, then read 1 byte.
   [[nodiscard]] virtual bool read8(int addr, uint8_t reg, uint8_t & out) = 0;
-  /// One transaction: data[0] is the first register, the rest are written to
-  /// consecutive registers. len 0 or above 32 is rejected.
+  /// One transaction: data[0] is the register, data[1..] fill it and the
+  /// registers after it (as on the wire). len 0 or above 32 is rejected.
   [[nodiscard]] virtual bool writeBytes(int addr, const uint8_t * data, std::size_t len) = 0;
 };
 
