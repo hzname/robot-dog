@@ -26,7 +26,7 @@ SERVO_MODELS = ('ideal', 'real')
 
 DEFAULT_DESCRIPTION = {
     'body_length': 0.23, 'body_width': 0.10, 'body_height': 0.05,
-    'body_mass': 0.80, 'hip_mass': 0.06, 'thigh_mass': 0.08, 'calf_mass': 0.03,
+    'body_mass': 0.80, 'body_com_x': 0.0, 'hip_mass': 0.06, 'thigh_mass': 0.08, 'calf_mass': 0.03,
     'foot_radius': 0.012, 'servo_effort': 1.1, 'servo_velocity': 6.0, 'sim_p_gain': 25.0,
     'hip_limits_deg': [-40.0, 40.0], 'thigh_limits_deg': [-45.0, 135.0],
     'calf_limits_deg': [-165.0, -15.0],
@@ -113,6 +113,9 @@ def build_urdf(geometry, description=None, gazebo=False, namespace='dog', initia
     d.update(description or {})
     L1, L2, L3 = g['hip_offset'], g['thigh'], g['calf']
     bl, bw, bh = d['body_length'], d['body_width'], d['body_height']
+    com_x = d['body_com_x']
+    if isinstance(com_x, bool) or not isinstance(com_x, (int, float)) or not math.isfinite(com_x):
+        raise ValueError('"body_com_x" must be a finite number')
     r_leg = 0.012
     out = ['<?xml version="1.0"?>', '<robot name="robot_dog">']
     out.append(
@@ -125,7 +128,7 @@ def build_urdf(geometry, description=None, gazebo=False, namespace='dog', initia
         '<link name="trunk">'
         f'<visual><geometry><box size="{bl} {bw} {bh}"/></geometry><material name="body"/></visual>'
         f'<collision><geometry><box size="{bl} {bw} {bh}"/></geometry></collision>'
-        + _inertial(d['body_mass'], _box_inertia(d['body_mass'], bl, bw, bh)) + '</link>')
+        + _inertial(d['body_mass'], _box_inertia(d['body_mass'], bl, bw, bh), (com_x, 0, 0)) + '</link>')
     out.append('<joint name="base_to_trunk" type="fixed"><parent link="base_link"/>'
                '<child link="trunk"/></joint>')
     out.append('<link name="imu_link"/>'

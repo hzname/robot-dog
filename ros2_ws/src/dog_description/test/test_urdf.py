@@ -166,3 +166,24 @@ def test_load_config_carries_servo_blocks():
     assert set(description['servo_sim']) >= {'backlash_deg', 'delay_ms', 'friction_nm',
                                              'bus_voltage', 'bus_voltage_ref'}
     assert set(description['servo']) >= {'max_speed', 'margin', 'knee_ratio'}
+
+
+def test_body_com_x_moves_trunk_inertial():
+    """D-21/CAL-16: description.body_com_x shifts the trunk inertial origin along
+    x; a missing key and an explicit 0.0 keep the previous bytes."""
+    zero = build_urdf(GEOM, PINNED_DESC)
+    assert build_urdf(GEOM, {**PINNED_DESC, 'body_com_x': 0.0}) == zero
+    plus = build_urdf(GEOM, {**PINNED_DESC, 'body_com_x': 0.012})
+    trunk = next(l for l in ET.fromstring(plus).findall('link') if l.get('name') == 'trunk')
+    assert trunk.find('inertial/origin').get('xyz') == '0.0120 0.0000 0.0000'
+    assert trunk.find('visual/origin') is None and trunk.find('collision/origin') is None
+    # swapping the shifted fragment for the zero one reproduces the plain string
+    assert plus.replace('0.0120 0.0000 0.0000', '0.0000 0.0000 0.0000') == zero
+    minus = build_urdf(GEOM, {**PINNED_DESC, 'body_com_x': -0.02})
+    trunk = next(l for l in ET.fromstring(minus).findall('link') if l.get('name') == 'trunk')
+    assert trunk.find('inertial/origin').get('xyz') == '-0.0200 0.0000 0.0000'
+    for bad in (float('nan'), float('inf'), True):
+        with pytest.raises(ValueError, match='body_com_x'):
+            build_urdf(GEOM, {**PINNED_DESC, 'body_com_x': bad})
+        with pytest.raises(ValueError, match='body_com_x'):
+            build_urdf(GEOM, {**PINNED_DESC, 'body_com_x': bad}, servo_model='real')
