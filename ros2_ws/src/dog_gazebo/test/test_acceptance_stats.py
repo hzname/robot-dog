@@ -336,3 +336,134 @@ def test_module_is_pure():
     assert not any(m == 'rclpy' or m.startswith('rclpy.') or m == 'numpy'
                    or m == 'walk_check' or m.endswith('.walk_check') for m in imported)
     assert 'dog_gazebo.terrain_sweep' in imported
+
+
+# ---------- schema 1: build_result, verdict, push_threshold_for, render_summary
+
+def _cells(**overrides):
+    base = {'flat_A_bwd10': [_run(ratio=r) for r in (0.52, 0.6, 0.66, 0.7, 0.8)],
+            'flat_B_bwd10': [_run(ratio=0.6) for _ in range(5)],
+            'waves10_A_bwd10': [_run(ratio=0.2) for _ in range(5)]}
+    base.update(overrides)
+    return base
+
+
+def test_build_result_schema_keys():
+    r = a.build_result('jazzy', 'ideal', 5, 'abc123', _cells())
+    assert set(r) == {'schema', 'distro', 'servo_model', 'repeats', 'git_sha',
+                      'cells', 'scoring', 'verdict', 'push_threshold'}
+    assert (r['schema'], r['distro'], r['servo_model'], r['repeats']) == (1, 'jazzy', 'ideal', 5)
+    assert r['scoring'] == {'jazzy': True, 'lyrical': False}
+    assert set(r['cells']['flat_A_bwd10']) == {'terrain', 'level', 'heading_hold',
+                                               'cmd_vx', 'runs', 'summary'}
+    assert set(r['cells']['flat_A_bwd10']['runs'][0]) == {'status', 'ratio', 'ratios',
+                                                          'dyaw5_deg', 'tilt_deg', 'z', 'wall_s'}
+    assert json.loads(json.dumps(r)) == r
+
+
+def test_heading_hold_and_order():
+    cells = _cells(flat_B_bwd05=[_run(ratio=0.3) for _ in range(5)])
+    got = a.build_result('jazzy', 'ideal', 5, 'abc', cells)['cells']
+    assert list(got) == ['flat_A_bwd10', 'flat_B_bwd10', 'flat_B_bwd05', 'waves10_A_bwd10']
+    assert got['flat_A_bwd10']['heading_hold'] is True
+    assert got['waves10_A_bwd10']['heading_hold'] is True
+    assert got['flat_B_bwd10']['heading_hold'] is False
+    assert got['flat_B_bwd05']['heading_hold'] is False
+
+
+def test_verdict_aggregates_scored_cells():
+    ok = a.build_result('jazzy', 'ideal', 5, 'abc',
+                        _cells(flat_B_bwd05=[_run(ratio=0.1) for _ in range(5)]))
+    assert ok['verdict']['pass'] is True and ok['verdict']['failures'] == []
+    low = a.build_result('jazzy', 'ideal', 5, 'abc',
+                         _cells(flat_A_bwd10=[_run(ratio=0.39) for _ in range(5)]))
+    assert low['verdict']['pass'] is False
+    assert any(f.startswith('flat_A_bwd10: ') and 'ratio_min=0.390' in f
+               for f in low['verdict']['failures'])
+    few = a.build_result('jazzy', 'ideal', 5, 'abc',
+                         _cells(flat_A_bwd10=[_run(ratio=0.6) for _ in range(4)]))
+    assert few['verdict']['pass'] is False
+    assert any('insufficient data' in f for f in few['verdict']['failures'])
+    report_only = a.build_result('jazzy', 'ideal', 5, 'abc',
+                                 {'flat_B_bwd05': [_run(ratio=0.1) for _ in range(5)]})
+    assert report_only['verdict']['pass'] is False
+    assert report_only['verdict']['failures'] == ['no scored cells']
+    empty = a.build_result('jazzy', 'ideal', 5, 'abc', {})
+    assert empty['verdict']['pass'] is False
+    assert empty['verdict']['failures'] == ['no scored cells']
+
+
+@pytest.mark.parametrize('override', [
+    {'distro': 'foxy'}, {'servo_model': 'dream'}, {'repeats': 0}, {'repeats': -1},
+    {'repeats': True}, {'repeats': '5'}, {'cells_runs': {'nope': []}},
+])
+def test_build_result_validates_input(override):
+    kwargs = {'distro': 'jazzy', 'servo_model': 'ideal', 'repeats': 5,
+              'git_sha': 'abc', 'cells_runs': {}}
+    kwargs.update(override)
+    with pytest.raises(ValueError):
+        a.build_result(**kwargs)
+
+
+def test_push_threshold_for():
+    r = a.build_result('jazzy', 'ideal', 5, 'abc', _cells())
+    info = r['push_threshold']
+    assert info['distro'] == 'jazzy' and info['n'] == 5 and info['falls'] == 0
+    assert info['min_ratio'] == pytest.approx(0.52)
+    assert info['push_threshold'] == pytest.approx(0.40)
+    assert a.push_threshold_for(r) == info
+    assert a.build_result('jazzy', 'real', 5, 'abc', _cells())['push_threshold'] is None
+    few = a.build_result('jazzy', 'ideal', 5, 'abc',
+                         _cells(flat_A_bwd10=[_run(ratio=0.6) for _ in range(4)]))
+    assert a.push_threshold_for(few) is None
+    missing = a.build_result('jazzy', 'ideal', 5, 'abc',
+                             {'flat_B_bwd10': [_run() for _ in range(5)]})
+    assert a.push_threshold_for(missing) is None
+    hi = a.build_result('jazzy', 'ideal', 10, 'abc',
+                        {'flat_A_bwd10': [_run(ratio=0.52) for _ in range(5)]
+                         + [_run(ratio=v) for v in (0.6, 0.66, 0.7, 0.8, 0.9)]})
+    assert hi['push_threshold']['push_threshold'] == pytest.approx(0.40)
+    lo = a.build_result('lyrical', 'ideal', 10, 'abc',
+                        {'flat_A_bwd10': [_run(ratio=0.30) for _ in range(5)]
+                         + [_run(ratio=v) for v in (0.4, 0.5, 0.6, 0.7, 0.8)]})
+    assert lo['push_threshold']['push_threshold'] == pytest.approx(0.20)
+
+
+def test_render_summary_content():
+    r = a.build_result('jazzy', 'ideal', 5, 'abcdef1234567890',
+                       _cells(flat_B_bwd05=[_run(ratio=0.3) for _ in range(5)]))
+    text = a.render_summary(r)
+    assert text.split('\n')[0] == '### Backward acceptance: jazzy / ideal (scoring)'
+    assert 'Repeats requested: 5, commit: abcdef123456' in text
+    for name in ('flat_A_bwd10', 'flat_B_bwd10', 'flat_B_bwd05', 'waves10_A_bwd10'):
+        assert name in text
+    assert 'PASS' in text and 'report' in text
+    assert '52.0%' in text
+    assert 'wall_s median' in text
+    assert 'Verdict: PASS' in text
+    assert 'Push-CI threshold (D-05): --backward-ratio 0.40' in text
+    assert a.render_summary(r) == text  # deterministic
+    lyrical = a.render_summary(a.build_result('lyrical', 'ideal', 5, 'abc', _cells()))
+    assert lyrical.split('\n')[0] == '### Backward acceptance: lyrical / ideal (reference only)'
+    low = a.render_summary(a.build_result('jazzy', 'ideal', 5, 'abc',
+                                          _cells(flat_A_bwd10=[_run(ratio=0.39) for _ in range(5)])))
+    assert 'FAIL' in low and '- flat_A_bwd10: ratio_min=0.390 < 0.40' in low
+    insuf = a.render_summary(a.build_result('jazzy', 'ideal', 5, 'abc',
+                                            _cells(flat_A_bwd10=[_run(ratio=0.6) for _ in range(4)])))
+    assert 'INSUFFICIENT' in insuf
+    real = a.render_summary(a.build_result('jazzy', 'real', 5, 'abc', _cells()))
+    assert 'not derivable' in real
+
+
+def test_render_summary_sanitizes():
+    r = a.build_result('jazzy', 'ideal', 5, 'ab|c`d\ne', _cells())
+    text = a.render_summary(r)
+    line = next(l for l in text.split('\n') if l.startswith('Repeats requested:'))
+    assert line == 'Repeats requested: 5, commit: ab?c?d?e'
+    r2 = a.build_result('jazzy', 'ideal', 5, 'abc', _cells())
+    r2['verdict'] = {'pass': False, 'failures': ['flat_A_bwd10: ratio|min `x`\ny']}
+    text2 = a.render_summary(r2)
+    assert "flat_A_bwd10: ratio/min 'x' y" in text2
+    assert 'ratio|min' not in text2
+    table_lines = sum(1 for l in text2.split('\n') if l.startswith('|'))
+    assert table_lines == 2 + len(r2['cells'])

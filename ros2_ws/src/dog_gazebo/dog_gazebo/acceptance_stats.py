@@ -265,3 +265,151 @@ def derive_push_threshold(min_ratio, lo=0.2, hi=0.4, step=0.05, margin=0.8):
         raise ValueError('min_ratio must be a finite number')
     raw = math.floor(round(margin * value / step, 9)) * step
     return round(min(hi, max(lo, raw)), 2)
+
+
+# ---------- result (schema 1)
+
+def push_threshold_for(result):
+    """The D-05 push-CI threshold for one acceptance result, or None.
+
+    Per distro and for the ideal model only: the threshold comes from the
+    minimum of cell PUSH_CELL over at least MIN_REPEATS valid repeats.
+    """
+    if not isinstance(result, dict) or result.get('servo_model') != 'ideal':
+        return None
+    cell = result.get('cells', {}).get(PUSH_CELL)
+    if not isinstance(cell, dict):
+        return None
+    summary = cell.get('summary')
+    if not isinstance(summary, dict):
+        return None
+    n = summary.get('n')
+    if isinstance(n, bool) or not isinstance(n, int) or n < MIN_REPEATS:
+        return None
+    min_ratio = _num(summary.get('ratio_min'))
+    if min_ratio is None:
+        return None
+    return {'distro': result['distro'], 'min_ratio': min_ratio,
+            'push_threshold': derive_push_threshold(min_ratio), 'n': n,
+            'falls': summary.get('falls')}
+
+
+def build_result(distro, servo_model, repeats, git_sha, cells_runs,
+                 floor_ratio=DEFAULT_FLOOR_RATIO):
+    """Assemble the acceptance result (schema 1) from runs[] lists per cell.
+
+    cells_runs maps CELLS names to lists of run_record entries; only the given
+    cells appear, in CELLS order. verdict.pass is True only when every scored
+    cell (rule != 'report') passes; failures carries '<cell>: <reason>' for
+    each reason of every scored cell whose pass is not True ('no scored cells'
+    when there is none). push_threshold is computed last through
+    push_threshold_for.
+    """
+    if distro not in DISTROS:
+        raise ValueError('distro must be one of %s' % (list(DISTROS),))
+    if servo_model not in SERVO_MODELS:
+        raise ValueError('servo_model must be one of %s' % (list(SERVO_MODELS),))
+    if isinstance(repeats, bool) or not isinstance(repeats, int) or repeats < 1:
+        raise ValueError('repeats must be an integer >= 1')
+    if not isinstance(cells_runs, dict):
+        raise ValueError('cells_runs must be a dict of runs[] lists')
+    for name in cells_runs:
+        if name not in CELLS:
+            raise ValueError('unknown cell %r' % name)
+    cells = {}
+    for name, cell in CELLS.items():
+        if name not in cells_runs:
+            continue
+        runs = cells_runs[name]
+        cells[name] = {'terrain': cell['terrain'], 'level': cell['level'],
+                       'heading_hold': cell['mode'] == 'A', 'cmd_vx': cell['cmd_vx'],
+                       'runs': runs,
+                       'summary': summarize_cell(name, runs, distro, floor_ratio)}
+    scored = [name for name in cells if CELLS[name]['rule'] != 'report']
+    failures = []
+    if not scored:
+        failures = ['no scored cells']
+    else:
+        for name in scored:
+            summary = cells[name]['summary']
+            if summary['pass'] is not True:
+                failures.extend('%s: %s' % (name, reason) for reason in summary['reasons'])
+    result = {'schema': SCHEMA_VERSION, 'distro': distro, 'servo_model': servo_model,
+              'repeats': repeats, 'git_sha': '' if git_sha is None else str(git_sha),
+              'cells': cells, 'scoring': dict(SCORING),
+              'verdict': {'pass': bool(scored) and not failures, 'failures': failures},
+              'push_threshold': None}
+    result['push_threshold'] = push_threshold_for(result)
+    return result
+
+
+# ---------- markdown summary
+
+def _clean_sha(value):
+    """A short commit id: [0-9A-Za-z._-] only, everything else '?', 12 chars."""
+    return re.sub(r'[^0-9A-Za-z._-]', '?', '' if value is None else str(value))[:12]
+
+
+def _clean_text(value):
+    """One markdown-safe line: no line breaks, table breaks or backticks."""
+    out = str(value).replace('\r', ' ').replace('\n', ' ')
+    return out.replace('`', "'").replace('|', '/')
+
+
+def _fmt_pct(value):
+    return 'n/a' if value is None else '%.1f%%' % (100 * value)
+
+
+def _fmt_one(value):
+    return 'n/a' if value is None else '%.1f' % value
+
+
+def render_summary(result):
+    """The markdown block for $GITHUB_STEP_SUMMARY (schema 1, deterministic,
+    English). git_sha and all free text are sanitised (T-01-03-04)."""
+    distro = result['distro']
+    scoring = result['scoring'][distro]
+    lines = ['### Backward acceptance: %s / %s (%s)'
+             % (distro, result['servo_model'],
+                'scoring' if scoring else 'reference only'),
+             'Repeats requested: %d, commit: %s'
+             % (result['repeats'], _clean_sha(result.get('git_sha'))),
+             '',
+             '| cell | rule | n | invalid | ratio min | ratio median | falls | '
+             'max abs dyaw5, deg | wall_s median | verdict |',
+             '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |']
+    for name, cell in result['cells'].items():
+        summary = cell['summary']
+        rule = CELLS[name]['rule']
+        if summary['pass'] is True:
+            verdict = 'PASS'
+        elif summary['pass'] is False:
+            verdict = 'FAIL'
+        elif rule == 'report':
+            verdict = 'report'
+        else:
+            verdict = 'INSUFFICIENT'
+        walls = [v for v in (_num(r.get('wall_s')) for r in cell['runs']) if v is not None]
+        lines.append('| %s | %s | %d | %d | %s | %s | %d | %s | %s | %s |'
+                     % (name, rule, summary['n'], summary['n_invalid'],
+                        _fmt_pct(summary['ratio_min']), _fmt_pct(summary['ratio_median']),
+                        summary['falls'], _fmt_one(summary['max_abs_dyaw5_deg']),
+                        _fmt_one(statistics.median(walls) if walls else None), verdict))
+    lines.append('')
+    lines.append('Verdict: %s' % ('PASS' if result['verdict']['pass'] else 'FAIL'))
+    for failure in result['verdict']['failures']:
+        lines.append('- %s' % _clean_text(failure))
+    lines.append('')
+    info = push_threshold_for(result)
+    if info is not None:
+        lines.append('Push-CI threshold (D-05): --backward-ratio %.2f '
+                     '(min ratio %.1f%% over n=%d on %s, ideal model)'
+                     % (info['push_threshold'], 100 * info['min_ratio'],
+                        info['n'], PUSH_CELL))
+    else:
+        lines.append('Push-CI threshold: not derivable (needs servo_model ideal, '
+                     'cell %s, at least %d valid repeats)' % (PUSH_CELL, MIN_REPEATS))
+    if not scoring:
+        lines.append('Reference distro (D-06): no 40%% requirement, floor ratio '
+                     'applies; results do not gate the phase.')
+    return '\n'.join(lines)
