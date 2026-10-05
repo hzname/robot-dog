@@ -134,8 +134,7 @@ void FakeI2cBus::dropWrites(int addr, bool drop)
 
 void FakeI2cBus::failRange(int first, int count)
 {
-  fail_first_ = first;
-  fail_count_ = count;
+  if (count > 0) {fail_ranges_.emplace_back(first, count);}
 }
 
 void FakeI2cBus::setTransactionHook(std::function<void()> hook)
@@ -163,7 +162,10 @@ const FakeI2cBus::Device * FakeI2cBus::deviceFor(int addr) const
 
 bool FakeI2cBus::fails(int number) const
 {
-  return fail_count_ > 0 && number >= fail_first_ && number < fail_first_ + fail_count_;
+  for (const auto & range : fail_ranges_) {
+    if (number >= range.first && number < range.first + range.second) {return true;}
+  }
+  return false;
 }
 
 int FakeI2cBus::beginTransaction(int addr)

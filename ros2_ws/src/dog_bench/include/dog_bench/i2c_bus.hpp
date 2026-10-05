@@ -8,6 +8,8 @@
 #include <functional>
 #include <map>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace dog_bench
 {
@@ -73,7 +75,8 @@ public:
   uint8_t reg8(int addr, uint8_t reg) const;
   /// The write still reports success but the register keeps its value.
   void dropWrites(int addr, bool drop);
-  /// Transactions numbered from 0: `count` consecutive ones from `first` fail.
+  /// Add a failing range: `count` consecutive transactions from `first`
+  /// (numbered from 0, counted since construction) fail. Ranges accumulate.
   void failRange(int first, int count);
   /// Called at the start of every transaction (tests move a fake clock here).
   void setTransactionHook(std::function<void()> hook);
@@ -113,8 +116,7 @@ private:
   int writes_{0};
   int pointer_reads_{0};
   int bare_reads_{0};
-  int fail_first_{-1};
-  int fail_count_{0};
+  std::vector<std::pair<int, int>> fail_ranges_;
 };
 
 }  // namespace dog_bench
