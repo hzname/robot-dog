@@ -5,6 +5,30 @@ on:
     branches: [main, master]
   pull_request:
   workflow_dispatch:
+    inputs:
+      acceptance:
+        description: Run the backward-walk acceptance job (CI only, D-04)
+        type: boolean
+        default: false
+      repeats:
+        description: Valid repeats per acceptance cell (1-20)
+        type: string
+        default: '5'
+      cells:
+        description: Acceptance cells to run
+        type: choice
+        options:
+          - all
+          - flat_A_bwd10
+          - flat_B_bwd10
+          - flat_B_bwd05
+          - waves10_A_bwd10
+          - rocks10_A_bwd10
+        default: all
+      strict:
+        description: Fail the job unless the acceptance verdict passes
+        type: boolean
+        default: false
 
 jobs:
   build-test:
