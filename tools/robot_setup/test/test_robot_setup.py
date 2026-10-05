@@ -158,6 +158,34 @@ def test_sensor_geometry_is_checked(cfg):
     msgs = [t for lv, t in rs.validate(v)[0] if lv == 'info']
     assert any(t.startswith('линия GS2') for t in msgs) and any(t.startswith('лидары: крест') for t in msgs)
     v['gs2_pitch_deg'] = 10  # nearly flat: the line is beyond the 0.3 m range
-    assert any(lv == 'error' and 'GS2' in t for lv, t in rs.validate(v)[0])
+    assert any(lv == 'warn' and 'GS2' in t for lv, t in rs.validate(v)[0])
     v['gs2_pitch_deg'], v['tof_fl_pitch_deg'] = 40, 2
-    assert any(lv == 'error' and 'ToF FL' in t for lv, t in rs.validate(v)[0])
+    assert any(lv == 'warn' and 'ToF FL' in t for lv, t in rs.validate(v)[0])
+
+
+def test_sensor_errors_do_not_block_save_and_check_while_the_sensors_are_not_on_the_robot(cfg):
+    v = rs.load(cfg)
+    v.update({'thigh': 130, 'calf': 130, 'stand_height': 200, 'max_height': 205})
+    msgs = rs.validate(v)[0]
+    assert not [m for m in msgs if m[0] == 'error'], msgs
+    assert any(lv == 'warn' and 'GS2 не достаёт до пола' in t and 'датчика нет на роботе' in t for lv, t in msgs)
+    assert rs.save(cfg, v) != '(ничего не изменилось)'
+    assert rs.main(['--check', '--config', cfg]) == 0
+
+
+def test_sensor_errors_block_for_sensors_on_the_robot(cfg, monkeypatch):
+    monkeypatch.setattr(rs, 'SENSORS_ON_ROBOT', frozenset({'gs2', 'tof', 'x_lidar'}))
+    v = rs.load(cfg)
+    v.update({'thigh': 130, 'calf': 130, 'stand_height': 200, 'max_height': 205,
+              'gs2_pitch_deg': 10, 'tof_fl_pitch_deg': 2, 'x_lidar_tilt_deg': 0})
+    msgs = rs.validate(v)[0]
+    assert any(lv == 'error' and 'GS2 не достаёт до пола' in t for lv, t in msgs)
+    assert any(lv == 'error' and 'ToF FL' in t for lv, t in msgs)
+    assert any(lv == 'error' and 'лидары: плоскость не пересекает пол' in t for lv, t in msgs)
+
+
+def test_sensor_checks_are_skipped_when_the_flag_is_off():
+    v = rs.load(rs.CONFIG)
+    v.update({'gs2': 0, 'tof': 0, 'x_lidar': 0, 'stand_height': 200})
+    msgs = [t for _, t in rs.validate(v)[0]]
+    assert not any('GS2' in t or 'ToF' in t or 'лидары' in t for t in msgs)

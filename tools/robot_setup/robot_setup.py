@@ -354,15 +354,34 @@ def _floor_hit(p, R, a, floor_z):
     return (t, p[0] + t * u[0], p[1] + t * u[1]) if t > 0 else None
 
 
+# Perception sensors physically on the robot (docs/HEAD.md: none, they exist
+# only in simulation). The geometry of the others is reported as a warning;
+# add 'gs2', 'tof' or 'x_lidar' here to make the problem block saving again.
+SENSORS_ON_ROBOT = frozenset()
+
+
+def _sensor_flag(kind, text):
+    """Sensor geometry message: an error for a sensor on the robot, else a warning."""
+    if kind in SENSORS_ON_ROBOT:
+        return ('error', text)
+    return ('warn', text + ' — датчика нет на роботе, на сохранение не влияет')
+
+
 def sensor_checks(g, out, info):
-    """Where the sensors meet the floor in the stand pose (all in mm, body frame)."""
+    """Where the sensors meet the floor in the stand pose (all in mm, body frame).
+
+    Sensor geometry problems are errors only for a sensor in SENSORS_ON_ROBOT;
+    for a simulated-only sensor they are warnings, so entering new body
+    measurements (a different stand_height, hip_x, hip_y) is not blocked by
+    template sensor values the real robot does not carry (D-18).
+    """
     floor = -g['stand_height']
     foot_x, foot_y = g['hip_x'], g['hip_y'] + g['hip_offset']
     if int(g['gs2']):
         p, R = (g['gs2_x'], g['gs2_y'], g['gs2_z']), _rot(0, g['gs2_pitch_deg'], 0)
         hit = _floor_hit(p, R, 0.0, floor)
         if hit is None or hit[0] > 300:
-            out.append(('error', 'GS2 не достаёт до пола в стойке (дальность 300 мм): увеличьте наклон вниз'))
+            out.append(_sensor_flag('gs2', 'GS2 не достаёт до пола в стойке (дальность 300 мм): увеличьте наклон вниз'))
         else:
             r, x, _ = hit
             half = math.acos(min(1.0, r / 300.0))
@@ -382,7 +401,7 @@ def sensor_checks(g, out, info):
             R = _rot(0, g[f'tof_{n}_pitch_deg'], g[f'tof_{n}_yaw_deg'])
             hit = _floor_hit(p, R, 0.0, floor)
             if hit is None or hit[0] > 1000:
-                out.append(('error', f'ToF {n.upper()}: луч не попадает на пол ближе 1 м'))
+                out.append(_sensor_flag('tof', f'ToF {n.upper()}: луч не попадает на пол ближе 1 м'))
                 continue
             r, x, y = hit
             out.append(('info', f'ToF {n.upper()}: пятно на полу x {x:.0f}, y {y:+.0f} мм, дальность {r:.0f} мм'))
@@ -402,7 +421,7 @@ def sensor_checks(g, out, info):
                     best = hit[1]
             crosses.append(best)
         if None in crosses:
-            out.append(('error', 'лидары: плоскость не пересекает пол впереди на оси — увеличьте наклон α'))
+            out.append(_sensor_flag('x_lidar', 'лидары: плоскость не пересекает пол впереди на оси — увеличьте наклон α'))
         else:
             x = max(crosses)
             info['x_lidar_cross_mm'] = round(x)
