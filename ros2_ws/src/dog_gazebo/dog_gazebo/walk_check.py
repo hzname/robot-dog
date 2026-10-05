@@ -5,6 +5,13 @@ ground-truth odometry from Gazebo. Exit code 0 = all maneuvers passed.
   ros2 run dog_gazebo walk_check
   ros2 run dog_gazebo walk_check --trace run.json   # also save the odometry trace
   ros2 run dog_gazebo walk_check --trace run.json --record   # + joints and IMU at 30 Hz
+  ros2 run dog_gazebo walk_check --maneuvers backward --backward-speed 0.05
+
+--maneuvers runs a subset of the flat routine in routine order (the lie check
+is skipped for a subset); --backward-speed is its magnitude [m/s]. Both are
+ignored on slope (the slope table and its -0.14 * T target stay fixed). The
+value dyaw5_deg of a maneuver is the yaw drift over the commanded seconds,
+before the 1.5 s coast that dyaw_deg includes.
 
 Thresholds are deliberately loose: an open-loop trot on a 1.5 kg servo dog
 slips and drifts; this catches sign errors, falls and broken gaits.
@@ -15,7 +22,6 @@ so tilt and body height are judged against the ground, not the horizon:
 Distances are measured along the slope in the robot's starting frame.
 """
 
-import argparse
 import json
 import math
 import sys
@@ -30,6 +36,7 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, qos_profile_sensor_data, Rel
 from std_msgs.msg import String
 
 from dog_gazebo import terrain
+from dog_gazebo.walk_check_args import DEFAULT_BACKWARD_SPEED, lie_wanted, maneuver_plan, parse_args
 
 
 def _rpy(q):
@@ -53,11 +60,14 @@ MIN_BODY_HEIGHT = 0.108
 
 class WalkCheck:
     def __init__(self, kind='flat', level=0.0, min_ratio=0.4, max_tilt=20.0, seconds=5.0,
-                 record=False, backward_ratio=None):
+                 record=False, backward_ratio=None, backward_speed=DEFAULT_BACKWARD_SPEED,
+                 maneuvers=None):
         self.normal = np.array(terrain.normal(kind, level))
         self.kind, self.level = kind, level
         self.min_ratio, self.max_tilt, self.seconds = min_ratio, max_tilt, seconds
         self.backward_ratio = min_ratio if backward_ratio is None else backward_ratio
+        self.backward_speed = backward_speed
+        self.maneuvers = maneuvers
         self.fallen = False
         self.record = record
         self.joints = {}
@@ -169,6 +179,7 @@ class WalkCheck:
         t = Twist()
         t.linear.x, t.linear.y, t.angular.z = float(vx), float(vy), float(wz)
         tilt = self.spin(seconds, lambda: self.vel.publish(t))
+        dyaw5 = self.yaw_unwrapped - yaw0   # the drift over the commanded seconds only
         # release the stick like an operator: zero twist, then coast to a stop
         tilt = max(tilt, self.spin(1.5, lambda: self.vel.publish(Twist())))
         p1 = self.odom.pose.pose.position
@@ -184,7 +195,7 @@ class WalkCheck:
         self.check(name, ok, 'dx=%+.2fm dy=%+.2fm dyaw=%+.0fdeg  (%d%% of command)  tilt<=%.0fdeg z=%.3f' % (
             dx, dy, math.degrees(dyaw), 100 * ratio, tilt, z1),
             cmd=[vx, vy, wz], seconds=seconds, dx=dx, dy=dy, dyaw_deg=math.degrees(dyaw),
-            ratio=ratio, tilt_deg=tilt, z=z1)
+            dyaw5_deg=math.degrees(dyaw5), ratio=ratio, tilt_deg=tilt, z=z1)
 
     def run(self):
         print('waiting for simulation...', flush=True)
@@ -210,56 +221,34 @@ class WalkCheck:
         self.check('stand', self.state == 'stand' and 0.14 < z < 0.19 and self.tilt() < self.max_tilt,
                    'state=%s z=%.3f tilt=%.0fdeg' % (self.state, z, self.tilt()), z=z)
         T = self.seconds
-        if self.kind == 'slope':
-            # climb onto the ramp, traverse and turn on it, then walk back down
-            self.maneuver('forward', 0.12, 0, 0, T, ('x', 0.12 * T))
-            self.maneuver('left', 0, 0.06, 0, T, ('y', 0.06 * T))
-            self.maneuver('right', 0, -0.06, 0, T, ('y', -0.06 * T))
-            self.maneuver('turn_ccw', 0, 0, 0.5, T * 0.5, ('yaw', 0.25 * T))
-            self.maneuver('turn_cw', 0, 0, -0.5, T * 0.5, ('yaw', -0.25 * T))
-            self.maneuver('backward', -0.10, 0, 0, T * 1.4, ('x', -0.14 * T))
-        else:
-            self.maneuver('forward', 0.12, 0, 0, T, ('x', 0.12 * T))
-            self.maneuver('backward', -0.10, 0, 0, T, ('x', -0.10 * T))
-            self.maneuver('left', 0, 0.06, 0, T, ('y', 0.06 * T))
-            self.maneuver('right', 0, -0.06, 0, T, ('y', -0.06 * T))
-            self.maneuver('turn_ccw', 0, 0, 0.5, T, ('yaw', 0.5 * T))
-            self.maneuver('turn_cw', 0, 0, -0.5, T, ('yaw', -0.5 * T))
-            # walking and turning at once: an arc of ~0.33 m radius
-            self.maneuver('arc_left', 0.10, 0, 0.3, T, ('yaw', 0.3 * T))
-            self.maneuver('arc_right', 0.10, 0, -0.3, T, ('yaw', -0.3 * T))
-        self.phase = 'lie'
-        self.cmd.publish(String(data='lie'))
-        # finishes the steps first; wall-clock wait, so allow for a slow simulation
-        end = time.time() + 10.0
-        while self.state != 'lying' and time.time() < end and not self.fallen:
+        if self.kind == 'slope' and (self.maneuvers is not None
+                                     or self.backward_speed != DEFAULT_BACKWARD_SPEED):
+            print('note: --maneuvers and --backward-speed do not apply on slope', flush=True)
+        # slope: climb onto the ramp, traverse and turn on it, then walk back down
+        for name, vx, vy, wz, seconds, expect in maneuver_plan(
+                self.kind, T, self.backward_speed, self.maneuvers):
+            self.maneuver(name, vx, vy, wz, seconds, expect)
+        if lie_wanted(self.kind, self.maneuvers):
+            self.phase = 'lie'
+            self.cmd.publish(String(data='lie'))
+            # finishes the steps first; wall-clock wait, so allow for a slow simulation
+            end = time.time() + 10.0
+            while self.state != 'lying' and time.time() < end and not self.fallen:
+                self.spin(0.5)
             self.spin(0.5)
-        self.spin(0.5)
-        z = self.height()
-        self.check('lie', self.state == 'lying' and z < 0.12 and not self.fallen,
-                   'state=%s z=%.3f' % (self.state, z), z=z)
+            z = self.height()
+            self.check('lie', self.state == 'lying' and z < 0.12 and not self.fallen,
+                       'state=%s z=%.3f' % (self.state, z), z=z)
         failed = [r for r in self.results if not r[1]]
         print('%d/%d passed' % (len(self.results) - len(failed), len(self.results)))
         return 1 if failed else 0
 
 
 def main():
-    ap = argparse.ArgumentParser(description='Drive the simulated dog and check the odometry.')
-    ap.add_argument('--trace', help='write results + odometry trace to this JSON file')
-    ap.add_argument('--terrain', default='flat', choices=['flat', 'slope', 'waves', 'rough'])
-    ap.add_argument('--level', type=float, default=0.0, help='slope [deg] or obstacle height [mm]')
-    ap.add_argument('--min-ratio', type=float, default=0.4, help='share of the command to pass')
-    ap.add_argument('--backward-ratio', type=float,
-                    help='... for the backward manoeuvre (default: --min-ratio); 0 = only no fall, '
-                    'no tilt, no sagging (backward on uneven ground is the weak manoeuvre, TERRAIN.md)')
-    ap.add_argument('--max-tilt', type=float, default=20.0, help='body tilt vs. the ground [deg]')
-    ap.add_argument('--seconds', type=float, default=5.0, help='duration of each maneuver')
-    ap.add_argument('--record', action='store_true',
-                    help='with --trace: also record joints and IMU at 30 Hz')
-    args, ros_args = ap.parse_known_args()
+    args, ros_args = parse_args()
     rclpy.init(args=ros_args)
     checker = WalkCheck(args.terrain, args.level, args.min_ratio, args.max_tilt, args.seconds,
-                        args.record, args.backward_ratio)
+                        args.record, args.backward_ratio, args.backward_speed, args.maneuvers)
     try:
         code = checker.run()
         if args.trace:
