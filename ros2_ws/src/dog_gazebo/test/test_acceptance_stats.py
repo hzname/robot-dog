@@ -467,3 +467,110 @@ def test_render_summary_sanitizes():
     assert 'ratio|min' not in text2
     table_lines = sum(1 for l in text2.split('\n') if l.startswith('|'))
     assert table_lines == 2 + len(r2['cells'])
+
+
+# ---------- CLI: python3 -m dog_gazebo.acceptance_stats threshold
+
+def _dump(tmp_path, result, name='result.json'):
+    path = tmp_path / name
+    path.write_text(json.dumps(result))
+    return str(path)
+
+
+def _five(ratio=0.6):
+    return [_run(ratio=ratio) for _ in range(5)]
+
+
+def test_main_threshold_prints_line(tmp_path, capsys):
+    runs = [_run(ratio=r) for r in (0.52, 0.6, 0.66, 0.7, 0.8)]
+    jazzy = _dump(tmp_path, a.build_result('jazzy', 'ideal', 5, 'sha123',
+                                           {'flat_A_bwd10': runs}), 'jazzy.json')
+    lyrical = _dump(tmp_path, a.build_result('lyrical', 'ideal', 5, 'sha123',
+                                             {'flat_A_bwd10': [_run(ratio=r)
+                                                               for r in (0.30, 0.4, 0.5, 0.6, 0.7)]}),
+                     'lyrical.json')
+    assert a.main(['threshold', jazzy, lyrical]) == 0
+    assert capsys.readouterr().out == ('distro=jazzy min_ratio=0.520 push_threshold=0.40\n'
+                                       'distro=lyrical min_ratio=0.300 push_threshold=0.20\n')
+
+
+def test_main_threshold_not_derivable(tmp_path, capsys):
+    runs = [_run(ratio=r) for r in (0.52, 0.6, 0.66, 0.7, 0.8)]
+    good = _dump(tmp_path, a.build_result('jazzy', 'ideal', 5, 'sha',
+                                          {'flat_A_bwd10': runs}), 'good.json')
+    real = _dump(tmp_path, a.build_result('jazzy', 'real', 5, 'sha',
+                                          {'flat_A_bwd10': runs}), 'real.json')
+    few = _dump(tmp_path, a.build_result('jazzy', 'ideal', 5, 'sha',
+                                         {'flat_A_bwd10': [_run(ratio=0.6) for _ in range(4)]}),
+                'few.json')
+    missing = _dump(tmp_path, a.build_result('jazzy', 'ideal', 5, 'sha',
+                                             {'flat_B_bwd10': _five()}), 'missing.json')
+    assert a.main(['threshold', real]) == 1
+    assert 'cannot derive' in capsys.readouterr().err
+    assert a.main(['threshold', few]) == 1
+    assert 'cannot derive' in capsys.readouterr().err
+    assert a.main(['threshold', missing]) == 1
+    assert 'cannot derive' in capsys.readouterr().err
+    assert a.main(['threshold', good, real]) == 1  # the good line is still printed
+    cap = capsys.readouterr()
+    assert 'distro=jazzy min_ratio=0.520 push_threshold=0.40' in cap.out
+    assert 'cannot derive' in cap.err
+
+
+def test_main_threshold_bad_input(tmp_path, capsys):
+    broken = tmp_path / 'broken.json'
+    broken.write_text('{not json')
+    assert a.main(['threshold', str(tmp_path / 'nope.json')]) == 2
+    assert a.main(['threshold', str(broken)]) == 2
+    bad_schema = _dump(tmp_path, {'schema': 2, 'distro': 'jazzy'}, 'schema.json')
+    assert a.main(['threshold', bad_schema]) == 2
+    bad_distro = _dump(tmp_path, {'schema': 1, 'distro': 'foxy'}, 'distro.json')
+    assert a.main(['threshold', bad_distro]) == 2
+    err = capsys.readouterr().err
+    assert 'error:' in err and 'Traceback' not in err
+    with pytest.raises(SystemExit) as exc:
+        a.main([])
+    assert exc.value.code == 2
+    with pytest.raises(SystemExit) as exc:
+        a.main(['bogus', str(broken)])
+    assert exc.value.code == 2
+
+
+def test_main_threshold_warns_on_falls(tmp_path, capsys):
+    runs = ([_run(ratio=r) for r in (0.52, 0.6, 0.66, 0.7, 0.8)]
+            + [_run(status='fell', ratio=0.6)])
+    path = _dump(tmp_path, a.build_result('jazzy', 'ideal', 6, 'sha',
+                                          {'flat_A_bwd10': runs}), 'fell.json')
+    assert a.main(['threshold', path]) == 0
+    cap = capsys.readouterr()
+    assert 'distro=jazzy min_ratio=0.520 push_threshold=0.40' in cap.out
+    assert 'warning' in cap.err and 'has 1 fall(s)' in cap.err
+
+
+def test_main_writes_nothing(tmp_path, capsys):
+    runs = [_run(ratio=r) for r in (0.52, 0.6, 0.66, 0.7, 0.8)]
+    path = _dump(tmp_path, a.build_result('jazzy', 'ideal', 5, 'sha',
+                                          {'flat_A_bwd10': runs}))
+    before = sorted(p.name for p in tmp_path.iterdir())
+    assert a.main(['threshold', path]) == 0
+    capsys.readouterr()
+    assert sorted(p.name for p in tmp_path.iterdir()) == before
+
+
+def test_module_entry_point(tmp_path):
+    runs = [_run(ratio=r) for r in (0.52, 0.6, 0.66, 0.7, 0.8)]
+    path = _dump(tmp_path, a.build_result('jazzy', 'ideal', 5, 'sha',
+                                          {'flat_A_bwd10': runs}))
+    env = dict(os.environ, PYTHONPATH=str(PACKAGE_ROOT))
+    proc = subprocess.run([sys.executable, '-m', 'dog_gazebo.acceptance_stats',
+                           'threshold', path], env=env, capture_output=True, text=True)
+    assert proc.returncode == 0
+    assert proc.stdout == 'distro=jazzy min_ratio=0.520 push_threshold=0.40\n'
+
+
+def test_packaging_declares_pytest():
+    setup_py = (PACKAGE_ROOT / 'setup.py').read_text()
+    package_xml = (PACKAGE_ROOT / 'package.xml').read_text()
+    assert "extras_require={'test': ['pytest']}," in setup_py
+    assert 'walk_check = dog_gazebo.walk_check:main' in setup_py  # entry_points untouched
+    assert '<test_depend>python3-pytest</test_depend>' in package_xml

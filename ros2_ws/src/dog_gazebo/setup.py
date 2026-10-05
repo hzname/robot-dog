@@ -20,6 +20,7 @@ setup(
     maintainer_email='hzname@example.com',
     description='Gazebo simulation of the robot dog.',
     license='MIT',
+    extras_require={'test': ['pytest']},
     entry_points={'console_scripts': [
         'joint_command_bridge = dog_gazebo.joint_command_bridge:main',
         'walk_check = dog_gazebo.walk_check:main',

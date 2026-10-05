@@ -16,10 +16,12 @@ not 1. Nothing is written to disk. The acceptance CLI (plan 01-11), the CI job
 (plan 01-13) and the push-CI threshold edit (plan 01-17) call these functions.
 """
 
+import argparse
 import json
 import math
 import re
 import statistics
+import sys
 
 from dog_gazebo.terrain_sweep import never_stood
 
@@ -413,3 +415,56 @@ def render_summary(result):
         lines.append('Reference distro (D-06): no 40%% requirement, floor ratio '
                      'applies; results do not gate the phase.')
     return '\n'.join(lines)
+
+
+# ---------- CLI
+
+def main(argv=None):
+    """`python3 -m dog_gazebo.acceptance_stats threshold RESULT.json [...]`.
+
+    Reads acceptance results (schema 1; only json.load, no eval, no pickle) and
+    prints one `distro=<d> min_ratio=<m> push_threshold=<v>` line per file that
+    yields a threshold. The exit code is the highest seen: 0 everything
+    derived, 1 at least one file yielded no threshold, 2 an unreadable file or
+    a schema/distro that is not 1/known. Nothing is written to disk.
+    """
+    ap = argparse.ArgumentParser(
+        prog='python3 -m dog_gazebo.acceptance_stats',
+        description='Derive the push-CI --backward-ratio from an acceptance result (D-05).')
+    sub = ap.add_subparsers(dest='command', required=True)
+    threshold = sub.add_parser('threshold',
+                               help='print the push-CI threshold per result file')
+    threshold.add_argument('paths', nargs='+', help='acceptance result JSON files (schema 1)')
+    args = ap.parse_args(argv)
+    code = 0
+    for path in args.paths:
+        try:
+            with open(path) as handle:
+                data = json.load(handle)
+            if not isinstance(data, dict):
+                raise ValueError('not a JSON object')
+            if data.get('schema') != SCHEMA_VERSION:
+                raise ValueError('schema is not %d' % SCHEMA_VERSION)
+            if data.get('distro') not in DISTROS:
+                raise ValueError('distro %r is not in %s' % (data.get('distro'), list(DISTROS)))
+        except (OSError, ValueError) as exc:
+            print('error: %s: %s' % (path, exc), file=sys.stderr)
+            code = max(code, 2)
+            continue
+        info = push_threshold_for(data)
+        if info is None:
+            print('cannot derive push threshold from %s: needs servo_model ideal, '
+                  'cell %s and at least %d valid repeats'
+                  % (path, PUSH_CELL, MIN_REPEATS), file=sys.stderr)
+            code = max(code, 1)
+            continue
+        print('distro=%s min_ratio=%.3f push_threshold=%.2f'
+              % (info['distro'], info['min_ratio'], info['push_threshold']))
+        if info['falls']:
+            print('warning: %s: %s has %d fall(s), the threshold is derived from '
+                  'all valid repeats' % (path, PUSH_CELL, info['falls']), file=sys.stderr)
+    return code
+
+
+if __name__ == '__main__':
+    sys.exit(main())
