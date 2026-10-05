@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Замеры на столе и ход назад в симуляции
 status: executing
-stopped_at: Completed 01-09-PLAN.md
-last_updated: "2026-10-05T19:08:21.336Z"
+stopped_at: Completed 01-10-PLAN.md
+last_updated: "2026-10-05T20:09:31.403Z"
 last_activity: 2026-10-05
 last_activity_desc: Phase 01 execution started
-state_head: 839513cc9b65f48ab625627dfd50f424383d1262
+state_head: 074558bfa42e260e5c3cd4bfc8061ec06ed56a18
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 9
+  completed_plans: 10
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 01 (Замеры на столе и ход назад в симуляции) — EXECUTING
-Plan: 10 of 17
+Plan: 11 of 17
 Status: Ready to execute
 Last activity: 2026-10-05 — Phase 01 execution started
 
@@ -67,6 +67,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P07 | 6 min | 4 tasks | 7 files |
 | Phase 01 P08 | 34 min | 4 tasks | 5 files |
 | Phase 01 P09 | 13 min | 3 tasks | 12 files |
+| Phase 01 P10 | 58 min | 4 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,10 @@ Recent decisions affecting current work:
 - [Phase 01]: Plan 01-09: SafetyGuard judges every reading unfiltered, updates the whole state and returns one event by priority (saturation, overcurrent, PCA, INA, tick overrun, implausible shunt, timeout) once; an invalid configuration fails closed with INA_ERRORS on the first update and error readings never clear the overcurrent window (D-10)
 - [Phase 01]: Plan 01-09: FakeI2cBus::writeBytes fixed to wire semantics (regs[first + (i - 1)]): the release frame {0xFA,0,0,0,0x10} lands on ALL_LED_OFF_H, not PRE_SCALE; no prior test exercised writeBytes (fix 839513c, WINDOWS id 3)
 - [Phase 01]: Plan 01-09: Pca9685Out preflight reads only (MODE1 awake with auto-increment, PRE_SCALE 121, no foreign live channel) and the destructor releases an armed chip with up to 3 attempts; a refused or never-armed object writes nothing (D-09, D-10)
+- [Phase 01]: Plan 01-10: servo_profile.py is pure stdlib (math/dataclasses/collections) in dog_description; the bridge and the launch file only import it, so all new tests run in the existing dog_description pytest job on Jazzy and Lyrical (no ci.yml change, D-24)
+- [Phase 01]: Plan 01-10: the ideal-model guard is PINNED_DESC + GOLDEN_SHA256 (sha256 of the plain and Gazebo URDF strings, taken on the untouched tree); the pin does not follow DEFAULT_DESCRIPTION, so plan 01-15 can sync code defaults without reddening it (D-15)
+- [Phase 01]: Plan 01-10: with zeros the bridge forwards each position in the same call with the previous order and numbers and creates no timer; the 500 Hz drain timer exists only when delay_s > 0 (D-15)
+- [Phase 01]: Plan 01-10: knee_ratio k gives the knee joint velocity/k and effort*k, rounded once from the exact numbers, and the calf cmd_max follows the joint's own velocity (D-20); servo_speed overrides only description.servo_velocity (D-13)
 
 ### Pending Todos
 
@@ -131,6 +136,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-05T19:08:21.298Z
-Stopped at: Completed 01-09-PLAN.md
+Last session: 2026-10-05T20:09:31.364Z
+Stopped at: Completed 01-10-PLAN.md
 Resume file: None
