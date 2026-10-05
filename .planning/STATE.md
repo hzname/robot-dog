@@ -3,11 +3,11 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Замеры на столе и ход назад в симуляции
 status: executing
-stopped_at: Completed 01-06-PLAN.md
-last_updated: "2026-10-05T17:42:34.272Z"
+stopped_at: Completed 01-07-PLAN.md
+last_updated: "2026-10-05T17:54:44.414Z"
 last_activity: 2026-10-05
 last_activity_desc: Phase 01 execution started
-state_head: 2baaecc0b0a221958cab4dcbfa264adc5b263f77
+state_head: 3f04d9e653376e3bc01f35a1dfe0db830c953ae8
 progress:
   total_phases: 8
   completed_phases: 0
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 01 (Замеры на столе и ход назад в симуляции) — EXECUTING
-Plan: 7 of 17
+Plan: 8 of 17
 Status: Ready to execute
 Last activity: 2026-10-05 — Phase 01 execution started
 
@@ -64,6 +64,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P04 | 8 min | 3 tasks | 4 files |
 | Phase 01 P05 | 10 min | 3 tasks | 11 files |
 | Phase 01 P06 | 23 min | 3 tasks | 6 files |
+| Phase 01 P07 | 6 min | 4 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -95,6 +96,9 @@ Recent decisions affecting current work:
 - [Phase 01]: tools/servo_speed contract is fixed by plan 01-06: CSV t_s,stroke_id,direction,cmd_us,shunt_raw,bus_raw and <csv>.meta.json with required shunt_ohm/us_per_deg/speeds_rad_s/strokes_per_speed; analyze CLI exit codes 0/1/2; result keys and flags per README; direction -1/0/+1 outside strokes. Plans 01-12 (session), 01-13 (CI job) and 01-14 (owner graph) consume these names without redefining them — The bench session writes the CSV and the job runs the same pytest; one plan must fix the format or the three plans drift (same rule as the phase-1 config contract from 01-02)
 - [Phase 01]: synth.py b_coef default is 0.0001, not the prototype 0.0002: at the sharper value the +/-1 ms front-phase jitter of the current edges inflated the ramp_timing saturated-pair distances past eps (6.0 rad/s, 8 mA, up direction 1.33x eps, kink lost); at 0.0001 the worst pair is 0.62x eps over a seed sweep and v_dur stays 2-4% low — The plan explicitly allows adjusting kp/a_max/tau_i/b_coef within reason when the analyzer tests fail; the reason is recorded in the synth.py docstring
 - [Phase 01]: analyze.py per-direction kernels compute I_plateau over that direction's own strokes; the mixed value made up/down plateau currents identical and hid the friction asymmetry (now up - down = 0.079 A, flag direction_mismatch is meaningful) — Per-direction report must carry its own sigma_rep, eps and I_plateau (D-08); the mixed average was a bug surfaced by the per_direction test
+- [Phase 01]: A1: docs/TERRAIN.md keeps 8/8 in the 6-degree slope row with an explicit (уклон: stand, 6 манёвров, lie) mark; 10/10 (stand, 8 манёвров, lie) is recorded for the flat floor (walk_check.py runs 8 checks on slope, 10 on flat) — a blind replacement would have written a wrong count
+- [Phase 01]: The measurement sheet fixes the D-22 check as Step 1.0 with an explicit STOP: a mismatch of the hip axis, the three-joint leg scheme, the knee direction or the axis height difference (>5 mm) stops the process and returns to the owner; the kinematics is never changed silently (PR-06)
+- [Phase 01]: Docs now describe servo_model:=real and the auto period (period table from plan 01-04); dog_hardware was not touched — the driver speed clamp goes to Phase 3 via docs/REVIEW.md item 26 (PR-03)
 
 ### Pending Todos
 
@@ -118,6 +122,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-05T17:42:34.230Z
-Stopped at: Completed 01-06-PLAN.md
+Last session: 2026-10-05T17:54:33.062Z
+Stopped at: Completed 01-07-PLAN.md
 Resume file: None
