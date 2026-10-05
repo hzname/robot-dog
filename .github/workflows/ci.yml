@@ -342,3 +342,16 @@ jobs:
             ros2_ws/acceptance_*.json
             ros2_ws/acceptance_*_summary.md
             ros2_ws/*.sim.log
+
+  servo-speed:
+    name: servo speed analysis (tools/servo_speed)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install numpy pytest
+      - run: python -m pytest -q tools/servo_speed/tests
