@@ -37,7 +37,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Скрипт приёмки хода назад выводит минимум и медиану по ≥ 5 повторам (ровный пол, волны 10 мм, камни 10 мм); порог `--backward-ratio` в CI поднят выше 0.2 только после измерения разброса
   5. После правок походки `walk_check` проходит 8/8 на обоих дистрибутивах, пиковая скорость сустава при предельных командах < 5.5 рад/с
 
-**Plans**: 1/17 plans executed
+**Plans**: 2/17 plans executed
 
 Plans:
 **Wave 1**
@@ -46,7 +46,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — контракт конфигурации (`robot.yaml`, `robot_setup`): ключи автопериода и профиля серв, `body_com_x`
+- [x] 01-02-PLAN.md — контракт конфигурации (`robot.yaml`, `robot_setup`): ключи автопериода и профиля серв, `body_com_x`
 - [ ] 01-03-PLAN.md — `acceptance_stats`: статистика приёмки, минимум и медиана по повторам
 - [ ] 01-04-PLAN.md — ядро `servo_limits`: пик скорости сустава и минимальный период
 - [ ] 01-05-PLAN.md — пакет `dog_bench`: шина I2C, быстрый INA219, трассер `selftest`
@@ -228,7 +228,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Замеры на столе и ход назад в симуляции | 1/17 | In Progress|  |
+| 1. Замеры на столе и ход назад в симуляции | 2/17 | In Progress|  |
 | 2. Устойчивость хода в симуляции | 0/TBD | Not started | - |
 | 3. Защита драйвера серв | 0/TBD | Not started | - |
 | 4. Защита корпуса и диагностика | 0/TBD | Not started | - |
