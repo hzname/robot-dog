@@ -1,0 +1,61 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-10-05T09:44:24.235Z",
+  "phase": "01",
+  "phase_name": "Замеры на столе и ход назад в симуляции",
+  "phase_dir": ".planning/phases/01-zamery-na-stole-i-hod-nazad-v-simulyatsii",
+  "plan": 6,
+  "task": 1,
+  "total_tasks": 3,
+  "status": "paused",
+  "grain_note": "Проект исполняется по-планово (план = единица учёта); completed_tasks/remaining_tasks перечисляют ПЛАНЫ фазы, не отдельные задачи.",
+  "completed_tasks": [
+    {"id": "01-01", "name": "Ветка фазы + tools/ci_dispatch/ci_dispatch.sh + tools/local_gtest/run.sh", "status": "done", "commit": "925214d"},
+    {"id": "01-02", "name": "Контракт конфигурации Phase 1 (robot.yaml, robot_setup, тесты)", "status": "done", "commit": "9a5d3ef"},
+    {"id": "01-03", "name": "dog_gazebo/acceptance_stats + pytest (68 тестов)", "status": "done", "commit": "aee4276"},
+    {"id": "01-04", "name": "ROS-free ядро dog_control/servo_limits + gtest (9 тестов)", "status": "done", "commit": "4236ba0"},
+    {"id": "01-05", "name": "Пакет dog_bench (fake I2C, INA219, selftest CLI) (6+5 тестов)", "status": "done", "commit": "0a6909c"}
+  ],
+  "remaining_tasks": [
+    {"id": "01-06", "name": "tools/servo_speed — офлайн-анализ скорости насыщения серв", "status": "interrupted_before_changes"},
+    {"id": "01-07", "name": "Документы владельца и процесса (лист замеров, заказ деталей, REVIEW)", "status": "not_started"},
+    {"id": "01-08", "name": "Период походки из скорости серв (locomotion)", "status": "not_started"},
+    {"id": "01-09", "name": "Слои dog_bench: рампа, предохранитель, PWM-выход", "status": "not_started"},
+    {"id": "01-10", "name": "Профиль серв в симуляции (dog_description)", "status": "not_started"},
+    {"id": "01-11", "name": "walk_check: манёвры --maneuvers", "status": "not_started"},
+    {"id": "01-12", "name": "Сборка рампы/предохранителя/PWM/сессии", "status": "not_started"},
+    {"id": "01-13", "name": "ci.yml: вход и job-ы (приёмка хода назад, анализ скоростей)", "status": "not_started"},
+    {"id": "01-14", "name": "ЧЕКПОИНТ ВЛАДЕЛЬЦА: замер скорости MG996R на роботе", "status": "not_started"},
+    {"id": "01-15", "name": "Ввод измеренных чисел в умолчания", "status": "not_started"},
+    {"id": "01-16", "name": "Форма траектории переноса при заднем ходе", "status": "not_started"},
+    {"id": "01-17", "name": "Итоговая приёмка хода назад", "status": "not_started"}
+  ],
+  "blockers": [],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {"action": "Вернуть delegation.subagent_auto_approve: false после завершения фазы 1 (сейчас true по решению владельца 2026-05-10)", "context": "Временное расширение прав субагентов на время фазы", "blocking": false},
+    {"action": "Волны 6-7: владелец замеряет скорость MG996R на живом роботе (лист замеров создаст план 01-07); числа вводит план 01-15", "context": "Физические измерения, без них фаза не завершается", "blocking": false},
+    {"action": "Отозвать на GitHub старый токен, ранее вшитый в URL origin (URL уже почищен планом 01-01)", "context": "Гигиена секретов", "blocking": false}
+  ],
+  "decisions": [
+    {"decision": "Исполнение фазы на Hermes: по одному плану за раз, через субагента-исполнителя (delegate_task), без worktrees", "rationale": "USE_WORKTREES=false, dispatch-capacity=1; параллельные исполнители на главном дереве небезопасны", "phase": "01"},
+    {"decision": "delegation.subagent_auto_approve: true на время фазы", "rationale": "субагенты не могут отвечать на интерактивные подтверждения; без ключа исполнители встают на первом же гейте (случилось на 01-01)", "phase": "01"},
+    {"decision": "origin URL заменён на канонический HTTPS (токен убран), авторизация через gh credential helper", "rationale": "старый URL с токеном не работал неинтерактивно; реализовано в 01-01 (deviation 1)", "phase": "01"}
+  ],
+  "uncommitted_files": [
+    "?? .gsd/",
+    "?? .planning/milestone.lock",
+    "?? .planning/phase-1-PLAN.md",
+    "?? .planning/phase-1-SPEC.md",
+    "?? .planning/phases/phase-2-PLAN.md",
+    "?? .planning/phases/phase-2-SPEC.md",
+    "?? .planning/state.json",
+    "?? legacy/RobotDog2_handoff.md",
+    "?? legacy/RobotDog2_handoff.md:Zone.Identifier",
+    "?? robot_configurator.py",
+    "?? robot_dog_ws/",
+    "?? test_servo_config_reader.sh"
+  ],
+  "next_action": "Проверить `hermes config get delegation.subagent_auto_approve` (должно быть true; иначе включить). Затем перезапустить исполнителя плана 01-06 (он был прерван до изменений — стартовать с чистого листа, шаблон брифа — в .continue-here.md).",
+  "context_notes": "Фаза 1 идёт волнами; волны 1-2 частично. План 01-06 прерван пользователем ('поставь на паузу') почти сразу после старта: ни коммитов, ни файловой грязи от него нет (uncommitted_files — только давние неотслеживаемые остатки v1 и рантайм-файлы GSD). Исполнители — субагенты Hermes, модель наследуется от сессии; бриф стандартный (role_setup/project_root_pin/required_reading/environment_notes/sequential_execution/success_criteria/final_answer_contract), живые журналы в ~/.hermes/cache/delegation/live/<delegation_id>/task-0.log. После каждого плана — spot-check: git log, Self-Check в SUMMARY, точечный прогон тестов. Волны: 1:{01-01}, 2:{01-02..01-07}, 3:{01-08..01-11}, 4:{01-12}, 5:{01-13}, 6:{01-14 владелец}, 7:{01-15}, 8:{01-16}, 9:{01-17}."
+}
