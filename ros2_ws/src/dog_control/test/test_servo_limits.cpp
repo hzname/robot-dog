@@ -9,9 +9,12 @@
 #include "dog_control/locomotion.hpp"
 #include "dog_control/servo_limits.hpp"
 
+using dog_control::BodyVelocity;
 using dog_control::kMaxAutoPeriod;
+using dog_control::kNumJoints;
 using dog_control::kPeriodScanStep;
 using dog_control::kSpeedTolerance;
+using dog_control::LocomotionController;
 using dog_control::LocomotionParams;
 using dog_control::minimalPeriod;
 using dog_control::PeakSpeed;
@@ -20,6 +23,7 @@ using dog_control::ServoSpeedModel;
 
 namespace
 {
+constexpr double kTickDt = 0.02;  // [s] the controller tick the procedure runs at
 // Pinned reference set (the v1 robot as shipped before Phase 1): these tests check the
 // algorithm, so they must not move when plan 01-15 syncs the shipped defaults with the measured robot.
 LocomotionParams pinnedParams()
@@ -63,6 +67,40 @@ double peakAt(double period, const ServoSpeedModel & s)
   LocomotionParams p = pinnedParams();
   p.gait.period = period;
   return peakServoSpeed(p, s).peak;
+}
+
+// The five extreme commands of the JointSpeedsFitTheServos procedure.
+std::array<BodyVelocity, 5> extremeCommandsOf(const LocomotionParams & p)
+{
+  const BodyVelocity m = p.max_velocity;
+  return {{
+    {m.vx, m.vy, m.wz},
+    {m.vx, 0.0, 0.0},
+    {-m.vx, 0.0, 0.0},
+    {0.0, m.vy, 0.0},
+    {0.0, 0.0, m.wz},
+  }};
+}
+
+// The JointSpeedsFitTheServos procedure, unchanged: stand (2 s), ramp (1 s),
+// then the max joint speed over the 4 s window. The knee is not scaled here.
+double controllerPeak(const LocomotionParams & p, const BodyVelocity & cmd)
+{
+  LocomotionController c(p);
+  c.request("stand");
+  for (int i = 0; i < 100; ++i) {c.update(kTickDt);}
+  c.setVelocity(cmd);
+  for (int i = 0; i < 50; ++i) {c.update(kTickDt);}
+  auto prev = c.joints();
+  double max_speed = 0.0;
+  for (int i = 0; i < 200; ++i) {
+    c.update(kTickDt);
+    for (int j = 0; j < kNumJoints; ++j) {
+      max_speed = std::max(max_speed, std::abs(c.joints()[j] - prev[j]) / kTickDt);
+    }
+    prev = c.joints();
+  }
+  return max_speed;
 }
 }  // namespace
 
@@ -220,4 +258,59 @@ TEST(ServoLimits, ToleranceIsOneNanoUnit)
   EXPECT_DOUBLE_EQ(minimalPeriod(pinnedParams(), s, 0.55, 0.55), 0.55);
   s.max_speed = peak - 2e-9;
   EXPECT_DOUBLE_EQ(minimalPeriod(pinnedParams(), s, 0.55, 0.55), 0.0);
+}
+
+TEST(ServoLimits, PeakMatchesController)
+{
+  // Set A: the reference periods, the v1 geometry of the pinned set spelled out.
+  const std::array<double, 5> periods{0.45, 0.55, 0.65, 0.75, 0.95};
+  const std::array<double, 5> references{5.971, 5.077, 4.419, 3.831, 3.027};
+  for (int i = 0; i < 5; ++i) {
+    LocomotionParams p = pinnedParams();
+    p.gait.period = periods[i];
+    p.foot_offset_x = 0.0;
+    p.foot_offset_y = 0.0;
+    p.hip_x = 0.09;
+    p.stand_height = 0.15;
+    p.transition_time = 1.5;
+    const double model_peak = peakServoSpeed(p, model(6.0)).peak;
+    EXPECT_NEAR(model_peak, references[i], 1e-3) << "period " << periods[i];
+    double controller_max = 0.0;
+    for (const BodyVelocity & cmd : extremeCommandsOf(p)) {
+      controller_max = std::max(controller_max, controllerPeak(p, cmd));
+    }
+    EXPECT_NEAR(model_peak, controller_max, 5e-4) << "period " << periods[i];
+  }
+
+  // Set B: foot offsets shift the neutral feet away from set A.
+  LocomotionParams b = pinnedParams();
+  b.gait.period = 0.65;
+  b.foot_offset_x = 0.01;
+  b.foot_offset_y = 0.01;
+  b.hip_x = 0.09;
+  b.stand_height = 0.15;
+  b.transition_time = 1.5;
+  const double b_model = peakServoSpeed(b, model(6.0)).peak;
+  EXPECT_NEAR(b_model, 4.737, 1e-3) << "set B reference";
+  double b_controller = 0.0;
+  for (const BodyVelocity & cmd : extremeCommandsOf(b)) {
+    b_controller = std::max(b_controller, controllerPeak(b, cmd));
+  }
+  EXPECT_NEAR(b_model, b_controller, 5e-4) << "set B controller";
+
+  // Set C: different hip_x and stand_height.
+  LocomotionParams c = pinnedParams();
+  c.gait.period = 0.65;
+  c.foot_offset_x = 0.0;
+  c.foot_offset_y = 0.0;
+  c.hip_x = 0.10;
+  c.stand_height = 0.14;
+  c.transition_time = 1.5;
+  const double c_model = peakServoSpeed(c, model(6.0)).peak;
+  EXPECT_NEAR(c_model, 4.226, 1e-3) << "set C reference";
+  double c_controller = 0.0;
+  for (const BodyVelocity & cmd : extremeCommandsOf(c)) {
+    c_controller = std::max(c_controller, controllerPeak(c, cmd));
+  }
+  EXPECT_NEAR(c_model, c_controller, 5e-4) << "set C controller";
 }
