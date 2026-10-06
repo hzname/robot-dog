@@ -188,7 +188,11 @@ if [ -z "$RUN_ID" ]; then
       echo "  input $kv"
     done
   fi
-  if ! ghq workflow run "$WORKFLOW" --repo "$REPO" --ref "$REF" "${INPUTS[@]}"; then
+  dispatch_argv=(workflow run "$WORKFLOW" --repo "$REPO" --ref "$REF")
+  for kv in "${INPUTS[@]}"; do
+    dispatch_argv+=(-f "$kv")
+  done
+  if ! ghq "${dispatch_argv[@]}"; then
     echo "error: could not dispatch the workflow" >&2
     exit 1
   fi
