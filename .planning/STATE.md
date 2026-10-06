@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Замеры на столе и ход назад в симуляции
 status: executing
-stopped_at: Completed 01-12-PLAN.md
-last_updated: "2026-10-05T21:37:35.434Z"
+stopped_at: Completed 01-13-PLAN.md
+last_updated: "2026-10-06T05:32:07.227Z"
 last_activity: 2026-10-05
 last_activity_desc: Phase 01 execution started
-state_head: efa2cfd992236163516fc6328fae93833da2e900
+state_head: b65c873375b5052585220f5e7f08b9e375aa67f3
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 12
+  completed_plans: 13
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 01 (Замеры на столе и ход назад в симуляции) — EXECUTING
-Plan: 13 of 17
+Plan: 14 of 17
 Status: Ready to execute
 Last activity: 2026-10-05 — Phase 01 execution started
 
@@ -70,6 +70,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P10 | 58 min | 4 tasks | 6 files |
 | Phase 01 P11 | 6 min | 3 tasks | 6 files |
 | Phase 01 P12 | 60 min | 3 tasks | 6 files |
+| Phase 01 P13 | 7h 45m | 4 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -122,6 +123,10 @@ Recent decisions affecting current work:
 - [Phase 01]: Plan 01-12: the tracer recording runs the first four grid speeds (3.0..4.5) because analyze.load_meta (01-06) requires a grid of at least four speeds; the task-1 verify id range was refined 10 -> 40, keeping both loaders exercised on a genuine recording
 - [Phase 01]: Plan 01-12: release() is attempted once and retried once on failure (persistent failure = exit 3); the CSV/meta are written only after the release and only when the measurement loop had started
 - [Phase 01]: Plan 01-12: SignalGuard keeps its handler state process-wide (one instance); the fatal handler writes ALL_LED_OFF into the descriptor armed by openEmergencyFd (the single I2C_SLAVE ioctl in the package) and _exit(3)
+- [Phase 01]: Plan 01-13: ci_dispatch.sh --wait-job charset extended with parentheses — plans 01-13/01-16/01-17 pass 'acceptance ('; quotes, backslashes, $, backticks and semicolons stay rejected because the value is embedded into a quoted jq string (fix e69759d)
+- [Phase 01]: Plan 01-13: ci_dispatch.sh now passes -f key=value to gh workflow run — the raw positionals it sent before were ignored by gh, so the acceptance job (if: inputs.acceptance) was skipped on the first trial dispatch; the green trial is run 37414394613 (fix adcf834)
+- [Phase 01]: Plan 01-13: baseline 'before' data captured (140 repeats, no falls, n_invalid=0): flat_A_bwd10 minima 42.1-54.0% at n=10; D-05 threshold candidates jazzy 0.35 / lyrical 0.40 recorded in 01-BASELINE.md (Lyrical marked as an assumption); ci.yml keeps --backward-ratio 0.2 until 01-17
+- [Phase 01]: Plan 01-13: acceptance artifacts are downloaded with gh run download --pattern 'acceptance-*' — the unfiltered download aborts on the robot image dockerbuild artifact (not a zip) and fetches nothing; logged in deferred-items.md for 01-16/01-17
 
 ### Pending Todos
 
@@ -145,6 +150,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-05T21:37:25.064Z
-Stopped at: Completed 01-12-PLAN.md
+Last session: 2026-10-06T05:31:56.757Z
+Stopped at: Completed 01-13-PLAN.md
 Resume file: None
