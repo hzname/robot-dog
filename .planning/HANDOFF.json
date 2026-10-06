@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-10-06T05:46:15.636Z",
+  "timestamp": "2026-10-06T07:26:08.073Z",
   "phase": "01",
   "phase_name": "Замеры на столе и ход назад в симуляции",
   "phase_dir": ".planning/phases/01-zamery-na-stole-i-hod-nazad-v-simulyatsii",
@@ -25,7 +25,7 @@
     {"id": "01-13", "name": "ci.yml: входы + job-ы acceptance/servo-speed; пробный прогон и baseline (CI зелёные)", "status": "done", "commit": "d10e449"}
   ],
   "remaining_tasks": [
-    {"id": "01-14", "name": "ЧЕКПОИНТ ВЛАДЕЛЬЦА: замер скорости MG996R на роботе", "status": "in_progress_at_checkpoint", "note": "предполётная подготовка сделана (push подтверждён, каталог servo_speed/ создан); ждёт замеров владельца — задача 1, чек-лист в 01-14-PLAN.md (блок <instructions>)"},
+    {"id": "01-14", "name": "ЧЕКПОИНТ ВЛАДЕЛЬЦА: замер скорости MG996R на роботе", "status": "in_progress_checkpoint", "note": "оркестратор выполнил по просьбе владельца: клон репо на Pi (ветка фазы 30ae1d1), бэкап-тег robot-dog:2.0-before-phase1, сборка образа идёт (лог /tmp/rd_build.log, маркер /tmp/rd_build.done), probe check/off OK, скан i2c-0: 40/68/70 без INA219, пульсы 1134/1606 визуально OK (канал 1). Ждём владельца: v_plus_volts, INA219 (адрес), инструментальный замер угла; затем шаг 4 (image_ok) и задачи 2-4."},
     {"id": "01-15", "name": "Ввод измеренных чисел в умолчания", "status": "not_started"},
     {"id": "01-16", "name": "Форма траектории переноса при заднем ходе", "status": "not_started"},
     {"id": "01-17", "name": "Итоговая приёмка хода назад", "status": "not_started"}
@@ -33,7 +33,7 @@
   "blockers": [],
   "async_jobs": [],
   "human_actions_pending": [
-    {"action": "Замеры владельца (01-14, задача 1): образ на Pi; питание/шунт/мультиметр; i2cdetect; транспортир; прислать 11 значений (чек-лист — 01-14-PLAN.md)", "context": "Физические измерения, без них фаза не завершается", "blocking": false},
+    {"action": "01-14 (отложено владельцем на «позже»): подключить INA219 (адрес 0x41/0x44/0x45) и провести инструментальный замер угла транспортиром (повтор пульсов 1134/1606); прислать v_plus_volts, protractor_angle_deg, ina_address", "context": "Без INA219 и угла задача 2 (selftest/dry-run/run) не запускается; замер по конструкции требует INA219", "blocking": false},
     {"action": "Вернуть delegation.subagent_auto_approve: false после завершения фазы 1 (сейчас true по решению владельца 2026-10-05)", "context": "Временное расширение прав субагентов на время фазы", "blocking": false},
     {"action": "Отозвать на GitHub старый токен, ранее вшитый в URL origin (URL уже почищен планом 01-01)", "context": "Гигиена секретов", "blocking": false}
   ],
@@ -41,7 +41,8 @@
     {"decision": "Исполнение фазы на Hermes: по одному плану за раз, через субагента-исполнителя (delegate_task), без worktrees", "rationale": "USE_WORKTREES=false, dispatch-capacity=1; параллельные исполнители на главном дереве небезопасны", "phase": "01"},
     {"decision": "delegation.subagent_auto_approve: true на время фазы", "rationale": "субагенты не могут отвечать на интерактивные подтверждения; без ключа исполнители встают на первом же гейте (случилось на 01-01)", "phase": "01"},
     {"decision": "origin URL заменён на канонический HTTPS (токен убран), авторизация через gh credential helper", "rationale": "старый URL с токеном не работал неинтерактивно; реализовано в 01-01 (deviation 1)", "phase": "01"},
-    {"decision": "Scope workflow выдан владельцем 2026-10-06; ветка с правками ci.yml запушена", "rationale": "нужен для push .github/workflows/*; 01-13 завершён", "phase": "01"}
+    {"decision": "Scope workflow выдан владельцем 2026-10-06; ветка с правками ci.yml запушена", "rationale": "нужен для push .github/workflows/*; 01-13 завершён", "phase": "01"},
+    {"decision": "01-14, отступления владельца: конденсатор на V+ не ставить (п.6); INA219 пока не подключён — временно без него; инструментальный замер угла — отложен («позже»)", "rationale": "решения владельца в ходе чек-листа 01-14; замер без INA219 невозможен по конструкции инструмента", "phase": "01"}
   ],
   "uncommitted_files": [
     "?? .gsd/",
@@ -57,6 +58,6 @@
     "?? robot_dog_ws/",
     "?? test_servo_config_reader.sh"
   ],
-  "next_action": "При возобновлении: показать владельцу чек-лист задачи 1 плана 01-14 (блок <instructions> в 01-14-PLAN.md; предполётная подготовка уже сделана), собрать 11 значений; затем continuation-субагент проверяет значения и выдаёт команды задачи 2; после CSV — задачи 3 (анализ) и 4 (решение).",
-  "context_notes": "Состояние на 2026-10-06 08:46 МСК: 13/17 планов готовы; 01-14 остановлен пользователем на первом чекпоинте владельца после предполётной подготовки (servo_speed/ создан, push подтверждён); ветка запушена (origin == HEAD). Отложенная проверка 01-12 закрыта (session 14/14 PASSED). CI: пробный прогон 01-13 зелёный (37414394613), baseline A/B сделаны; в B не блокирующий сбой terrain limits на склоне (по плану допустимо); прогон 37372430526 — инфраструктурный сбой GitHub, перекрыт зелёными. Локальные навыки процесса: ~/.hermes/skills/autonomous-ai-agents/hermes-gsd-operations (+templates/delegate-executor-brief.md) и hermes-subagent-execution. Python: /usr/bin/python3; gh в фоне: env -u GITHUB_TOKEN."
+  "next_action": "1) Дождаться маркера /tmp/rd_build.done на Pi → шаг 4 чек-листа 01-14 (из ~/robot-dog на Pi): docker compose run --rm robot /ws/install/dog_bench/lib/dog_bench/servo_speed_test --help → image_ok=yes; доложить. 2) Далее ждём владельца: INA219 + инструментальный замер угла + v_plus_volts. 3) Когда значения собраны — continuation-субагент 01-14 (проверка значений → задачи 2-4).",
+  "context_notes": "Состояние на 2026-10-06 10:26 МСК: 13/17; 01-14 идёт при участии оркестратора по просьбе владельца (SSH-часть на Pi). Pi: ssh sg@192.168.31.174 (id_ed25519; dog.local из WSL не резолвится; sudo неинтерактивно недоступен). Репо на Pi: ~/robot-dog (ветка фазы 30ae1d1); рантайм: ~/robot-dog-v2. Сборка образа на Pi: лог /tmp/rd_build.log, маркер /tmp/rd_build.done. Скан i2c-0: 40/68/70 (INA219 нет). Собрано: gnd=yes, vcc=ок, shunt=R100, capacitor=нет, power_cutoff=switch. Отложено владельцем: INA219, инструментальный замер угла («позже»). Локальные навыки процесса: hermes-gsd-operations (+templates/delegate-executor-brief.md) и hermes-subagent-execution. Python: /usr/bin/python3; gh в фоне: env -u GITHUB_TOKEN."
 }
