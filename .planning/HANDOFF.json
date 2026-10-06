@@ -1,13 +1,13 @@
 {
   "version": "1.0",
-  "timestamp": "2026-10-05T22:06:09.511Z",
+  "timestamp": "2026-10-06T05:46:15.636Z",
   "phase": "01",
   "phase_name": "Замеры на столе и ход назад в симуляции",
   "phase_dir": ".planning/phases/01-zamery-na-stole-i-hod-nazad-v-simulyatsii",
-  "plan": 13,
-  "task": 3,
+  "plan": 14,
+  "task": 1,
   "total_tasks": 4,
-  "status": "blocked",
+  "status": "paused",
   "grain_note": "Проект исполняется по-планово (план = единица учёта); completed_tasks/remaining_tasks перечисляют ПЛАНЫ фазы, не отдельные задачи.",
   "completed_tasks": [
     {"id": "01-01", "name": "Ветка фазы + tools/ci_dispatch/ci_dispatch.sh + tools/local_gtest/run.sh", "status": "done", "commit": "925214d"},
@@ -21,30 +21,27 @@
     {"id": "01-09", "name": "dog_bench: рампа, safety-предохранитель, PWM-выход", "status": "done", "commit": "20e62dc"},
     {"id": "01-10", "name": "Профиль серв в симуляции (люфт/задержка/CommandShaper)", "status": "done", "commit": "3127cf9"},
     {"id": "01-11", "name": "Приёмочный CLI walk_check --maneuvers (125 pytest)", "status": "done", "commit": "171fe9e"},
-    {"id": "01-12", "name": "Сессия измерений, SignalGuard, CSV (46 gtest; CI зелёный)", "status": "done", "commit": "fd687af"}
+    {"id": "01-12", "name": "Сессия измерений, SignalGuard, CSV (46 gtest; CI зелёный)", "status": "done", "commit": "fd687af"},
+    {"id": "01-13", "name": "ci.yml: входы + job-ы acceptance/servo-speed; пробный прогон и baseline (CI зелёные)", "status": "done", "commit": "d10e449"}
   ],
   "remaining_tasks": [
-    {"id": "01-13", "name": "ci.yml: вход и job-ы (приёмка хода назад, анализ скоростей)", "status": "in_progress_blocked", "note": "задачи 1-2 закоммичены (fc9c548, 8fc46ab, 589e06b); задача 3 (push + пробный CI) блокирована отсутствием scope workflow; задача 4 (baseline) не начата; SUMMARY нет"},
-    {"id": "01-14", "name": "ЧЕКПОИНТ ВЛАДЕЛЬЦА: замер скорости MG996R на роботе", "status": "not_started"},
+    {"id": "01-14", "name": "ЧЕКПОИНТ ВЛАДЕЛЬЦА: замер скорости MG996R на роботе", "status": "in_progress_at_checkpoint", "note": "предполётная подготовка сделана (push подтверждён, каталог servo_speed/ создан); ждёт замеров владельца — задача 1, чек-лист в 01-14-PLAN.md (блок <instructions>)"},
     {"id": "01-15", "name": "Ввод измеренных чисел в умолчания", "status": "not_started"},
     {"id": "01-16", "name": "Форма траектории переноса при заднем ходе", "status": "not_started"},
     {"id": "01-17", "name": "Итоговая приёмка хода назад", "status": "not_started"}
   ],
-  "blockers": [
-    {"description": "Push ветки невозможен: у gh-токена hzname нет scope `workflow`, а в 3 непушнутых коммитах есть правки .github/workflows/ci.yml. Проверены и отпали: PAT в ~/.git-credentials (401), SSH-ключ (не зарегистрирован), фоновый GITHUB_TOKEN (заглушка, 401).", "type": "human_action", "workaround": "Владелец: `gh auth refresh -h github.com -s workflow` + device flow; после этого push и continuation 01-13."}
-  ],
+  "blockers": [],
   "async_jobs": [],
   "human_actions_pending": [
-    {"action": "gh auth refresh -h github.com -s workflow (интерактивный device flow)", "context": "нужен для push .github/workflows/ci.yml — блокирует завершение 01-13", "blocking": true},
+    {"action": "Замеры владельца (01-14, задача 1): образ на Pi; питание/шунт/мультиметр; i2cdetect; транспортир; прислать 11 значений (чек-лист — 01-14-PLAN.md)", "context": "Физические измерения, без них фаза не завершается", "blocking": false},
     {"action": "Вернуть delegation.subagent_auto_approve: false после завершения фазы 1 (сейчас true по решению владельца 2026-10-05)", "context": "Временное расширение прав субагентов на время фазы", "blocking": false},
-    {"action": "Волны 6-7: владелец замеряет скорость MG996R на живом роботе по листу 01-MEASUREMENT-SHEET.md; числа вводит план 01-15", "context": "Физические измерения, без них фаза не завершается", "blocking": false},
     {"action": "Отозвать на GitHub старый токен, ранее вшитый в URL origin (URL уже почищен планом 01-01)", "context": "Гигиена секретов", "blocking": false}
   ],
   "decisions": [
     {"decision": "Исполнение фазы на Hermes: по одному плану за раз, через субагента-исполнителя (delegate_task), без worktrees", "rationale": "USE_WORKTREES=false, dispatch-capacity=1; параллельные исполнители на главном дереве небезопасны", "phase": "01"},
     {"decision": "delegation.subagent_auto_approve: true на время фазы", "rationale": "субагенты не могут отвечать на интерактивные подтверждения; без ключа исполнители встают на первом же гейте (случилось на 01-01)", "phase": "01"},
     {"decision": "origin URL заменён на канонический HTTPS (токен убран), авторизация через gh credential helper", "rationale": "старый URL с токеном не работал неинтерактивно; реализовано в 01-01 (deviation 1)", "phase": "01"},
-    {"decision": "Push правок ci.yml отложен до выдачи владельцем scope `workflow`", "rationale": "gh-токен без scope workflow не может пушить .github/workflows/*; альтернатив нет", "phase": "01"}
+    {"decision": "Scope workflow выдан владельцем 2026-10-06; ветка с правками ci.yml запушена", "rationale": "нужен для push .github/workflows/*; 01-13 завершён", "phase": "01"}
   ],
   "uncommitted_files": [
     "?? .gsd/",
@@ -60,6 +57,6 @@
     "?? robot_dog_ws/",
     "?? test_servo_config_reader.sh"
   ],
-  "next_action": "Владелец: `gh auth refresh -h github.com -s workflow` + device flow. Затем оркестратор: проверить `gh auth status` (scope workflow), запустить continuation-субагента 01-13 (задачи 3-4: push ветки, пробный CI-прогон, baseline, SUMMARY; бриф — .continue-here.md). Затем волна 6 — 01-14 (замеры владельца по 01-MEASUREMENT-SHEET.md).",
-  "context_notes": "Состояние на 2026-10-06 01:06 МСК: 12/17 планов (01-01…01-12) готовы и проверены; 01-13 на blocking-human чекпоинте (scope workflow), SUMMARY нет (корректно для чекпоинта); ветка на 3 коммита впереди origin (push ждёт scope). Все планы исполнены через субагентов Hermes (модель наследуется от сессии); бриф стандартный, живые журналы в ~/.hermes/cache/delegation/live/<delegation_id>/task-0.log. Python для pytest/numpy: /usr/bin/python3 (3.13.5); голый python3 — служебный 3.14 без пакетов. gh в фоне: `env -u GITHUB_TOKEN`. Локальные навыки процесса: ~/.hermes/skills/autonomous-ai-agents/hermes-gsd-operations (+templates/delegate-executor-brief.md) и hermes-subagent-execution — следовать им."
+  "next_action": "При возобновлении: показать владельцу чек-лист задачи 1 плана 01-14 (блок <instructions> в 01-14-PLAN.md; предполётная подготовка уже сделана), собрать 11 значений; затем continuation-субагент проверяет значения и выдаёт команды задачи 2; после CSV — задачи 3 (анализ) и 4 (решение).",
+  "context_notes": "Состояние на 2026-10-06 08:46 МСК: 13/17 планов готовы; 01-14 остановлен пользователем на первом чекпоинте владельца после предполётной подготовки (servo_speed/ создан, push подтверждён); ветка запушена (origin == HEAD). Отложенная проверка 01-12 закрыта (session 14/14 PASSED). CI: пробный прогон 01-13 зелёный (37414394613), baseline A/B сделаны; в B не блокирующий сбой terrain limits на склоне (по плану допустимо); прогон 37372430526 — инфраструктурный сбой GitHub, перекрыт зелёными. Локальные навыки процесса: ~/.hermes/skills/autonomous-ai-agents/hermes-gsd-operations (+templates/delegate-executor-brief.md) и hermes-subagent-execution. Python: /usr/bin/python3; gh в фоне: env -u GITHUB_TOKEN."
 }
