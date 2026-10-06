@@ -131,7 +131,10 @@ if [ -z "$RUN_ID" ] && [ -z "$REF" ]; then
 fi
 
 for sub in "${WAIT_JOBS[@]}"; do
-  if ! [[ "$sub" =~ ^[A-Za-z0-9_\ .:+/-]+$ ]]; then
+  # Conservative charset: the value is embedded into a quoted jq string, so no
+  # quotes/backslashes/$/backticks/semicolons. Spaces and parentheses occur in
+  # matrix job names ("acceptance (jazzy, ideal)") and are inert inside the quotes.
+  if ! [[ "$sub" =~ ^[A-Za-z0-9_\ .:+/()-]+$ ]]; then
     die "invalid --wait-job value '$sub' (unexpected characters)"
   fi
 done
