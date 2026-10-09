@@ -102,7 +102,7 @@ check(code == 404, 'обход пути заблокирован')
 check('class="layout"' in html, 'двухколоночная раскладка (управление + схема справа)')
 check('details class="imgs" open' in html, 'схема открыта (правая колонка)')
 check(html.index('class="right"') > html.index('id="box"'), 'схема в .right после блока кнопок')
-check(html.count('<div class="btns">') == 2, 'кнопки в два ряда (держать/снять; −1°/+1°)')
+check(html.count('<div class="btns">') == 3, 'кнопки в три ряда (держать/снять; −1°/+1°; направление)')
 check('/img/measure_leg_side.svg' not in html and '/img/measure_leg_rear.svg' not in html,
       'схемы измерений убраны (осталась только монтажная поза)')
 
@@ -128,6 +128,38 @@ check(off('lf_thigh_joint') == '43.0' and off('lf_calf_joint') == '-89.0'
 check(os.path.exists(p2 + '.bak'), 'бэкап .bak создан')
 d2 = get('/api/apply')
 check(d2['ok'] and not d2['changed'], 'повторный apply: менять нечего')
+
+# кнопки проверки направления (шаг ±12°, контроль тока)
+check(all(x in html for x in ('внутрь', 'наружу', 'вперёд', 'назад', 'вверх', 'вниз')),
+      'подписи кнопок направления на странице')
+check('class="b-dir"' in html, 'кнопки направления есть на странице')
+for ch in range(12):
+    get('/api/reset?ch=%d' % ch)
+s = get('/api/dir?ch=0&d=out')                          # LF плечо: наружу = +12°
+check(s['ok'] and not s['tripped'] and abs(s['dev_after_deg'] - 12.0) < 0.1,
+      'LF плечо [наружу]: сдвиг +12° (получено %s)' % s.get('dev_after_deg'))
+check(abs(js(get('/api/state'), 0)['held_us'] - 1483.3) <= 3.0,
+      'LF плечо наружу: импульс ~1483.3 мкс')
+s = get('/api/dir?ch=3&d=out')                          # RF плечо: зеркально
+check(abs(js(get('/api/state'), 3)['held_us'] - 1483.3) <= 3.0,
+      'RF плечо [наружу]: импульс тоже ~1483.3 (зеркальная серва)')
+s = get('/api/dir?ch=1&d=back')                         # бедро назад = +12°
+check(abs(js(get('/api/state'), 1)['held_us'] - 1483.3) <= 3.0,
+      'бедро [назад]: +12°, импульс ~1483.3')
+s = get('/api/dir?ch=2&d=up')                           # колено вверх = −12°
+check(abs(js(get('/api/state'), 2)['held_us'] - 1256.7) <= 3.0,
+      'колено [вверх]: −12°, импульс ~1256.7')
+for _ in range(4):
+    s = get('/api/dir?ch=0&d=out')
+check(s.get('clamped') and abs(s['dev_after_deg'] - 35.0) < 0.2,
+      'предел теста: дальше +35° не идёт (получено %s)' % s.get('dev_after_deg'))
+get('/api/mock/current?val=2.0')
+s = get('/api/dir?ch=0&d=in')
+check(s['tripped'] and js(get('/api/state'), 0)['held_us'] is None,
+      'перегруз 2.0 А -> стоп по току и сустав отпущен')
+get('/api/mock/current?val=0.15')
+s = get('/api/dir?ch=0&d=fwd')
+check(not s['ok'] and 'направления' in s.get('error', ''), 'чужое направление -> ошибка')
 
 print('ИТОГ:', 'PASS' if ok else 'FAIL')
 sys.exit(0 if ok else 1)
