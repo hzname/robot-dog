@@ -290,20 +290,27 @@ PAGE = """<!doctype html>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
-  body { margin: 0; background: #111; color: #eee; padding: 14px; max-width: 620px; }
+  body { margin: 0 auto; background: #111; color: #eee; padding: 14px; max-width: 1000px; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
+  @media (min-width: 900px) {
+    .layout { grid-template-columns: minmax(0, 1fr) 380px; }
+    .right { position: sticky; top: 12px; }
+  }
+  #box { display: grid; grid-template-columns: 1fr; gap: 10px; }
+  @media (min-width: 640px) { #box { grid-template-columns: 1fr 1fr; } }
   h1 { font-size: 18px; margin: 0 0 10px; }
   .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
   .tabs button { flex: 1; padding: 14px 0; font-size: 18px; font-weight: 700;
                  background: #222; color: #bbb; border: 1px solid #333; border-radius: 10px; }
   .tabs button.active { background: #2d4; color: #000; border-color: #2d4; }
   .card { background: #1a1a1a; border: 1px solid #333; border-radius: 12px;
-          padding: 12px; margin-bottom: 10px; }
+          padding: 12px; }
   .card h2 { margin: 0 0 2px; font-size: 16px; }
   .dim { color: #888; font-size: 12px; font-weight: 400; }
   .st { font-size: 13px; color: #bbb; margin: 6px 0 10px; line-height: 1.45; }
   .st b { color: #2d4; font-weight: 600; } .st.off b { color: #888; }
   .btns { display: flex; gap: 8px; }
-  .btns button { flex: 1; padding: 13px 0; font-size: 15px; font-weight: 700;
+  .btns button { flex: 1; padding: 11px 0; font-size: 14px; font-weight: 700;
                  border: none; border-radius: 10px; }
   .b-step { background: #2a6; color: #000; }
   .b-hold { background: #2d4; color: #000; }
@@ -330,20 +337,26 @@ PAGE = """<!doctype html>
 </head>
 <body>
 <h1>Монтажные положения + подстройка</h1>
-<div class="tabs" id="tabs"></div>
-<div id="box"></div>
-<div class="legrow" id="legrow"></div>
-<details class="imgs">
-  <summary>Монтажная поза — схема (нажми, чтобы раскрыть)</summary>
-  <a href="/img/assembly_pose.svg" target="_blank" rel="noopener"><img src="/img/assembly_pose.svg" alt="Монтажная поза и рабочие позы"></a>
-  <div class="cap">Монтажная поза: все 12 серв на 1370 мкс — плечо вертикально, бедро +45° назад,
-  колено −90°. Ниже на схеме — рабочие позы с импульсами (у правой ноги зеркально).</div>
-</details>
-<footer>
-  <button id="allrel">Отпустить всё</button>
-  <a class="lnk" href="/api/export" target="_blank">экспорт offset_deg</a>
-  <span id="conn">связь: —</span>
-</footer>
+<div class="layout">
+  <div class="left">
+    <div class="tabs" id="tabs"></div>
+    <div id="box"></div>
+    <div class="legrow" id="legrow"></div>
+    <footer>
+      <button id="allrel">Отпустить всё</button>
+      <a class="lnk" href="/api/export" target="_blank">экспорт offset_deg</a>
+      <span id="conn">связь: —</span>
+    </footer>
+  </div>
+  <div class="right">
+    <details class="imgs" open>
+      <summary>Монтажная поза — схема</summary>
+      <a href="/img/assembly_pose.svg" target="_blank" rel="noopener"><img src="/img/assembly_pose.svg" alt="Монтажная поза и рабочие позы"></a>
+      <div class="cap">Все 12 серв на 1370 мкс — плечо вертикально, бедро +45° назад, колено −90°.
+      Ниже на схеме — рабочие позы с импульсами (у правой ноги зеркально).</div>
+    </details>
+  </div>
+</div>
 <div class="hint">
   «держать» = импульс <b>1370 мкс + подстройка</b> канала (монтажная поза: плечо
   вертикально, бедро +45°, колено −90°). Кнопки <b>±1°</b> — подстройка одним шагом
@@ -443,10 +456,11 @@ function put(ch, j) {
 
 async function refresh() {
   const s = await api('/api/state');
-  const conn = document.getElementById('conn') || document.getElementById('connsp');
+  const conn = document.getElementById('conn');
   STATE = s;
   if (!s) { if (conn) conn.textContent = 'связь: НЕТ'; return; }
   if (conn) conn.textContent = 'связь: ок' + (s.real ? ' (I2C)' : ' (макет)');
+  if (!document.getElementById('box').children.length) render();
   for (const j of s.joints) put(j.ch, j);
 }
 
