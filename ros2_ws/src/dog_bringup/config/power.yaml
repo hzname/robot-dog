@@ -9,7 +9,7 @@
       device: /dev/i2c-0
       addresses: [65, 68, 69]  # 0x41, 0x44, 0x45
     chip: auto                 # auto | ina226 | ina219
-    shunt_ohm: 0.01            # 10 mOhm: up to ~8 A on INA226 at +-81.9 mV
+    shunt_ohm: 0.1             # bench: INA219 module with R100 (0.1 Ohm, +-3.2 A); INA226 with 10 mOhm: 0.01
     rate: 20.0
     filter_tau: 0.1            # [s] current smoothing: servo PWM bursts are spiky
     overcurrent_a: 5.0         # sustained total servo current = stalled leg
