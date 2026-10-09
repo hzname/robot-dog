@@ -241,6 +241,33 @@ def dir_test(ch, sem):
             'note': 'предел теста' if limited else ''}
 
 
+def invert_direction(ch):
+    """Меняет знак direction сустава в servos.yaml (бэкап .bak)."""
+    name = BY_CH[ch][3]
+    try:
+        with open(SERVOS_YAML) as f:
+            text = f.read()
+    except OSError as exc:
+        return {'ok': False, 'error': 'нет %s (%s)' % (SERVOS_YAML, exc)}
+    lines = text.splitlines(keepends=True)
+    for i, line in enumerate(lines):
+        if not re.match(r'\s*%s:\s+\{' % re.escape(name), line):
+            continue
+        m = re.search(r'(direction:)\s*([+-]?\d+)(\s*,)', line)
+        if not m:
+            return {'ok': False, 'error': 'в строке %s нет direction' % name}
+        old = int(m.group(2))
+        new = -old
+        lines[i] = (line[:m.start()] + m.group(1) + ' ' + ('%2d' % new) + m.group(3)
+                    + line[m.end():])
+        shutil.copy2(SERVOS_YAML, SERVOS_YAML + '.bak')
+        with open(SERVOS_YAML, 'w') as f:
+            f.write(''.join(lines))
+        return {'ok': True, 'ch': ch, 'yaml': name, 'old': old, 'new': new,
+                'path': SERVOS_YAML}
+    return {'ok': False, 'error': 'не нашёл %s в servos.yaml' % name}
+
+
 class Bus:
     """PCA9685: реальные записи, либо макет без I2C."""
 
@@ -446,6 +473,11 @@ class Handler(BaseHTTPRequestHandler):
             if not chs or len(chs) != 1:
                 return self._json({'error': 'dir needs one ch'}, 400)
             return self._json(dir_test(chs[0], (q.get('d') or [''])[0].lower()))
+        if u.path == '/api/invert':
+            chs = channel_list(q, u.path)
+            if not chs or len(chs) != 1:
+                return self._json({'error': 'invert needs one ch'}, 400)
+            return self._json(invert_direction(chs[0]))
         if u.path == '/api/mock/current':
             if BUS.real:
                 return self._json({'error': 'mock only'}, 404)
@@ -521,6 +553,8 @@ PAGE = """<!doctype html>
   .btns button:disabled { opacity: .45; }
   .dirmsg { font-size: 12px; color: #9a8; margin-top: 6px; min-height: 15px; line-height: 1.35; }
   .dirmsg.bad { color: #f88; }
+  .linkrow { display: flex; gap: 16px; align-items: center; }
+  .lnk.inv { color: #eb6; font-weight: 600; }
   #applymsg { font-size: 12px; color: #9a8; margin-top: 6px; line-height: 1.4; }
   details.imgs { background: #1a1a1a; border: 1px solid #333; border-radius: 12px;
                  padding: 10px 12px; margin-bottom: 12px; font-size: 13px; }
@@ -569,8 +603,9 @@ PAGE = """<!doctype html>
   <b>Проверка направления:</b> кнопки «внутрь/наружу» (плечо), «вперёд/назад»
   (бедро), «вверх/вниз» (колено) сдвигают сустав на 12°. Правильно так: наружу —
   от корпуса; вперёд — стопа к носу; вверх — голень складывается (стопа
-  поднимается). Если наоборот — скажи «инвертируй &lt;сустав&gt;»: правим
-  <code>direction</code> в servos.yaml, страница подхватит на лету. При токе
+  поднимается). Если наоборот — жми «инвертировать direction» у сустава
+  (правит <code>direction</code> в servos.yaml, бэкап .bak — страница видит сразу),
+  или скажи мне. При токе
   больше 1.5 А движение останавливается, сустав отпускается.<br>
   Во время калибровки стек ROS должен быть остановлен. Работай при свободных
   лапах, рука на выключателе питания.
@@ -619,7 +654,7 @@ function jointStatus(j) {
 function row(j) {
   const d = document.createElement('div');
   d.className = 'card';
-  d.innerHTML = '<h2>' + jointLine(j) + '</h2>' +
+  d.innerHTML = '<h2 id="h-' + j.ch + '">' + jointLine(j) + '</h2>' +
     '<div class="st" id="st-' + j.ch + '">—</div>' +
     '<div class="btns">' +
       '<button class="b-hold">держать</button>' +
@@ -634,7 +669,10 @@ function row(j) {
       '<button class="b-dir"></button>' +
     '</div>' +
     '<div class="dirmsg" id="dir-' + j.ch + '">шаг ±12° — смотри глазами (верно или инверсия)</div>' +
-    '<button class="lnk">сброс подстройки</button>';
+    '<div class="linkrow">' +
+      '<button class="lnk">сброс подстройки</button>' +
+      '<button class="lnk inv">инвертировать direction</button>' +
+    '</div>';
   const [hold, rel] = d.querySelectorAll('.btns')[0].querySelectorAll('button');
   const [minus, plus] = d.querySelectorAll('.btns')[1].querySelectorAll('button');
   const dBtns = d.querySelectorAll('.btns')[2].querySelectorAll('button');
@@ -649,6 +687,7 @@ function row(j) {
   plus.onclick = () => act('/api/nudge?ch=' + j.ch + '&d=1');
   for (const b of dBtns) b.onclick = () => dirAct(j, b);
   d.querySelector('.lnk').onclick = () => act('/api/reset?ch=' + j.ch);
+  d.querySelector('.lnk.inv').onclick = () => invAct(j);
   return d;
 }
 
@@ -679,6 +718,11 @@ function put(ch, j) {
   const txt = jointStatus(j);
   if (el.innerHTML !== txt) el.innerHTML = txt;
   el.className = 'st' + (j.held_us == null ? ' off' : '');
+  const h = document.getElementById('h-' + ch);
+  if (h) {
+    const ht = jointLine(j);
+    if (h.innerHTML !== ht) h.innerHTML = ht;
+  }
 }
 
 async function refresh() {
@@ -718,6 +762,22 @@ async function dirAct(j, btn) {
     box.className = 'dirmsg';
     box.textContent = '«' + r.label + '»: ' + r.moved_deg.toFixed(1) + '°, ' + pk;
   }
+  await refresh();
+}
+
+async function invAct(j) {
+  const box = document.getElementById('dir-' + j.ch);
+  if (!confirm('Инвертировать direction сустава ' + j.leg + ' ' + j.joint +
+               ' в servos.yaml? Сейчас dir=' + (j.dir > 0 ? '+1' : '−1'))) return;
+  const r = await api('/api/invert?ch=' + j.ch);
+  if (!r || !r.ok) {
+    box.className = 'dirmsg bad';
+    box.textContent = 'ошибка: ' + ((r && r.error) || 'не прошло');
+    return;
+  }
+  box.className = 'dirmsg';
+  box.textContent = 'direction инвертирован: ' + r.old + ' → ' + r.new + ' (' + r.yaml +
+    '); нажми кнопку направления ещё раз — поедет зеркально';
   await refresh();
 }
 

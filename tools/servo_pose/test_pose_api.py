@@ -161,5 +161,19 @@ get('/api/mock/current?val=0.15')
 s = get('/api/dir?ch=0&d=fwd')
 check(not s['ok'] and 'направления' in s.get('error', ''), 'чужое направление -> ошибка')
 
+# кнопка «инвертировать direction» (правит servos_apply_test.yaml, не репо)
+check('инвертировать' in html, 'кнопка инвертирования на странице')
+inv = get('/api/invert?ch=0')
+check(inv['ok'] and inv['old'] == 1 and inv['new'] == -1, 'инверсия: +1 -> −1')
+check(js(get('/api/state'), 0)['dir'] == -1, 'страница сразу видит dir −1')
+get('/api/dir?ch=0&d=out')
+check(abs(js(get('/api/state'), 0)['held_us'] - 1256.7) <= 3.0,
+      'после инверсии [наружу] — зеркальный импульс ~1256.7')
+inv2 = get('/api/invert?ch=0')
+check(inv2['ok'] and inv2['new'] == 1, 'инверсия обратно: −1 -> +1')
+t2 = open(p2).read()
+check(_re.search(r'lf_hip_joint:\s+\{.*?direction:\s*\+?1,', t2) is not None,
+      'в файле direction снова +1 (формат сохранён)')
+
 print('ИТОГ:', 'PASS' if ok else 'FAIL')
 sys.exit(0 if ok else 1)
