@@ -24,6 +24,7 @@ servos.yaml скриптом servo_pose_apply.py: offset_deg = опорный_у
 import fcntl
 import json
 import os
+import re
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -48,6 +49,7 @@ PERIOD_US = 1e6 / HZ
 
 TRIM_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                          'servo_pose_trim.json')
+IMG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'pose_img')
 
 # Суставы: канал -> (нога, сустав, имя в servos.yaml, direction, опорный угол°)
 JOINTS = [
@@ -210,6 +212,22 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _img(self, name):
+        """Статические схемы из pose_img/ (svg), только простые имена."""
+        if not re.fullmatch(r'[a-z0-9_]+\.svg', name or ''):
+            return self._json({'error': 'bad image name'}, 404)
+        try:
+            with open(os.path.join(IMG_DIR, name), 'rb') as f:
+                data = f.read()
+        except OSError:
+            return self._json({'error': 'no image: %s' % name}, 404)
+        self.send_response(200)
+        self.send_header('Content-Type', 'image/svg+xml')
+        self.send_header('Content-Length', str(len(data)))
+        self.send_header('Cache-Control', 'no-store')
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_GET(self):                                  # noqa: N802
         u = urlparse(self.path)
         q = parse_qs(u.query)
@@ -258,6 +276,8 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     BUS.off(ch)
             return self._json(all_state())
+        if u.path.startswith('/img/'):
+            return self._img(u.path[len('/img/'):])
         return self._json({'error': 'not found'}, 404)
 
 
@@ -297,6 +317,13 @@ PAGE = """<!doctype html>
   footer button { padding: 12px 16px; font-size: 15px; background: #522; color: #fdd;
                   border: 1px solid #733; border-radius: 10px; }
   #conn { font-size: 12px; color: #888; margin-left: auto; }
+  details.imgs { background: #1a1a1a; border: 1px solid #333; border-radius: 12px;
+                 padding: 10px 12px; margin-bottom: 12px; font-size: 13px; }
+  details.imgs summary { cursor: pointer; color: #ddd; font-weight: 600; margin-bottom: 4px; }
+  details.imgs a { display: block; }
+  details.imgs img { display: block; width: 100%; height: auto; background: #eef1f5;
+                     border-radius: 8px; margin: 10px 0 4px; }
+  details.imgs .cap { color: #888; font-size: 12px; line-height: 1.45; }
   .hint { font-size: 12px; color: #777; margin-top: 12px; line-height: 1.5; }
   .hint code { color: #9a8; }
 </style>
@@ -304,6 +331,16 @@ PAGE = """<!doctype html>
 <body>
 <h1>Монтажные положения + подстройка</h1>
 <div class="tabs" id="tabs"></div>
+<details class="imgs" open>
+  <summary>Монтажная поза и углы суставов — схемы</summary>
+  <a href="/img/assembly_pose.svg" target="_blank" rel="noopener"><img src="/img/assembly_pose.svg" alt="Монтажная поза и рабочие позы"></a>
+  <div class="cap">Монтажная поза: все 12 серв на 1370 мкс — плечо вертикально, бедро +45° назад,
+  колено −90°. Ниже — рабочие позы с импульсами (у правой ноги зеркально).</div>
+  <a href="/img/measure_leg_side.svg" target="_blank" rel="noopener"><img src="/img/measure_leg_side.svg" alt="Знаки углов бедра и колена"></a>
+  <div class="cap">Сбоку: thigh «+» — стопа назад; calf «−» — колено согнуто назад.</div>
+  <a href="/img/measure_leg_rear.svg" target="_blank" rel="noopener"><img src="/img/measure_leg_rear.svg" alt="Знак угла плеча"></a>
+  <div class="cap">Сзади: hip «+» — стопа влево (у левых наружу, у правых внутрь).</div>
+</details>
 <div id="box"></div>
 <div class="legrow" id="legrow"></div>
 <footer>
