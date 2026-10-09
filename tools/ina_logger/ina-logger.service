@@ -1,0 +1,16 @@
+[Unit]
+Description=INA219 current sensor + SoC temp logger (bench)
+After=local-fs.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=sg
+WorkingDirectory=/home/sg
+ExecStart=/usr/bin/python3 /home/sg/ina_logger.py
+Restart=always
+RestartSec=2
+Nice=5
+
+[Install]
+WantedBy=multi-user.target
