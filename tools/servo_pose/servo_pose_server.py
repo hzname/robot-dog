@@ -331,18 +331,14 @@ PAGE = """<!doctype html>
 <body>
 <h1>Монтажные положения + подстройка</h1>
 <div class="tabs" id="tabs"></div>
-<details class="imgs" open>
-  <summary>Монтажная поза и углы суставов — схемы</summary>
-  <a href="/img/assembly_pose.svg" target="_blank" rel="noopener"><img src="/img/assembly_pose.svg" alt="Монтажная поза и рабочие позы"></a>
-  <div class="cap">Монтажная поза: все 12 серв на 1370 мкс — плечо вертикально, бедро +45° назад,
-  колено −90°. Ниже — рабочие позы с импульсами (у правой ноги зеркально).</div>
-  <a href="/img/measure_leg_side.svg" target="_blank" rel="noopener"><img src="/img/measure_leg_side.svg" alt="Знаки углов бедра и колена"></a>
-  <div class="cap">Сбоку: thigh «+» — стопа назад; calf «−» — колено согнуто назад.</div>
-  <a href="/img/measure_leg_rear.svg" target="_blank" rel="noopener"><img src="/img/measure_leg_rear.svg" alt="Знак угла плеча"></a>
-  <div class="cap">Сзади: hip «+» — стопа влево (у левых наружу, у правых внутрь).</div>
-</details>
 <div id="box"></div>
 <div class="legrow" id="legrow"></div>
+<details class="imgs">
+  <summary>Монтажная поза — схема (нажми, чтобы раскрыть)</summary>
+  <a href="/img/assembly_pose.svg" target="_blank" rel="noopener"><img src="/img/assembly_pose.svg" alt="Монтажная поза и рабочие позы"></a>
+  <div class="cap">Монтажная поза: все 12 серв на 1370 мкс — плечо вертикально, бедро +45° назад,
+  колено −90°. Ниже на схеме — рабочие позы с импульсами (у правой ноги зеркально).</div>
+</details>
 <footer>
   <button id="allrel">Отпустить всё</button>
   <a class="lnk" href="/api/export" target="_blank">экспорт offset_deg</a>
