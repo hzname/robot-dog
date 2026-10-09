@@ -10,6 +10,7 @@ API:      /api/state
           /api/set?ch=N | ?leg=LF    держать (импульс = центре + подстройка)
           /api/release?ch=N | ?leg=… / ?all=1
           /api/export                offset_deg для servos.yaml
+          /api/apply[?dry=1]         запись offset_deg в servos.yaml (кнопка страницы)
 
 Прямые записи в PCA9685 (/dev/i2c-0 @0x40) — как драйвер проекта:
 канал N = регистры 0x06+4N, [ON=0, OFF=тики], «отпустить» = бит full-off.
@@ -25,6 +26,7 @@ import fcntl
 import json
 import os
 import re
+import shutil
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -50,6 +52,11 @@ PERIOD_US = 1e6 / HZ
 TRIM_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                          'servo_pose_trim.json')
 IMG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'pose_img')
+# Куда переносить подстройки (кнопка «Перенести в servos.yaml»).
+# Приоритет: argv[2] → env SERVO_POSE_SERVOS → путь в клоне репы на Pi.
+SERVOS_YAML = (sys.argv[2] if len(sys.argv) > 2
+               else os.environ.get('SERVO_POSE_SERVOS')
+               or '/home/sg/robot-dog/ros2_ws/src/dog_bringup/config/servos.yaml')
 
 # Суставы: канал -> (нога, сустав, имя в servos.yaml, direction, опорный угол°)
 JOINTS = [
@@ -93,6 +100,33 @@ def save_trim():
                    'trims': {str(ch): round(TRIM.get(ch, 0.0), 2)
                              for ch, *_ in JOINTS}}, f, ensure_ascii=False, indent=1)
     os.replace(tmp, TRIM_FILE)
+
+
+def apply_offsets(dry=False):
+    """offset_deg = опорный угол − trim; бэкап .bak, возвращает отчёт."""
+    try:
+        with open(SERVOS_YAML) as f:
+            text = f.read()
+    except OSError as exc:
+        return {'ok': False, 'error': 'нет %s (%s)' % (SERVOS_YAML, exc)}
+    want = {j[3]: j[5] - TRIM.get(j[0], 0.0) for j in JOINTS}
+    pat = re.compile(r'^(\s*([a-z_]+_joint):\s+\{.*?offset_deg:)\s*(-?\d+(?:\.\d+)?)(.*)$')
+    out, changed = [], []
+    for line in text.splitlines():
+        m = pat.match(line)
+        if m and m.group(2) in want:
+            new_val = '%6.1f' % want[m.group(2)]
+            if m.group(3) != new_val.strip():
+                changed.append([m.group(2), m.group(3), new_val.strip()])
+            line = m.group(1) + new_val + m.group(4)
+        out.append(line)
+    if not changed or dry:
+        return {'ok': True, 'dry': dry, 'path': SERVOS_YAML, 'changed': changed,
+                'note': ('уже совпадает' if not changed else 'предпросмотр')}
+    shutil.copy2(SERVOS_YAML, SERVOS_YAML + '.bak')
+    with open(SERVOS_YAML, 'w') as f:
+        f.write('\n'.join(out) + ('\n' if text.endswith('\n') else ''))
+    return {'ok': True, 'dry': False, 'path': SERVOS_YAML, 'changed': changed}
 
 
 class Bus:
@@ -278,6 +312,9 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     BUS.off(ch)
             return self._json(all_state())
+        if u.path == '/api/apply':
+            dry = (q.get('dry') or [''])[0] == '1'
+            return self._json(apply_offsets(dry=dry))
         if u.path.startswith('/img/'):
             return self._img(u.path[len('/img/'):])
         return self._json({'error': 'not found'}, 404)
@@ -326,6 +363,9 @@ PAGE = """<!doctype html>
   footer button { padding: 12px 16px; font-size: 15px; background: #522; color: #fdd;
                   border: 1px solid #733; border-radius: 10px; }
   #conn { font-size: 12px; color: #888; margin-left: auto; }
+  .b-apply { padding: 12px 14px; font-size: 14px; background: #246; color: #cde;
+             border: 1px solid #468; border-radius: 10px; }
+  #applymsg { font-size: 12px; color: #9a8; margin-top: 6px; line-height: 1.4; }
   details.imgs { background: #1a1a1a; border: 1px solid #333; border-radius: 12px;
                  padding: 10px 12px; margin-bottom: 12px; font-size: 13px; }
   details.imgs summary { cursor: pointer; color: #ddd; font-weight: 600; margin-bottom: 4px; }
@@ -346,9 +386,11 @@ PAGE = """<!doctype html>
     <div class="legrow" id="legrow"></div>
     <footer>
       <button id="allrel">Отпустить всё</button>
+      <button id="applybtn" class="b-apply">Перенести в servos.yaml</button>
       <a class="lnk" href="/api/export" target="_blank">экспорт offset_deg</a>
       <span id="conn">связь: —</span>
     </footer>
+    <div id="applymsg"></div>
   </div>
   <div class="right">
     <details class="imgs" open>
@@ -474,6 +516,29 @@ async function act(p) { await api(p); await refresh(); }
 
 document.getElementById('allrel').onclick = () => act('/api/release_all');
 
+document.getElementById('applybtn').onclick = async () => {
+  const msg = document.getElementById('applymsg');
+  msg.textContent = '…';
+  const dry = await api('/api/apply?dry=1');
+  if (!dry || !dry.ok) {
+    msg.textContent = 'ошибка: ' + ((dry && dry.error) || 'запрос не прошёл');
+    return;
+  }
+  if (!dry.changed.length) { msg.textContent = 'уже совпадает — менять нечего'; return; }
+  const list = dry.changed.map(c => c[0] + ' ' + c[1] + '→' + c[2]);
+  const preview = list.slice(0, 8).join('; ') + (list.length > 8 ? ' …' : '');
+  if (!confirm('Записать offset_deg в servos.yaml? ' + preview)) {
+    msg.textContent = 'отменено';
+    return;
+  }
+  const r = await api('/api/apply');
+  if (!r || !r.ok) {
+    msg.textContent = 'ошибка: ' + ((r && r.error) || 'запись не прошла');
+    return;
+  }
+  msg.textContent = 'записано (' + r.changed.length + '): ' + preview + '  →  ' + r.path + ' (бэкап .bak)';
+};
+
 renderTabs();
 (async function loop() { await refresh(); setTimeout(loop, 1500); })();
 </script>
@@ -485,4 +550,5 @@ if __name__ == '__main__':
     print('servo_pose_server: http://0.0.0.0:%d/  (%s)'
           % (PORT, 'I2C ' + DEV if BUS.real else 'МАКЕТ — I2C нет'))
     print('подстройка: %s' % TRIM_FILE)
+    print('servos.yaml: %s' % SERVOS_YAML)
     ThreadingHTTPServer(('0.0.0.0', PORT), Handler).serve_forever()
