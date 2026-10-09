@@ -84,10 +84,14 @@ def main():
                     pass
                 fd = None
         if line is None:
-            if t - last_note >= 10.0:
-                line = '%s  !! нет данных с INA219/шины' % \
-                    datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                last_note = t
+            try:
+                with open('/proc/uptime') as fh:
+                    up = float(fh.read().split()[0])
+            except OSError:
+                up = 0.0
+            line = '%s up=%7.1f  !! нет данных с INA219/шины  T=%s' % (
+                datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
+                up, temps())
         if line is not None:
             try:
                 path = os.path.join(
