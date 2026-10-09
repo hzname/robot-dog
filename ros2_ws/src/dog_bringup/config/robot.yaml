@@ -20,7 +20,7 @@
       max_height: 0.18
       foot_offset_x: 0.0    # neutral foot position relative to the hip [m]
       foot_offset_y: 0.0
-      transition_time: 1.5  # stand up / lie down duration [s]
+      transition_time: 4.5  # stand up / lie down duration [s] (стенд: втрое медленнее — инерция корпуса бьёт по сервам; вернуть при тюнинге походки)
       max_roll: 0.26        # [rad] ~15 deg
       max_pitch: 0.26
 
