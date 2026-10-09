@@ -31,6 +31,7 @@ import os
 import re
 import shutil
 import sys
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
@@ -151,15 +152,20 @@ def load_trim():
 
 TRIM = load_trim()
 
+# save_trim зовут из потоков сервера: без замка два os.replace наперегонки
+# дают FileNotFoundError (tmp уже переименован соседним потоком)
+_SAVE_LOCK = threading.Lock()
+
 
 def save_trim():
-    tmp = TRIM_FILE + '.tmp'
-    with open(tmp, 'w') as f:
-        json.dump({'step_deg': STEP_DEG,
-                   'updated': time.strftime('%Y-%m-%d %H:%M:%S'),
-                   'trims': {str(ch): round(TRIM.get(ch, 0.0), 2)
-                             for ch, *_ in JOINTS}}, f, ensure_ascii=False, indent=1)
-    os.replace(tmp, TRIM_FILE)
+    with _SAVE_LOCK:
+        tmp = TRIM_FILE + '.tmp'
+        with open(tmp, 'w') as f:
+            json.dump({'step_deg': STEP_DEG,
+                       'updated': time.strftime('%Y-%m-%d %H:%M:%S'),
+                       'trims': {str(ch): round(TRIM.get(ch, 0.0), 2)
+                                 for ch, *_ in JOINTS}}, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, TRIM_FILE)
 
 
 def apply_offsets(dry=False):
