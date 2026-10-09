@@ -290,14 +290,13 @@ PAGE = """<!doctype html>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
-  body { margin: 0 auto; background: #111; color: #eee; padding: 14px; max-width: 1000px; }
+  body { margin: 0 auto; background: #111; color: #eee; padding: 14px; max-width: 1280px; }
   .layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
   @media (min-width: 900px) {
-    .layout { grid-template-columns: minmax(0, 1fr) 380px; }
+    .layout { grid-template-columns: 380px minmax(0, 1fr); }
     .right { position: sticky; top: 12px; }
   }
   #box { display: grid; grid-template-columns: 1fr; gap: 10px; }
-  @media (min-width: 640px) { #box { grid-template-columns: 1fr 1fr; } }
   h1 { font-size: 18px; margin: 0 0 10px; }
   .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
   .tabs button { flex: 1; padding: 14px 0; font-size: 18px; font-weight: 700;
@@ -310,7 +309,8 @@ PAGE = """<!doctype html>
   .st { font-size: 13px; color: #bbb; margin: 6px 0 10px; line-height: 1.45; }
   .st b { color: #2d4; font-weight: 600; } .st.off b { color: #888; }
   .btns { display: flex; gap: 8px; }
-  .btns button { flex: 1; padding: 11px 0; font-size: 14px; font-weight: 700;
+  .btns + .btns { margin-top: 8px; }
+  .btns button { flex: 1; padding: 13px 0; font-size: 15px; font-weight: 700;
                  border: none; border-radius: 10px; }
   .b-step { background: #2a6; color: #000; }
   .b-hold { background: #2d4; color: #000; }
@@ -411,17 +411,20 @@ function row(j) {
   d.innerHTML = '<h2>' + jointLine(j) + '</h2>' +
     '<div class="st" id="st-' + j.ch + '">—</div>' +
     '<div class="btns">' +
-      '<button class="b-step">−1°</button>' +
       '<button class="b-hold">держать</button>' +
       '<button class="b-rel">снять</button>' +
+    '</div>' +
+    '<div class="btns">' +
+      '<button class="b-step">−1°</button>' +
       '<button class="b-step">+1°</button>' +
     '</div>' +
     '<button class="lnk">сброс подстройки</button>';
-  const [b1, b2, b3, b4] = d.querySelectorAll('.btns button');
-  b1.onclick = () => act('/api/nudge?ch=' + j.ch + '&d=-1');
-  b2.onclick = () => act('/api/set?ch=' + j.ch);
-  b3.onclick = () => act('/api/release?ch=' + j.ch);
-  b4.onclick = () => act('/api/nudge?ch=' + j.ch + '&d=1');
+  const [hold, rel] = d.querySelectorAll('.btns')[0].querySelectorAll('button');
+  const [minus, plus] = d.querySelectorAll('.btns')[1].querySelectorAll('button');
+  hold.onclick = () => act('/api/set?ch=' + j.ch);
+  rel.onclick = () => act('/api/release?ch=' + j.ch);
+  minus.onclick = () => act('/api/nudge?ch=' + j.ch + '&d=-1');
+  plus.onclick = () => act('/api/nudge?ch=' + j.ch + '&d=1');
   d.querySelector('.lnk').onclick = () => act('/api/reset?ch=' + j.ch);
   return d;
 }
