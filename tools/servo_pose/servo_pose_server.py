@@ -191,6 +191,8 @@ def channel_list(q, path):
 
 
 class Handler(BaseHTTPRequestHandler):
+    protocol_version = 'HTTP/1.1'                      # keep-alive: короче задержки на Wi-Fi
+
     def log_message(self, format, *args):              # тихий лог
         pass
 
@@ -453,7 +455,8 @@ function render() {
 function put(ch, j) {
   const el = document.getElementById('st-' + ch);
   if (!el) return;
-  el.innerHTML = jointStatus(j);
+  const txt = jointStatus(j);
+  if (el.innerHTML !== txt) el.innerHTML = txt;
   el.className = 'st' + (j.held_us == null ? ' off' : '');
 }
 
@@ -472,8 +475,7 @@ async function act(p) { await api(p); await refresh(); }
 document.getElementById('allrel').onclick = () => act('/api/release_all');
 
 renderTabs();
-refresh();
-setInterval(refresh, 1500);
+(async function loop() { await refresh(); setTimeout(loop, 1500); })();
 </script>
 </body>
 </html>
