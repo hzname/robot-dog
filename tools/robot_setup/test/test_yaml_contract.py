@@ -101,7 +101,9 @@ def test_servo_blocks_carry_a_comment_with_a_unit():
 CAD_Q2_REGION = (-145.0, -35.0)         # [deg] knee against the thigh, by the map
 CAD_S_HARD_STOPS = (-87.0, 18.0)        # [deg] hard stops of s from the fine sweeps
 GAIT_S_ENVELOPE = (-68.6, -16.2)        # [deg] stance/walk/lie, `stance_envelope` of the map
-MOUNT_S_DEG = -45.0                     # [deg] thigh 45 + knee -90, all servos centred
+# [deg] thigh 45 + knee -90, all servos centred. An assembly assumption, not a measurement: after
+# s0 is measured at 1370 us (docs/CALIBRATION.md) put s0 here, the test then holds for both recipes.
+MOUNT_S_DEG = -45.0
 CENTRE_PULSE_US = 1370.0                # [us] v1 centre pulse, the mount pose
 LEGS = ('lf', 'rf', 'lr', 'rr')
 
@@ -146,4 +148,4 @@ def test_the_mount_pose_is_the_centre_pulse_of_the_knee(leg):
     centre = (c['pulse_min_us'] + c['pulse_max_us']) / 2
     us_per_deg = (c['pulse_max_us'] - c['pulse_min_us']) / c['range_deg']
     pulse = centre + c['direction'] * (MOUNT_S_DEG - c['offset_deg']) * us_per_deg
-    assert abs(pulse - CENTRE_PULSE_US) <= 1.0, pulse
+    assert abs(pulse - CENTRE_PULSE_US) <= 1.0, (pulse, 'measured s0 at 1370 us differs from MOUNT_S_DEG?')
