@@ -10,6 +10,10 @@ offset_deg = опорный угол монтажной позы − подст�
 
 Без --write — только печатает, что изменится (сухой прогон). С --write —
 переписывает значения offset_deg в строках суставов, рядом сохраняет .bak.
+
+Строки с coupled_to (колено, связанное с бедром) пропускаются: их offset_deg
+— это s = бедро + колено в середине окна импульсов, а не угол колена, и
+ставится вручную (docs/CALIBRATION.md, раздел «Колено связано с бедром»).
 """
 import argparse
 import json
@@ -52,16 +56,23 @@ def main():
         text = f.read()
 
     pat = re.compile(r'^(\s*([a-z_]+_joint):\s+\{.*?offset_deg:)\s*(-?\d+(?:\.\d+)?)(.*)$')
-    out, changed = [], []
+    coupled = re.compile(r'coupled_to:\s*[\'"]?[a-z_]+_joint')
+    out, changed, skipped = [], [], []
     for line in text.splitlines():
         m = pat.match(line)
-        if m and m.group(2) in want:
+        if m and m.group(2) in want and coupled.search(line):
+            skipped.append(m.group(2))  # offset_deg of a coupled joint is s, not the knee angle
+        elif m and m.group(2) in want:
             name = m.group(2)
             new_val = '%6.1f' % want[name]
             if m.group(3) != new_val.strip():
                 changed.append((name, m.group(3), new_val.strip()))
             line = m.group(1) + new_val + m.group(4)
         out.append(line)
+
+    if skipped:
+        print('пропущены связанные суставы (offset_deg ставится вручную, docs/CALIBRATION.md): %s'
+              % ', '.join(skipped))
 
     if not changed:
         print('offset_deg уже соответствуют подстройке — менять нечего')

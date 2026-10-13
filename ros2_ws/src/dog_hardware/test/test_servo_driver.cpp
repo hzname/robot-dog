@@ -22,6 +22,32 @@ ServoCalibration knee()
   c.max_deg = -15.0;
   return c;
 }
+
+// The shipped knee row of servos.yaml for a left (+1) or right (-1) leg: the servo sits in the
+// thigh block and sets s = thigh + knee, window s = -32.5 +- 47.5 = -80..+15 deg, knee against the
+// thigh -140..-40 deg (CAD collision map 2026-10-13, docs/CALIBRATION.md). The constants mirror
+// servos.yaml; tools/robot_setup/test/test_yaml_contract.py pins the yaml side.
+ServoCalibration coupledKnee(int direction)
+{
+  ServoCalibration c;
+  c.channel = 2;
+  c.direction = direction;
+  c.offset_deg = -32.5;
+  c.range_deg = 95.0;
+  c.min_deg = -140.0;
+  c.max_deg = -40.0;
+  c.pulse_min_us = direction > 0 ? 1039.5 : 803.5;
+  c.pulse_max_us = direction > 0 ? 1936.5 : 1700.5;
+  c.coupled_to = 0;
+  c.coupling = 1.0;
+  return c;
+}
+
+/// Pulse for thigh q1 and knee q2 given in degrees.
+double kneePulse(const ServoCalibration & c, double q1_deg, double q2_deg, bool * clamped)
+{
+  return jointToPulseUs(c, q2_deg * kDeg, clamped, q1_deg * kDeg);
+}
 }  // namespace
 
 TEST(ServoMap, CentreAndScale)
@@ -291,4 +317,133 @@ TEST_F(DriverTest, CoupledServoIsRewrittenWhenParentMoves)
   // Self-coupling is refused.
   child.coupled_to = 1;
   EXPECT_FALSE(driver->setCalibration(1, child));
+}
+
+// ------------------------------------------------- knee coupled to the thigh
+
+TEST(CoupledKnee, CentreOfTheWindowIsNotClamped)
+{
+  for (const int dir : {1, -1}) {
+    SCOPED_TRACE(dir);
+    const ServoCalibration c = coupledKnee(dir);
+    bool clamped = true;
+    // s = 57.5 - 90 = -32.5 = offset_deg
+    EXPECT_NEAR(kneePulse(c, 57.5, -90.0, &clamped), c.centerUs(), 1e-9);
+    EXPECT_FALSE(clamped);
+    EXPECT_NEAR(c.centerUs(), dir > 0 ? 1488.0 : 1252.0, 1e-9);
+  }
+}
+
+TEST(CoupledKnee, MountPoseIsTheCentrePulseOfTheServo)
+{
+  // The assembly reference "all servos centred (1370 us) = thigh 45, knee -90" is s = -45.
+  for (const int dir : {1, -1}) {
+    SCOPED_TRACE(dir);
+    const ServoCalibration c = coupledKnee(dir);
+    bool clamped = true;
+    EXPECT_NEAR(kneePulse(c, 45.0, -90.0, &clamped), 1370.0, 0.1);
+    EXPECT_FALSE(clamped);
+  }
+}
+
+TEST(CoupledKnee, WindowEdgesFollowTheShinAngle)
+{
+  for (const int dir : {1, -1}) {
+    SCOPED_TRACE(dir);
+    const ServoCalibration c = coupledKnee(dir);
+    const double at_max = dir > 0 ? c.pulse_max_us : c.pulse_min_us;  // s = +15 side
+    const double at_min = dir > 0 ? c.pulse_min_us : c.pulse_max_us;  // s = -80 side
+    bool clamped = true;
+    // Half a degree inside the window: free; half a degree outside: pinned to the edge pulse.
+    kneePulse(c, 74.5, -60.0, &clamped);  // s = +14.5
+    EXPECT_FALSE(clamped);
+    kneePulse(c, 20.5, -100.0, &clamped);  // s = -79.5
+    EXPECT_FALSE(clamped);
+    EXPECT_NEAR(kneePulse(c, 75.5, -60.0, &clamped), at_max, 1e-9);  // s = +15.5
+    EXPECT_TRUE(clamped);
+    EXPECT_NEAR(kneePulse(c, 19.5, -100.0, &clamped), at_min, 1e-9);  // s = -80.5
+    EXPECT_TRUE(clamped);
+  }
+}
+
+TEST(CoupledKnee, ThighPlusKneeBeyondTheWindowIsClamped)
+{
+  for (const int dir : {1, -1}) {
+    SCOPED_TRACE(dir);
+    const ServoCalibration c = coupledKnee(dir);
+    bool clamped = false;
+    // q1 = 100, q2 = -60: the knee is inside -140..-40 but the sum 40 deg > 15 deg.
+    EXPECT_NEAR(kneePulse(c, 100.0, -60.0, &clamped), dir > 0 ? c.pulse_max_us : c.pulse_min_us, 1e-9);
+    EXPECT_TRUE(clamped);
+    // q1 = 10, q2 = -100: s = -90 deg < -80 deg, the other edge.
+    EXPECT_NEAR(kneePulse(c, 10.0, -100.0, &clamped), dir > 0 ? c.pulse_min_us : c.pulse_max_us, 1e-9);
+    EXPECT_TRUE(clamped);
+  }
+}
+
+TEST(CoupledKnee, KneeLimitAppliesBeforeTheSum)
+{
+  for (const int dir : {1, -1}) {
+    SCOPED_TRACE(dir);
+    const ServoCalibration c = coupledKnee(dir);
+    bool clamped = false;
+    // The knee beyond -140 is cut to -140 first; the sum is then inside the window.
+    const double bent = kneePulse(c, 80.0, -150.0, &clamped);
+    EXPECT_TRUE(clamped);
+    bool edge_clamped = true;
+    EXPECT_NEAR(bent, kneePulse(c, 80.0, -140.0, &edge_clamped), 1e-9);
+    EXPECT_FALSE(edge_clamped);
+    // Same on the straight side: -30 is cut to -40.
+    const double straight = kneePulse(c, 30.0, -30.0, &clamped);
+    EXPECT_TRUE(clamped);
+    EXPECT_NEAR(straight, kneePulse(c, 30.0, -40.0, &edge_clamped), 1e-9);
+    EXPECT_FALSE(edge_clamped);
+  }
+}
+
+TEST(CoupledKnee, CadStanceWalkAndLieEnvelopeIsNotClamped)
+{
+  // (thigh q1, knee q2) [deg]: lie 0.08, min 0.10, stance 0.15, max 0.18 and the walk corners
+  // (step x -60/-30/+30/+60 mm, lift 0/20 mm); `stance_envelope` of
+  // .planning/quick/261013-e4x-*/thigh-knee-limits.json, s = q1 + q2 in -68.6..-16.2.
+  const double poses[12][2] = {
+    {79.9, -137.5}, {71.3, -125.7}, {50.9, -92.7}, {36.9, -67.8},
+    {67.7, -83.8}, {78.6, -97.6}, {61.0, -90.5}, {70.8, -104.4},
+    {38.3, -90.5}, {44.8, -104.4}, {24.1, -83.8}, {29.0, -97.6}};
+  for (const int dir : {1, -1}) {
+    SCOPED_TRACE(dir);
+    const ServoCalibration c = coupledKnee(dir);
+    for (const auto & pose : poses) {
+      bool clamped = true;
+      const double us = kneePulse(c, pose[0], pose[1], &clamped);
+      EXPECT_FALSE(clamped) << pose[0] << " " << pose[1];
+      EXPECT_GT(us, c.pulse_min_us);
+      EXPECT_LT(us, c.pulse_max_us);
+    }
+  }
+}
+
+TEST(CoupledKnee, DriverClampsThePairAndCountsIt)
+{
+  auto bus = std::make_shared<MockBus>();
+  ServoCalibration thigh;
+  thigh.channel = 1;
+  thigh.offset_deg = 45.0;
+  thigh.min_deg = -45.0;
+  thigh.max_deg = 135.0;
+  const ServoCalibration calf = coupledKnee(1);
+  ServoDriver driver(bus, {"lf_thigh_joint", "lf_calf_joint"}, {thigh, calf}, DriverParams{});
+  const std::vector<std::string> names = {"lf_thigh_joint", "lf_calf_joint"};
+
+  // thigh 100, knee -60: the sum 40 deg is beyond the window (+15 deg).
+  EXPECT_EQ(driver.setTargets(names, {100.0 * kDeg, -60.0 * kDeg}, 0.0), 2);
+  driver.update(0.0);
+  EXPECT_NEAR(driver.pulses()[1], calf.pulse_max_us, 1e-9);
+  EXPECT_EQ(driver.clampedCount(), 1);
+
+  // The centre of the window: thigh 57.5, knee -90 (s = -32.5), reached by slew limiting.
+  EXPECT_EQ(driver.setTargets(names, {57.5 * kDeg, -90.0 * kDeg}, 0.05), 2);
+  for (int k = 1; k <= 20; ++k) {driver.update(0.05 * k);}
+  EXPECT_NEAR(driver.pulses()[1], calf.centerUs(), 1e-6);
+  EXPECT_EQ(driver.clampedCount(), 0);
 }

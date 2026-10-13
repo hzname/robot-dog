@@ -112,18 +112,22 @@ for ch in range(12):
     get('/api/reset?ch=%d' % ch)
 get('/api/nudge?ch=1&d=1'); get('/api/nudge?ch=1&d=1')
 get('/api/nudge?ch=2&d=-1')
+# колено связано с бедром (coupled_to): apply его строки не трогает, а только перечисляет
 d = get('/api/apply?dry=1')
-check(d['ok'] and d['dry'] and len(d['changed']) == 2, 'apply dry: 2 изменения')
+check(d['ok'] and d['dry'] and len(d['changed']) == 1 and d['changed'][0][0] == 'lf_thigh_joint',
+      'apply dry: 1 изменение (lf_thigh_joint)')
+check(sorted(d['skipped']) == ['lf_calf_joint', 'lr_calf_joint', 'rf_calf_joint', 'rr_calf_joint'],
+      'apply dry: связанные колени перечислены как пропущенные (получено %s)' % d['skipped'])
 dr = get('/api/apply')
-check(dr['ok'] and not dr['dry'] and len(dr['changed']) == 2, 'apply: записано 2 изменения')
+check(dr['ok'] and not dr['dry'] and len(dr['changed']) == 1, 'apply: записано 1 изменение')
 p2 = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'servos_apply_test.yaml')
 text = open(p2).read()
 def off(name):
     m = _re.search(name + r':\s+\{.*?offset_deg:\s*(-?[\d.]+)', text)
     return m.group(1) if m else '?'
-check(off('lf_thigh_joint') == '43.0' and off('lf_calf_joint') == '-89.0'
+check(off('lf_thigh_joint') == '43.0' and off('lf_calf_joint') == '-32.5'
       and off('lf_hip_joint') == '0.0',
-      'в servos.yaml: lf_thigh 43.0, lf_calf −89.0, lf_hip 0.0 (получено %s/%s/%s)'
+      'в servos.yaml: lf_thigh 43.0, lf_calf остался −32.5 (связан), lf_hip 0.0 (получено %s/%s/%s)'
       % (off('lf_thigh_joint'), off('lf_calf_joint'), off('lf_hip_joint')))
 check(os.path.exists(p2 + '.bak'), 'бэкап .bak создан')
 d2 = get('/api/apply')

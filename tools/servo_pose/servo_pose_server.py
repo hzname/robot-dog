@@ -88,7 +88,8 @@ JOINTS = [
 ]
 BY_CH = {j[0]: j for j in JOINTS}
 LEGS = ['LF', 'LB', 'RF', 'RB']
-FALLBACK_BOUNDS = {'hip': (-40.0, 40.0), 'thigh': (-45.0, 135.0), 'calf': (-165.0, -15.0)}
+# Same numbers as description.*_limits_deg in robot.yaml (calf: CAD collision map, docs/CALIBRATION.md).
+FALLBACK_BOUNDS = {'hip': (-40.0, 40.0), 'thigh': (-45.0, 135.0), 'calf': (-140.0, -40.0)}
 _CFG_CACHE = {'stamp': None, 'cfg': {}}
 
 
@@ -169,30 +170,37 @@ def save_trim():
 
 
 def apply_offsets(dry=False):
-    """offset_deg = опорный угол − trim; бэкап .bak, возвращает отчёт."""
+    """offset_deg = опорный угол − trim; бэкап .bak, возвращает отчёт.
+
+    Строки с coupled_to (колено связано с бедром) не трогаются: их offset_deg — это
+    s = бедро + колено в середине окна, а не угол колена; имена идут в 'skipped'.
+    """
     try:
         with open(SERVOS_YAML) as f:
             text = f.read()
     except OSError as exc:
-        return {'ok': False, 'error': 'нет %s (%s)' % (SERVOS_YAML, exc)}
+        return {'ok': False, 'error': 'нет %s (%s)' % (SERVOS_YAML, exc), 'skipped': []}
     want = {j[3]: j[5] - TRIM.get(j[0], 0.0) for j in JOINTS}
     pat = re.compile(r'^(\s*([a-z_]+_joint):\s+\{.*?offset_deg:)\s*(-?\d+(?:\.\d+)?)(.*)$')
-    out, changed = [], []
+    coupled = re.compile(r'coupled_to:\s*[\'"]?[a-z_]+_joint')
+    out, changed, skipped = [], [], []
     for line in text.splitlines():
         m = pat.match(line)
-        if m and m.group(2) in want:
+        if m and m.group(2) in want and coupled.search(line):
+            skipped.append(m.group(2))
+        elif m and m.group(2) in want:
             new_val = '%6.1f' % want[m.group(2)]
             if m.group(3) != new_val.strip():
                 changed.append([m.group(2), m.group(3), new_val.strip()])
             line = m.group(1) + new_val + m.group(4)
         out.append(line)
     if not changed or dry:
-        return {'ok': True, 'dry': dry, 'path': SERVOS_YAML, 'changed': changed,
+        return {'ok': True, 'dry': dry, 'path': SERVOS_YAML, 'changed': changed, 'skipped': skipped,
                 'note': ('уже совпадает' if not changed else 'предпросмотр')}
     shutil.copy2(SERVOS_YAML, SERVOS_YAML + '.bak')
     with open(SERVOS_YAML, 'w') as f:
         f.write('\n'.join(out) + ('\n' if text.endswith('\n') else ''))
-    return {'ok': True, 'dry': False, 'path': SERVOS_YAML, 'changed': changed}
+    return {'ok': True, 'dry': False, 'path': SERVOS_YAML, 'changed': changed, 'skipped': skipped}
 
 
 def dir_test(ch, sem):
@@ -797,9 +805,12 @@ document.getElementById('applybtn').onclick = async () => {
     msg.textContent = 'ошибка: ' + ((dry && dry.error) || 'запрос не прошёл');
     return;
   }
-  if (!dry.changed.length) { msg.textContent = 'уже совпадает — менять нечего'; return; }
+  const skip = (dry.skipped && dry.skipped.length)
+    ? ' Пропущены связанные суставы (offset_deg ставится вручную, docs/CALIBRATION.md): ' + dry.skipped.join(', ')
+    : '';
+  if (!dry.changed.length) { msg.textContent = 'уже совпадает — менять нечего.' + skip; return; }
   const list = dry.changed.map(c => c[0] + ' ' + c[1] + '→' + c[2]);
-  const preview = list.slice(0, 8).join('; ') + (list.length > 8 ? ' …' : '');
+  const preview = list.slice(0, 8).join('; ') + (list.length > 8 ? ' …' : '') + skip;
   if (!confirm('Записать offset_deg в servos.yaml? ' + preview)) {
     msg.textContent = 'отменено';
     return;
