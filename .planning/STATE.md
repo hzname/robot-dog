@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 Phase: 01 (Замеры на столе и ход назад в симуляции) — EXECUTING
 Plan: 14 of 17
 Status: Ready to execute
-Last activity: 2026-10-05 — Phase 01 execution started
+Last activity: 2026-10-13 - Completed quick task 261013-e4x: пределы бедра и колена по CAD (колено связано с бедром)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -139,6 +139,12 @@ Recent decisions affecting current work:
 - Phase 6-7: датчик тока INA226/INA219 установлен (подтверждено владельцем 2026-09-29), но значение шунта не проверено (10 мОм насыщается около 8 А); напряжение элемента батареи датчик не видит
 - Phase 6: неизвестны I2C-нумерация на разъёме M4 Zero, поведение TWI H618 при `I2C_TIMEOUT`, доступность пина OE
 - Пороги наклона и тока предварительные; уточнять по данным Phase 2 и записи ходьбы в Phase 7-8
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 261013-e4x | Пределы бедра и колена: карта допустимых (q1,q2) по CAD, график, окно сервы колена в servos.yaml/robot.yaml, тесты драйвера | 2026-10-13 | fb852fc | [261013-e4x-predely-bedra-i-kolena-karta-dopustimyh-](./quick/261013-e4x-predely-bedra-i-kolena-karta-dopustimyh-/) |
 
 ## Deferred Items
 

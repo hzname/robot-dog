@@ -1,0 +1,273 @@
+{
+ "description": "Collision map of the thigh x knee joint space, front-left leg, Fusion Full_body_case (SPT5435LV stand-in, user mg996_arm_2pad/round, femur_armed, motor_extension_taller_new)",
+ "date": "2026-10-13",
+ "angles": "q1 thigh [deg], + = foot backward; q2 knee relative to the thigh [deg], negative = knee backwards; s = q1 + q2 = absolute tibia pitch (what the knee servo sets)",
+ "reference_pose_cad": {
+  "q1": 48.1,
+  "q2": -94.9,
+  "s": -46.8
+ },
+ "grid": {
+  "q1": [
+   -50,
+   -45,
+   -40,
+   -35,
+   -30,
+   -25,
+   -20,
+   -15,
+   -10,
+   -5,
+   0,
+   5,
+   10,
+   15,
+   20,
+   25,
+   30,
+   35,
+   40,
+   45,
+   50,
+   55,
+   60,
+   65,
+   70,
+   75,
+   80,
+   85,
+   90,
+   95,
+   100,
+   105,
+   110,
+   115,
+   120,
+   125,
+   130,
+   135,
+   140,
+   145,
+   150,
+   155,
+   160
+  ],
+  "q2": [
+   -170,
+   -165,
+   -160,
+   -155,
+   -150,
+   -145,
+   -140,
+   -135,
+   -130,
+   -125,
+   -120,
+   -115,
+   -110,
+   -105,
+   -100,
+   -95,
+   -90,
+   -85,
+   -80,
+   -75,
+   -70,
+   -65,
+   -60,
+   -55,
+   -50,
+   -45,
+   -40,
+   -35,
+   -30,
+   -25,
+   -20,
+   -15,
+   -10
+  ],
+  "rows": {
+   "0": "GGGGGGGGGGGGGGGEEaaaaaaabbbbLLLLL",
+   "5": "GGGGGGGGGGGGGGEE.aaaaaaabbbbLLLLL",
+   "10": "GGGGGGGGGGGGGEE..aaaaaaabbbbLLLLL",
+   "15": "GGGGGGGGGGGGEE...aaaaaaabbbbLLLLL",
+   "20": "GGGGGGGGGGGEEa...aaaaaaabbbbLLLLL",
+   "25": "GGGGGGGGGGEEaa...aaaaaaabbbbLLLLL",
+   "30": "GGGGGGGGGEEaaa...aaaaaaabbbbLLLLL",
+   "35": "GGGGGGGGEEaaaa...aaaaaaabbbbLLLLL",
+   "40": "GGGGGGGEEaaaaa...aaaaaaabbbbLLLLL",
+   "45": "GGGGGGEEaaaaaa...aaaaaaabbbbLLLL#",
+   "50": "GGGGGEEaaaaaaa...aaaaaaabbbbLLL##",
+   "55": "GGGGLEbaaaaaaa...aaaaaaabbbbLL###",
+   "60": "GGGLLbbaaaaaaa...aaaaaaabbbEL####",
+   "65": "GGLLLbbaaaaaaa...aaaaaaabbEL####L",
+   "70": "GDLLLbbaaaaaaa...aaaaaabbEE####LL",
+   "75": "DDLLLbbaaaaaaa...aaaaabbEE####LLL",
+   "80": "DDLLLbbaaaaaaa...aaaabbEE####LEEE",
+   "85": "DDLLLbbaaaaaaa...aaabbEE####EEEEE",
+   "90": "DDLLLbbaaaaaaa...aabbEE####EEEEEE",
+   "95": "DDLLLbbaaaaaaa..aabbEE####EEEEEEE",
+   "100": "DDLLLbbaaaaaaa.aabbEE####EEEEEEEE",
+   "105": "DDLLLbbaaaaaaaaabbEE####EEEEEEEEE",
+   "110": "DDLLLbbaaaaaaaabbEE####EEEEEEEEEE",
+   "115": "DDLLLbbaaaaaaabbEE####EEEEEEEEEEE",
+   "120": "DDLLLbbaaaaaabbEE####EEEEEEEEEEEE",
+   "-50": "FFFFFFFFFGGGGGGGGGGGGGGGGGGGGGGGG",
+   "-45": "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+   "-40": "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+   "-35": "GGGGGGGGGGGGGGGGGGGGGGGGGbbbLLLLL",
+   "-30": "GGGGGGGGGGGGGGGGGGGGGGEbbbbbLLLLL",
+   "-25": "GGGGGGGGGGGGGGGGGGGGEEbbbbbbLLLLL",
+   "-20": "GGGGGGGGGGGGGGGGGGGEEaaabbbbLLLLL",
+   "-15": "GGGGGGGGGGGGGGGGGGEEaaaabbbbLLLLL",
+   "-10": "GGGGGGGGGGGGGGGGGEEaaaaabbbbLLLLL",
+   "-5": "GGGGGGGGGGGGGGGGEEaaaaaabbbbLLLLL",
+   "125": "DDLLLbbaaaaabbEE####EEEEEEEEEEEEE",
+   "130": "DDLLLbbaaaabbEE####EEEEEEEEEEEEEE",
+   "135": "DDLLLbbaaabbEE####EEEEEEEEEEEEEEE",
+   "140": "DDLLLbbaabbEE####EEEEEEEEEEEEEEEE",
+   "145": "DDLLLbbabbEE####EEEEEEEEEEEEEEEEE",
+   "150": "DDLLLLLLLLL####LLLLLLLLLLLLLLLLLL",
+   "155": "DDLLLLLLLL####LLLLLLLLLLLLLLLLLLL",
+   "160": "DDLLLLLLL####LLLLLLLLLLLLLLLLLLLL"
+  },
+  "codes": {
+   ".": "free (<2 mm3 above the baseline contacts)",
+   "a": "contact 2-10 mm3",
+   "b": "contact 10-25 mm3",
+   "E": "кривошип/удлинитель × диск (абс. угол голени)",
+   "L": "бедро × link_100mm (относит. колено)",
+   "G": "бедро × удлинитель кривошипа",
+   "F": "бедро × link_28mm",
+   "T": "бедро × голень/стопа",
+   "D": "бедро × диск",
+   "#": "рычажный механизм не замыкается (мёртвая точка)"
+  }
+ },
+ "free_region_from_map": {
+  "q2": [
+   -145,
+   -35
+  ],
+  "s": [
+   -85,
+   20
+  ],
+  "cells_not_matching_rectangle": 0,
+  "cells": 825,
+  "domain_q1": [
+   0,
+   120
+  ],
+  "outside_domain_extra_stops": "q1 <= -35: femur hits the crank extension (G); q1 >= 150: linkage branch flips / femur x link_100"
+ },
+ "recommended_region_margin_5deg": {
+  "q2": [
+   -140,
+   -40
+  ],
+  "s": [
+   -80,
+   15
+  ],
+  "polygon_q1_q2": [
+   [
+    -40.0,
+    -40.0
+   ],
+   [
+    55.0,
+    -40.0
+   ],
+   [
+    155.0,
+    -140.0
+   ],
+   [
+    60.0,
+    -140.0
+   ]
+  ]
+ },
+ "stance_envelope": [
+  {
+   "pose": "лежать 0.08",
+   "q1": 79.9,
+   "q2": -137.5,
+   "s": -57.6
+  },
+  {
+   "pose": "мин. 0.10",
+   "q1": 71.3,
+   "q2": -125.7,
+   "s": -54.3
+  },
+  {
+   "pose": "стойка 0.15",
+   "q1": 50.9,
+   "q2": -92.7,
+   "s": -41.8
+  },
+  {
+   "pose": "макс. 0.18",
+   "q1": 36.9,
+   "q2": -67.8,
+   "s": -31.0
+  },
+  {
+   "pose": "шаг x=-60, подъём 0",
+   "q1": 67.7,
+   "q2": -83.8,
+   "s": -16.2
+  },
+  {
+   "pose": "шаг x=-60, подъём 20",
+   "q1": 78.6,
+   "q2": -97.6,
+   "s": -19.0
+  },
+  {
+   "pose": "шаг x=-30, подъём 0",
+   "q1": 61.0,
+   "q2": -90.5,
+   "s": -29.5
+  },
+  {
+   "pose": "шаг x=-30, подъём 20",
+   "q1": 70.8,
+   "q2": -104.4,
+   "s": -33.6
+  },
+  {
+   "pose": "шаг x=+30, подъём 0",
+   "q1": 38.3,
+   "q2": -90.5,
+   "s": -52.1
+  },
+  {
+   "pose": "шаг x=+30, подъём 20",
+   "q1": 44.8,
+   "q2": -104.4,
+   "s": -59.5
+  },
+  {
+   "pose": "шаг x=+60, подъём 0",
+   "q1": 24.1,
+   "q2": -83.8,
+   "s": -59.8
+  },
+  {
+   "pose": "шаг x=+60, подъём 20",
+   "q1": 29.0,
+   "q2": -97.6,
+   "s": -68.6
+  }
+ ],
+ "geometry_used_mm": {
+  "thigh": 100.0,
+  "calf": 116.6
+ },
+ "static_parts_checked": "servos, holders, rocker, abduction servo, body panels, covers: no contacts inside the free region"
+}
