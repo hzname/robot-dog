@@ -29,7 +29,7 @@ DEFAULT_DESCRIPTION = {
     'body_mass': 0.80, 'body_com_x': 0.0, 'hip_mass': 0.06, 'thigh_mass': 0.08, 'calf_mass': 0.03,
     'foot_radius': 0.012, 'servo_effort': 1.1, 'servo_velocity': 6.0, 'sim_p_gain': 25.0,
     'hip_limits_deg': [-40.0, 40.0], 'thigh_limits_deg': [-45.0, 135.0],
-    'calf_limits_deg': [-165.0, -15.0],
+    'calf_limits_deg': [-140.0, -40.0],
 }
 
 

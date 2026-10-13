@@ -257,4 +257,7 @@
       sim_p_gain: 25.0      # Gazebo joint position loop gain [1/s]; not used in the velocity-command mode (joint_command_bridge sends velocities), value kept
       hip_limits_deg: [-40.0, 40.0]
       thigh_limits_deg: [-45.0, 135.0]
-      calf_limits_deg: [-165.0, -15.0]
+      # Knee relative to the thigh [deg], from the CAD collision map of 2026-10-13 (not
+      # measured): free -145..-35, taken with a 5 deg margin. The servo window on
+      # s = thigh + knee is in servos.yaml (docs/CALIBRATION.md).
+      calf_limits_deg: [-140.0, -40.0]

@@ -230,3 +230,28 @@ def test_sensor_checks_are_skipped_when_the_flag_is_off():
     v.update({'gs2': 0, 'tof': 0, 'x_lidar': 0, 'stand_height': 200})
     msgs = [t for _, t in rs.validate(v)[0]]
     assert not any('GS2' in t or 'ToF' in t or 'лидары' in t for t in msgs)
+
+
+def test_shipped_knee_is_coupled_and_validates_without_warnings():
+    v = rs.load(rs.CONFIG)
+    assert v['calf_coupled'] == 1
+    msgs, _ = rs.validate(v)
+    assert not [m for m in msgs if m[0] in ('error', 'warn')], msgs
+    assert any(lv == 'info' and 'coupled_to' in t for lv, t in msgs)
+
+
+def test_editing_calf_max_keeps_the_coupling_and_the_window(cfg):
+    servos_p = os.path.join(cfg, 'servos.yaml')
+    before = yaml.safe_load(open(servos_p))['/**/servo_driver']['ros__parameters']
+    v = rs.load(cfg)
+    v['calf_max'] = -45.0
+    rs.save(cfg, v)
+    after = yaml.safe_load(open(servos_p))['/**/servo_driver']['ros__parameters']
+    for leg in ('lf', 'rf', 'lr', 'rr'):
+        old, new = before['%s_calf_joint' % leg], after['%s_calf_joint' % leg]
+        assert (new['min_deg'], new['max_deg']) == (-140.0, -45.0)
+        for key in ('coupled_to', 'coupling', 'offset_deg', 'range_deg', 'pulse_min_us', 'pulse_max_us',
+                    'servo_arm_mm', 'direction', 'channel'):
+            assert new[key] == old[key], (leg, key)
+    robot = yaml.safe_load(open(os.path.join(cfg, 'robot.yaml')))['/**']['ros__parameters']
+    assert robot['description']['calf_limits_deg'] == [-140.0, -45.0]

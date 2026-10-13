@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 import numpy as np
 import pytest
 
-from dog_description.urdf import build_urdf, joint_names, load_config
+from dog_description.urdf import DEFAULT_DESCRIPTION, build_urdf, joint_names, load_config
 
 GEOM = {'hip_offset': 0.055, 'thigh': 0.105, 'calf': 0.105, 'hip_x': 0.09, 'hip_y': 0.06}
 
@@ -187,3 +187,12 @@ def test_body_com_x_moves_trunk_inertial():
             build_urdf(GEOM, {**PINNED_DESC, 'body_com_x': bad})
         with pytest.raises(ValueError, match='body_com_x'):
             build_urdf(GEOM, {**PINNED_DESC, 'body_com_x': bad}, servo_model='real')
+
+
+def test_default_limits_match_the_shipped_robot_yaml():
+    """Defaults in code and in robot.yaml must agree (CLAUDE.md); the pinned ideal-model
+    tests override the default explicitly, so they do not follow it."""
+    cfg = os.path.join(os.path.dirname(__file__), '..', '..', 'dog_bringup', 'config', 'robot.yaml')
+    _, description = load_config(cfg)
+    for key in ('hip_limits_deg', 'thigh_limits_deg', 'calf_limits_deg'):
+        assert description[key] == DEFAULT_DESCRIPTION[key], key

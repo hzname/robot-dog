@@ -432,8 +432,9 @@ def validate(v):
             out.append(('error', f'{k}: тяга не замыкается (рычаги {a:g}/{b or a:g}, тяга {c or d:g}, оси {d:g} мм)'))
         elif a > 0 and (b or a) < a:
             out.append(('info', f'{k}: рычаг сустава короче рычага сервы — ход сустава больше хода сервы'))
-    if int(g['calf_coupled']) and g['calf_servo_arm_mm'] <= 0:
-        out.append(('warn', 'колено «от корпуса» обычно бывает только с тягой (servo_arm_mm > 0)'))
+    if int(g['calf_coupled']):
+        out.append(('info', 'колено связано с бедром (coupled_to): серва колена задаёт s = бедро + колено, '
+                            'её окно считается по s (docs/CALIBRATION.md, раздел «Колено связано с бедром»)'))
     if linkage_closes(g['calf_servo_arm_mm'], g['calf_joint_arm_mm'],
                       g['calf_rod_mm'], g['calf_axis_distance_mm']):
         ratio = knee_ratio_max(g['calf_servo_arm_mm'], g['calf_joint_arm_mm'],
