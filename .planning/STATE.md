@@ -4,10 +4,10 @@ current_phase: 01
 current_phase_name: Замеры на столе и ход назад в симуляции
 status: executing
 stopped_at: Completed 01-13-PLAN.md
-last_updated: "2026-10-06T05:32:07.227Z"
-last_activity: 2026-10-05
+last_updated: "2026-10-13T08:53:57.983Z"
+last_activity: 2026-10-13
 last_activity_desc: Phase 01 execution started
-state_head: b65c873375b5052585220f5e7f08b9e375aa67f3
+state_head: 6df9fab2e802dee93ed33aef97e3d085bc99d916
 progress:
   total_phases: 8
   completed_phases: 0
@@ -145,6 +145,7 @@ Recent decisions affecting current work:
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 261013-e4x | Пределы бедра и колена: карта допустимых (q1,q2) по CAD, график, окно сервы колена в servos.yaml/robot.yaml, тесты драйвера | 2026-10-13 | fb852fc | [261013-e4x-predely-bedra-i-kolena-karta-dopustimyh-](./quick/261013-e4x-predely-bedra-i-kolena-karta-dopustimyh-/) |
+| 2 | Убрать из документации пункты про опоры для лежания (вариант корпуса отклонён владельцем) | 2026-10-13 | 6df9fab | — |
 
 ## Deferred Items
 
