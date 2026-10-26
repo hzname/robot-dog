@@ -3,11 +3,11 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Замеры на столе и ход назад в симуляции
 status: executing
-stopped_at: Completed 01-16-PLAN.md
-last_updated: "2026-10-26T14:05:00.000Z"
+stopped_at: Checkpoint in 01-17-PLAN.md (the Jazzy scoring gate failed on heading)
+last_updated: "2026-10-26T16:05:00.000Z"
 last_activity: 2026-10-26
-last_activity_desc: Plan 01-16 closed — acceptance says no gait changes needed
-state_head: 64c5650
+last_activity_desc: Plan 01-17 stopped at the checkpoint — heading 10.8° against 10° in one repeat, ci.yml untouched
+state_head: ac11642
 progress:
   total_phases: 8
   completed_phases: 0
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 01 (Замеры на столе и ход назад в симуляции) — EXECUTING
-Plan: 17 of 17
-Status: 01-16 закрыт: приёмка на текущем конфиге даёт зачёт с запасом, правки формы переноса не требуются
-Last activity: 2026-10-26 - Completed 01-16: прогон 40324372510 (Jazzy real 53.5 % на flat_A_bwd10, увод 6.2°, падений нет) → gait_changes: not_needed; попутно исправлен красный тест dog_bringup
+Plan: 17 of 17 (CHECKPOINT REACHED)
+Status: зачёт GAIT-01 на Jazzy `real` не получен: увод 10.8° против допуска 10° в одном повторе из пяти; отчёт и данные закоммичены, `ci.yml` и `docs/TERRAIN.md` не менялись
+Last activity: 2026-10-26 - 01-17 остановлен на CHECKPOINT: прогоны 40328414499 (repeats=5 cells=all) и 40328467878 (repeats=10 flat_A) сняты на 0917551, отчёт 01-ACCEPTANCE-REPORT.md, пороги 0.30/0.40 посчитаны но не применены
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -74,6 +74,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P14 | 2 h 40m | 4 tasks | 13 files |
 | Phase 01 P15 | 40 min | 1 task | 6 files |
 | Phase 01 P16 | 1 h 10m | 1 task | 8 files |
+| Phase 01 P17 | 1 h 45m | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -136,6 +137,8 @@ Recent decisions affecting current work:
 - [Phase 01]: Plan 01-16: `gait_changes: not_needed` — приёмка на текущем конфиге (RUN_ID 40324372510, 83ce7c9, cells=all repeats=5) даёт на Jazzy `real` 53.5 % на `flat_A_bwd10` (медиана 62.2 %) при воротах 40 %, `flat_B_bwd10` 51.4 %, увод в режиме A 6.2° при 10°, падений нет; волны 41.4 %, камни 52.1 %. Пороги и код походки не менялись, кандидаты K1-K3 не пробовались
 - [Phase 01]: Plan 01-16: план пересобран под фактическое состояние — 01-15 закрыт без чисел и без `auto_period`, поэтому `period_s_before` взят из `robot.yaml` (0.55), а не из gtest `ShippedDefaultsStartWithAutoPeriod`; критерии D-01/D-07 не менялись (одобрено владельцем 2026-10-26)
 - [Phase 01]: Plan 01-16: `build + test` был красным на ветке с коммита 61878f1 — `dog_bringup/test_mock_bringup.py` хардкодил offset 45°, после подстроек стало 56°, поза 45° давала 1266.1 мкс вместо 1370. Тест теперь читает `offset_deg` из `cal_info` (e112250); на нём оба `build + test` зелёные
+- [Phase 01]: Plan 01-17: итоговая приёмка на 0917551 — Jazzy `real` min 61.9 % (медиана 65.6 %) при воротах 40 %, `flat_B` 48.2 %, падений нет, волны и камни пройдены, но увод в `flat_A_bwd10` 10.8° против 10° → `jazzy_real_scoring: FAIL`, CHECKPOINT. Нарушение — один повтор из пяти (3.3…6.1° в остальных), на 10 повторах той же ячейки максимум 6.8°
+- [Phase 01]: Plan 01-17: по ветке провала `ci.yml` не менялся (остаётся `--backward-ratio 0.2`), `docs/TERRAIN.md` не правился, пороги по дистрибутивам 0.30 / 0.40 посчитаны и записаны в отчёт, но не применены (D-17). Владелец отказался от повторного прогона 2026-10-26 («не. закрывай»)
 
 ### Pending Todos
 
@@ -150,6 +153,7 @@ Recent decisions affecting current work:
 - Пороги наклона и тока предварительные; уточнять по данным Phase 2 и записи ходьбы в Phase 7-8
 - Phase 1: скорость серв не измерена. Причина отказа 01-14 — не механика, а методика: разброс между одинаковыми ходами (σ 9…11 % плато) втрое больше разницы между соседними скоростями (6…19 %), порог значимости 3σ = 27…32 %, поэтому анализатор не находит излом ни на одной из четырёх записей. Чтобы получить число, нужны другие условия съёма (робот на боку, чтобы убрать вес ноги, либо в разы больше повторов на скорость)
 - Калибровка драйвера: при 12.065 мкс/град окно импульсов 520..2220 задаёт ~141° при range_deg 180. Принято как данность (2026-10-26): фактический ход серв такой и есть, окно не расширяется; учитывать при планировании походки
+- Phase 1, зачёт GAIT-01 не получен (2026-10-26): на Jazzy `real` в `flat_A_bwd10` увод за 5 с 10.8° против допуска 10°, при этом доля хода 61.9 % (медиана 65.6 %) и падений нет. Нарушение — один повтор из пяти (остальные 3.3…6.1°), на десяти повторах той же ячейки максимум 6.8°. Нужно решение владельца: правки походки по уводу, повторная приёмка или пересмотр критерия D-01 (максимум по пяти повторам). `ci.yml` остаётся с `--backward-ratio 0.2`, пороги по дистрибутивам (0.30 / 0.40) посчитаны, но не применены
 
 ### Quick Tasks Completed
 
@@ -168,6 +172,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-26T14:05:00.000Z
-Stopped at: Completed 01-16-PLAN.md
-Resume file: .planning/phases/01-zamery-na-stole-i-hod-nazad-v-simulyatsii/01-16-SUMMARY.md
+Last session: 2026-10-26T16:05:00.000Z
+Stopped at: Checkpoint in 01-17-PLAN.md (the Jazzy scoring gate failed on heading)
+Resume file: .planning/phases/01-zamery-na-stole-i-hod-nazad-v-simulyatsii/01-17-SUMMARY.md
