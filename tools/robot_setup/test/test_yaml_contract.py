@@ -106,6 +106,10 @@ GAIT_S_ENVELOPE = (-68.6, -16.2)        # [deg] stance/walk/lie, `stance_envelop
 MOUNT_S_DEG = -45.0
 CENTRE_PULSE_US = 1370.0                # [us] v1 centre pulse, the mount pose
 LEGS = ('lf', 'rf', 'lr', 'rr')
+# [deg] knee trims at the mount pose, measured on the bench with tools/servo_pose (2026-10-26):
+# the mount pose of a knee is held at 1370 + direction * trim * 1700/180 us, so its pulse window
+# is shifted by that much (the s window of the CAD map stays the same).
+KNEE_MOUNT_TRIM_DEG = {'lf': -12.0, 'rf': -11.0, 'lr': -11.0, 'rr': -30.0}
 
 
 def _calf(leg):
@@ -143,9 +147,11 @@ def test_calf_window_stays_inside_the_cad_stops_and_covers_the_gait(leg):
 
 @pytest.mark.parametrize('leg', LEGS)
 def test_the_mount_pose_is_the_centre_pulse_of_the_knee(leg):
-    """Physical consistency: all servos centred (1370 us) = thigh 45, knee -90, s = -45."""
+    """Physical consistency: the mount pose (thigh 45, knee -90, s = -45) is the centre pulse
+    1370 us plus the knee's measured mount trim."""
     c = _calf(leg)
     centre = (c['pulse_min_us'] + c['pulse_max_us']) / 2
     us_per_deg = (c['pulse_max_us'] - c['pulse_min_us']) / c['range_deg']
     pulse = centre + c['direction'] * (MOUNT_S_DEG - c['offset_deg']) * us_per_deg
-    assert abs(pulse - CENTRE_PULSE_US) <= 1.0, (pulse, 'measured s0 at 1370 us differs from MOUNT_S_DEG?')
+    expected = CENTRE_PULSE_US + c['direction'] * KNEE_MOUNT_TRIM_DEG[leg] * 1700.0 / 180.0
+    assert abs(pulse - expected) <= 1.0, (pulse, expected, 'knee window does not match the measured mount trim')
