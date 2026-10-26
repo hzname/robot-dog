@@ -1,0 +1,1 @@
+{"shunt_ohm": 0.1, "us_per_deg": 12.065, "amp_deg": 25, "center_us": 1370, "channel": 10, "speeds_rad_s": [1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 8, 9, 10], "strokes_per_speed": 10, "hold_s": 0.4, "rest_s": 3, "ina_config": 6559, "stop_reason": "completed"}
