@@ -1,5 +1,6 @@
 """Contract of the Phase 1 config keys in robot.yaml and servos.yaml."""
 
+import ast
 import math
 import os
 import re
@@ -155,3 +156,84 @@ def test_the_mount_pose_is_the_centre_pulse_of_the_knee(leg):
     pulse = centre + c['direction'] * (MOUNT_S_DEG - c['offset_deg']) * us_per_deg
     expected = CENTRE_PULSE_US + c['direction'] * KNEE_MOUNT_TRIM_DEG[leg] * 1700.0 / 180.0
     assert abs(pulse - expected) <= 1.0, (pulse, expected, 'knee window does not match the measured mount trim')
+
+
+# Rule of the project (outline #7, note 01-10): the defaults of the code are the
+# YAML values. These two guards fail when a YAML number changes without the C++
+# default, so a later phase cannot silently leave the nodes on the old numbers.
+ROS = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'ros2_ws', 'src')
+
+
+def _read(*parts):
+    with open(os.path.join(ROS, *parts)) as f:
+        return f.read()
+
+
+def _cpp_struct(text, name):
+    """Body of `struct <name> { ... }`, line comments removed."""
+    text = re.sub(r'//.*', '', text)
+    start = re.search(r'\bstruct\s+%s\s*\{' % re.escape(name), text)
+    assert start, 'struct %s not found' % name
+    body = text[start.end() - 1:]
+    depth = 0
+    for i, ch in enumerate(body):
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                return body[1:i]
+    raise AssertionError('unbalanced struct %s' % name)
+
+
+def _cpp_field(body, name):
+    """Default of `double|float|int|bool <name>{...}` inside a struct body."""
+    m = re.search(r'\b(?:double|float|int|bool)\s+%s\s*\{\s*([^}]+?)\s*\}' % re.escape(name), body)
+    assert m, 'default of %s not found' % name
+    raw = m.group(1)
+    if raw == 'true':
+        return True
+    if raw == 'false':
+        return False
+    return float(raw)
+
+
+def _default_description():
+    tree = ast.parse(_read('dog_description', 'dog_description', 'urdf.py'))
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(getattr(t, 'id', None) == 'DEFAULT_DESCRIPTION'
+                                                for t in node.targets):
+            return ast.literal_eval(node.value)
+    raise AssertionError('DEFAULT_DESCRIPTION not found in urdf.py')
+
+
+def test_cpp_defaults_match_geometry_in_robot_yaml():
+    robot = _robot()
+    leg = _cpp_struct(_read('dog_control', 'include', 'dog_control', 'kinematics.hpp'),
+                      'LegGeometry')
+    for field, path in (('hip', 'geometry.hip_offset'), ('thigh', 'geometry.thigh'),
+                        ('calf', 'geometry.calf')):
+        assert _cpp_field(leg, field) == pytest.approx(_dig(robot, path)), (field, path)
+    params = _cpp_struct(_read('dog_control', 'include', 'dog_control', 'locomotion.hpp'),
+                         'LocomotionParams')
+    for field, path in (('hip_x', 'geometry.hip_x'), ('hip_y', 'geometry.hip_y'),
+                        ('stand_height', 'stance.stand_height'), ('lie_height', 'stance.lie_height'),
+                        ('min_height', 'stance.min_height'), ('max_height', 'stance.max_height'),
+                        ('foot_offset_x', 'stance.foot_offset_x'),
+                        ('foot_offset_y', 'stance.foot_offset_y')):
+        assert _cpp_field(params, field) == pytest.approx(_dig(robot, path)), (field, path)
+    default = _default_description()
+    assert set(default) == set(robot['description'])
+    for key, value in default.items():
+        assert robot['description'][key] == value, key
+
+
+def test_cpp_defaults_match_servo_model_and_auto_period():
+    robot = _robot()
+    model = _cpp_struct(_read('dog_control', 'include', 'dog_control', 'servo_limits.hpp'),
+                        'ServoSpeedModel')
+    for field in ('max_speed', 'margin', 'knee_ratio'):
+        assert _cpp_field(model, field) == pytest.approx(robot['servo'][field]), field
+    params = _cpp_struct(_read('dog_control', 'include', 'dog_control', 'locomotion.hpp'),
+                         'LocomotionParams')
+    assert _cpp_field(params, 'auto_period') is robot['gait']['auto_period']
