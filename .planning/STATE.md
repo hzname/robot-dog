@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Замеры на столе и ход назад в симуляции
 status: executing
-stopped_at: Completed 01-15-PLAN.md
-last_updated: "2026-10-26T13:20:00.000Z"
+stopped_at: Completed 01-16-PLAN.md
+last_updated: "2026-10-26T14:05:00.000Z"
 last_activity: 2026-10-26
-last_activity_desc: Plan 01-15 closed with the synchronization only (two defaults guards)
-state_head: 26e8fe4
+last_activity_desc: Plan 01-16 closed — acceptance says no gait changes needed
+state_head: 64c5650
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 15
+  completed_plans: 16
   percent: 0
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 01 (Замеры на столе и ход назад в симуляции) — EXECUTING
-Plan: 16 of 17
-Status: 01-15 закрыт в объёме синхронизации: сторожа умолчаний кода и YAML добавлены, числа замеров не вносились (решение владельца 2026-10-26)
-Last activity: 2026-10-26 - Completed 01-15: два сторожа «умолчания кода равны robot.yaml», 62 pytest зелёные; замеры геометрии и скорости не вносились
+Plan: 17 of 17
+Status: 01-16 закрыт: приёмка на текущем конфиге даёт зачёт с запасом, правки формы переноса не требуются
+Last activity: 2026-10-26 - Completed 01-16: прогон 40324372510 (Jazzy real 53.5 % на flat_A_bwd10, увод 6.2°, падений нет) → gait_changes: not_needed; попутно исправлен красный тест dog_bringup
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -73,6 +73,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P13 | 7h 45m | 4 tasks | 12 files |
 | Phase 01 P14 | 2 h 40m | 4 tasks | 13 files |
 | Phase 01 P15 | 40 min | 1 task | 6 files |
+| Phase 01 P16 | 1 h 10m | 1 task | 8 files |
 
 ## Accumulated Context
 
@@ -132,6 +133,9 @@ Recent decisions affecting current work:
 - [Phase 01]: Plan 01-14: замер скорости серв признан непригодным — анализатор не выделяет излом ни на одной из четырёх записей (шум повторяемости 9-11 % против разницы между соседними скоростями 6-19 %, порог eps = 3σ = 27-32 %), все дают saturated_at_first_speed; владелец 2026-10-26 отклонил замер, в конфиге остаются 6.0 рад/с и servo.margin 0.8. Виновата методика, не механика: данные пишутся воспроизводимо (137 с, ~126 тыс. строк, stop_reason completed на всех прогонах)
 - [Phase 01]: Plan 01-14: us_per_deg = 12.065 мкс/град по транспортиру (две пары: 472 мкс → 38.1°, 600 мкс → 50.75°; +27.8 % к номиналу 9.444). Окно 520..2220 мкс при этом покрывает ~141°, а не 180° — принято как данность (решение владельца 2026-10-26), окно и `range_deg` не меняются
 - [Phase 01]: Plan 01-15 закрыт в объёме синхронизации (решение владельца 2026-10-26): добавлены два сторожа «умолчания кода равны robot.yaml» (`LegGeometry`, `LocomotionParams`, `ServoSpeedModel`, `DEFAULT_DESCRIPTION` через ast), 62 pytest зелёные, сторож падает на подменённом YAML. YAML и числа не менялись, `gait.auto_period` остаётся false. Таблица замеров от 2026-10-06 закоммичена, но не внесена; нога с момента замера не переделывалась
+- [Phase 01]: Plan 01-16: `gait_changes: not_needed` — приёмка на текущем конфиге (RUN_ID 40324372510, 83ce7c9, cells=all repeats=5) даёт на Jazzy `real` 53.5 % на `flat_A_bwd10` (медиана 62.2 %) при воротах 40 %, `flat_B_bwd10` 51.4 %, увод в режиме A 6.2° при 10°, падений нет; волны 41.4 %, камни 52.1 %. Пороги и код походки не менялись, кандидаты K1-K3 не пробовались
+- [Phase 01]: Plan 01-16: план пересобран под фактическое состояние — 01-15 закрыт без чисел и без `auto_period`, поэтому `period_s_before` взят из `robot.yaml` (0.55), а не из gtest `ShippedDefaultsStartWithAutoPeriod`; критерии D-01/D-07 не менялись (одобрено владельцем 2026-10-26)
+- [Phase 01]: Plan 01-16: `build + test` был красным на ветке с коммита 61878f1 — `dog_bringup/test_mock_bringup.py` хардкодил offset 45°, после подстроек стало 56°, поза 45° давала 1266.1 мкс вместо 1370. Тест теперь читает `offset_deg` из `cal_info` (e112250); на нём оба `build + test` зелёные
 
 ### Pending Todos
 
@@ -164,6 +168,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-26T13:20:00.000Z
-Stopped at: Completed 01-15-PLAN.md
-Resume file: .planning/phases/01-zamery-na-stole-i-hod-nazad-v-simulyatsii/01-15-SUMMARY.md
+Last session: 2026-10-26T14:05:00.000Z
+Stopped at: Completed 01-16-PLAN.md
+Resume file: .planning/phases/01-zamery-na-stole-i-hod-nazad-v-simulyatsii/01-16-SUMMARY.md
