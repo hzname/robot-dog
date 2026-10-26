@@ -164,19 +164,22 @@ class TestMockBringup(unittest.TestCase):
             self.assertEqual(lf['channel'], 1.0)
             self.assertEqual(lf['servo_arm_mm'], 0.0)
             self.assertAlmostEqual(info['geometry']['thigh'], 0.105)
-            ws.send({'type': 'cal_pose', 'joints': {'lf_thigh_joint': 45.0}})
+            # The mount pose is the centre pulse whatever the measured offset is:
+            # the calibration is data (servos.yaml), not a constant of the test.
+            mount = lf['offset_deg']
+            ws.send({'type': 'cal_pose', 'joints': {'lf_thigh_joint': mount}})
             ws.recv_type('cal_pose_ok')
             status = ws.recv_until(lambda m: m['type'] == 'cal_status'
                                    and m['pulses'].get('lf_thigh_joint', 0) > 1000)
-            self.assertAlmostEqual(status['pulses']['lf_thigh_joint'], 1370.0, delta=1.0)  # offset 45
-            ws.send({'type': 'cal_set', 'params': {'lf_thigh_joint.offset_deg': 40}})
+            self.assertAlmostEqual(status['pulses']['lf_thigh_joint'], 1370.0, delta=1.0)  # mount pose
+            ws.send({'type': 'cal_set', 'params': {'lf_thigh_joint.offset_deg': mount - 5}})
             self.assertTrue(ws.recv_type('cal_set_result')['ok'])
             status = ws.recv_until(lambda m: m['type'] == 'cal_status'
                                    and abs(m['pulses']['lf_thigh_joint'] - 1370.0) > 20)
             self.assertAlmostEqual(status['pulses']['lf_thigh_joint'], 1370.0 + 5 * 1700 / 180, delta=1.0)
             ws.send({'type': 'cal_set', 'params': {'lf_thigh_joint.direction': 3}})
             self.assertFalse(ws.recv_type('cal_set_result')['ok'])
-            ws.send({'type': 'cal_set', 'params': {'lf_thigh_joint.offset_deg': 45}})
+            ws.send({'type': 'cal_set', 'params': {'lf_thigh_joint.offset_deg': mount}})
             self.assertTrue(ws.recv_type('cal_set_result')['ok'])
         finally:
             ws.close()
