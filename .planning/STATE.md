@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Замеры на столе и ход назад в симуляции
 status: executing
-stopped_at: Completed 01-14-PLAN.md
-last_updated: "2026-10-26T12:25:00.000Z"
+stopped_at: Completed 01-15-PLAN.md
+last_updated: "2026-10-26T13:20:00.000Z"
 last_activity: 2026-10-26
-last_activity_desc: Plan 01-14 closed — servo speed measurement rejected as unusable
-state_head: b16a2c6
+last_activity_desc: Plan 01-15 closed with the synchronization only (two defaults guards)
+state_head: 26e8fe4
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 14
+  completed_plans: 15
   percent: 0
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 01 (Замеры на столе и ход назад в симуляции) — EXECUTING
-Plan: 15 of 17
-Status: 01-14 закрыт: замер скорости серв признан непригодным, 01-15 нечего вносить (решение владельца 2026-10-26)
-Last activity: 2026-10-26 - Completed 01-14: замер MG996R на четырёх бёдрах, вердикт unusable, 6.0 рад/с остаются в конфиге
+Plan: 16 of 17
+Status: 01-15 закрыт в объёме синхронизации: сторожа умолчаний кода и YAML добавлены, числа замеров не вносились (решение владельца 2026-10-26)
+Last activity: 2026-10-26 - Completed 01-15: два сторожа «умолчания кода равны robot.yaml», 62 pytest зелёные; замеры геометрии и скорости не вносились
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -72,6 +72,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P12 | 60 min | 3 tasks | 6 files |
 | Phase 01 P13 | 7h 45m | 4 tasks | 12 files |
 | Phase 01 P14 | 2 h 40m | 4 tasks | 13 files |
+| Phase 01 P15 | 40 min | 1 task | 6 files |
 
 ## Accumulated Context
 
@@ -129,7 +130,8 @@ Recent decisions affecting current work:
 - [Phase 01]: Plan 01-13: baseline 'before' data captured (140 repeats, no falls, n_invalid=0): flat_A_bwd10 minima 42.1-54.0% at n=10; D-05 threshold candidates jazzy 0.35 / lyrical 0.40 recorded in 01-BASELINE.md (Lyrical marked as an assumption); ci.yml keeps --backward-ratio 0.2 until 01-17
 - [Phase 01]: Plan 01-13: acceptance artifacts are downloaded with gh run download --pattern 'acceptance-*' — the unfiltered download aborts on the robot image dockerbuild artifact (not a zip) and fetches nothing; logged in deferred-items.md for 01-16/01-17
 - [Phase 01]: Plan 01-14: замер скорости серв признан непригодным — анализатор не выделяет излом ни на одной из четырёх записей (шум повторяемости 9-11 % против разницы между соседними скоростями 6-19 %, порог eps = 3σ = 27-32 %), все дают saturated_at_first_speed; владелец 2026-10-26 отклонил замер, в конфиге остаются 6.0 рад/с и servo.margin 0.8. Виновата методика, не механика: данные пишутся воспроизводимо (137 с, ~126 тыс. строк, stop_reason completed на всех прогонах)
-- [Phase 01]: Plan 01-14: us_per_deg = 12.065 мкс/град по транспортиру (две пары: 472 мкс → 38.1°, 600 мкс → 50.75°; +27.8 % к номиналу 9.444). Следствие для калибровки: окно 520..2220 мкс покрывает ~141°, а не 180°, как записано в range_deg — команды дают меньше поворота, чем считает драйвер; решать в поздней фазе (расширить окно либо привести range_deg к факту)
+- [Phase 01]: Plan 01-14: us_per_deg = 12.065 мкс/град по транспортиру (две пары: 472 мкс → 38.1°, 600 мкс → 50.75°; +27.8 % к номиналу 9.444). Окно 520..2220 мкс при этом покрывает ~141°, а не 180° — принято как данность (решение владельца 2026-10-26), окно и `range_deg` не меняются
+- [Phase 01]: Plan 01-15 закрыт в объёме синхронизации (решение владельца 2026-10-26): добавлены два сторожа «умолчания кода равны robot.yaml» (`LegGeometry`, `LocomotionParams`, `ServoSpeedModel`, `DEFAULT_DESCRIPTION` через ast), 62 pytest зелёные, сторож падает на подменённом YAML. YAML и числа не менялись, `gait.auto_period` остаётся false. Таблица замеров от 2026-10-06 закоммичена, но не внесена; нога с момента замера не переделывалась
 
 ### Pending Todos
 
@@ -143,7 +145,7 @@ Recent decisions affecting current work:
 - Phase 6: неизвестны I2C-нумерация на разъёме M4 Zero, поведение TWI H618 при `I2C_TIMEOUT`, доступность пина OE
 - Пороги наклона и тока предварительные; уточнять по данным Phase 2 и записи ходьбы в Phase 7-8
 - Phase 1: скорость серв не измерена. Чтобы получить число, нужны другие условия съёма (робот на боку, чтобы убрать вес ноги, либо в разы больше повторов на скорость): та же процедура шум перекроет снова
-- Калибровка драйвера: при 12.065 мкс/град окно импульсов 520..2220 задаёт ~141° при range_deg 180 — фактические углы меньше команд; вопрос к фазе калибровки
+- Калибровка драйвера: при 12.065 мкс/град окно импульсов 520..2220 задаёт ~141° при range_deg 180. Принято как данность (2026-10-26): фактический ход серв такой и есть, окно не расширяется; учитывать при планировании походки
 
 ### Quick Tasks Completed
 
@@ -162,6 +164,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-26T12:25:00.000Z
-Stopped at: Completed 01-14-PLAN.md
-Resume file: .planning/phases/01-zamery-na-stole-i-hod-nazad-v-simulyatsii/01-14-SUMMARY.md
+Last session: 2026-10-26T13:20:00.000Z
+Stopped at: Completed 01-15-PLAN.md
+Resume file: .planning/phases/01-zamery-na-stole-i-hod-nazad-v-simulyatsii/01-15-SUMMARY.md
