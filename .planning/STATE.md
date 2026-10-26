@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Замеры на столе и ход назад в симуляции
 status: executing
-stopped_at: Completed 01-13-PLAN.md
-last_updated: "2026-10-13T08:53:57.983Z"
-last_activity: 2026-10-13
-last_activity_desc: Phase 01 execution started
-state_head: 6df9fab2e802dee93ed33aef97e3d085bc99d916
+stopped_at: Completed 01-14-PLAN.md
+last_updated: "2026-10-26T12:25:00.000Z"
+last_activity: 2026-10-26
+last_activity_desc: Plan 01-14 closed — servo speed measurement rejected as unusable
+state_head: b16a2c6
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 13
+  completed_plans: 14
   percent: 0
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 01 (Замеры на столе и ход назад в симуляции) — EXECUTING
-Plan: 14 of 17
-Status: Ready to execute
-Last activity: 2026-10-13 - Completed quick task 261013-e4x: пределы бедра и колена по CAD (колено связано с бедром)
+Plan: 15 of 17
+Status: 01-14 закрыт: замер скорости серв признан непригодным, 01-15 нечего вносить (решение владельца 2026-10-26)
+Last activity: 2026-10-26 - Completed 01-14: замер MG996R на четырёх бёдрах, вердикт unusable, 6.0 рад/с остаются в конфиге
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -71,6 +71,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P11 | 6 min | 3 tasks | 6 files |
 | Phase 01 P12 | 60 min | 3 tasks | 6 files |
 | Phase 01 P13 | 7h 45m | 4 tasks | 12 files |
+| Phase 01 P14 | 2 h 40m | 4 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -127,6 +128,8 @@ Recent decisions affecting current work:
 - [Phase 01]: Plan 01-13: ci_dispatch.sh now passes -f key=value to gh workflow run — the raw positionals it sent before were ignored by gh, so the acceptance job (if: inputs.acceptance) was skipped on the first trial dispatch; the green trial is run 37414394613 (fix adcf834)
 - [Phase 01]: Plan 01-13: baseline 'before' data captured (140 repeats, no falls, n_invalid=0): flat_A_bwd10 minima 42.1-54.0% at n=10; D-05 threshold candidates jazzy 0.35 / lyrical 0.40 recorded in 01-BASELINE.md (Lyrical marked as an assumption); ci.yml keeps --backward-ratio 0.2 until 01-17
 - [Phase 01]: Plan 01-13: acceptance artifacts are downloaded with gh run download --pattern 'acceptance-*' — the unfiltered download aborts on the robot image dockerbuild artifact (not a zip) and fetches nothing; logged in deferred-items.md for 01-16/01-17
+- [Phase 01]: Plan 01-14: замер скорости серв признан непригодным — анализатор не выделяет излом ни на одной из четырёх записей (шум повторяемости 9-11 % против разницы между соседними скоростями 6-19 %, порог eps = 3σ = 27-32 %), все дают saturated_at_first_speed; владелец 2026-10-26 отклонил замер, в конфиге остаются 6.0 рад/с и servo.margin 0.8. Виновата методика, не механика: данные пишутся воспроизводимо (137 с, ~126 тыс. строк, stop_reason completed на всех прогонах)
+- [Phase 01]: Plan 01-14: us_per_deg = 12.065 мкс/град по транспортиру (две пары: 472 мкс → 38.1°, 600 мкс → 50.75°; +27.8 % к номиналу 9.444). Следствие для калибровки: окно 520..2220 мкс покрывает ~141°, а не 180°, как записано в range_deg — команды дают меньше поворота, чем считает драйвер; решать в поздней фазе (расширить окно либо привести range_deg к факту)
 
 ### Pending Todos
 
@@ -139,6 +142,8 @@ Recent decisions affecting current work:
 - Phase 6-7: датчик тока INA226/INA219 установлен (подтверждено владельцем 2026-09-29), но значение шунта не проверено (10 мОм насыщается около 8 А); напряжение элемента батареи датчик не видит
 - Phase 6: неизвестны I2C-нумерация на разъёме M4 Zero, поведение TWI H618 при `I2C_TIMEOUT`, доступность пина OE
 - Пороги наклона и тока предварительные; уточнять по данным Phase 2 и записи ходьбы в Phase 7-8
+- Phase 1: скорость серв не измерена. Чтобы получить число, нужны другие условия съёма (робот на боку, чтобы убрать вес ноги, либо в разы больше повторов на скорость): та же процедура шум перекроет снова
+- Калибровка драйвера: при 12.065 мкс/град окно импульсов 520..2220 задаёт ~141° при range_deg 180 — фактические углы меньше команд; вопрос к фазе калибровки
 
 ### Quick Tasks Completed
 
@@ -157,6 +162,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-06T05:31:56.757Z
-Stopped at: Completed 01-13-PLAN.md
-Resume file: None
+Last session: 2026-10-26T12:25:00.000Z
+Stopped at: Completed 01-14-PLAN.md
+Resume file: .planning/phases/01-zamery-na-stole-i-hod-nazad-v-simulyatsii/01-14-SUMMARY.md
