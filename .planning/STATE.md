@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 01
-current_phase_name: Замеры на столе и ход назад в симуляции
-status: phase_complete
-stopped_at: Phase 01 complete — all 18 plans closed, GAIT-01 obtained on 2026-10-27
-last_updated: "2026-10-27T09:20:00.000Z"
+current_phase: 02
+current_phase_name: Устойчивость хода в симуляции
+status: executing
+stopped_at: Plan 02-01 written, waiting for the owner's approval
+last_updated: "2026-10-27T13:40:00.000Z"
 last_activity: 2026-10-27
-last_activity_desc: Plan 01-18 closed — kp 2.5 to 5.0 cut the yaw tail, the final acceptance passed, the push threshold moved to 0.30
-state_head: 65329c8
+last_activity_desc: Phase 02 opened — four decisions taken (15°/20° tilt, mu 0.6, body payload ±20 %, per-parameter credit), wave 1 plan written
+state_head: 0deb73b
 progress:
   total_phases: 8
-  completed_phases: 0
-  total_plans: 18
+  completed_phases: 1
+  total_plans: 22
   completed_plans: 18
-  percent: 0
+  percent: 13
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 
 ## Current Position
 
-Phase: 01 (Замеры на столе и ход назад в симуляции) — COMPLETE
-Plan: 18 of 18 (closed)
-Status: зачёт GAIT-01 получен на исправленном коде: `flat_A_bwd10` min 46.9 % при воротах 40 %, увод 6.1° при допуске 10°, падений нет; порог push-CI 0.30 применён и проверен в push-CI 40477848116
-Last activity: 2026-10-27 - 01-18 закрыт: прогоны 40474588817 (repeats=5 cells=all strict) и 40474628029 (repeats=10 flat_A) на 19d9eb6, правка kp 2.5→5.0 (0f606c7), отчёт и docs/TERRAIN.md обновлены
+Phase: 02 (Устойчивость хода в симуляции) — EXECUTING
+Plan: 02-01 из 4 волн (написан, ждёт утверждения)
+Status: решения фазы приняты владельцем 2026-10-27 (мягкий порог 15°/20°, зачёт по каждому параметру плюс комбинация, `mu = 0.6`, груз на корпусе ±20 %); волна 1 — входы возмущений и базовая линия
+Last activity: 2026-10-27 - фаза 02 открыта: `02-CONTEXT.md` с решениями D-01…D-11, `02-01-PLAN.md` (три задачи: трение пола, груз на корпусе, базовая линия)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -178,6 +178,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-27T09:20:00.000Z
-Stopped at: Phase 01 complete — all 18 plans closed, GAIT-01 obtained
-Resume file: .planning/phases/01-zamery-na-stole-i-hod-nazad-v-simulyatsii/01-18-SUMMARY.md
+Last session: 2026-10-27T13:40:00.000Z
+Stopped at: Plan 02-01 written, waiting for the owner's approval
+Resume file: .planning/phases/02-ustoychivost-hoda-v-simulyatsii/02-01-PLAN.md
