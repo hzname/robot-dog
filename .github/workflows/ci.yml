@@ -45,6 +45,14 @@ on:
         description: Slope angles for the terrain job, comma separated (e.g. "7,10")
         type: string
         default: '10'
+      servo_speed:
+        description: Servo speed for the acceptance [rad/s], empty keeps servo_velocity (e.g. 3.5)
+        type: string
+        default: ''
+      servo_delay:
+        description: Command delay for the acceptance [ms], empty keeps servo_sim's 40 (e.g. 50)
+        type: string
+        default: ''
 
 jobs:
   build-test:
@@ -311,6 +319,8 @@ jobs:
       TRACE: ${{ inputs.trace }}
       FRICTION: ${{ inputs.friction || '1.0' }}
       PAYLOAD: ${{ inputs.payload || '0.0' }}
+      SERVO_SPEED: ${{ inputs.servo_speed }}
+      SERVO_DELAY: ${{ inputs.servo_delay }}
     defaults:
       run:
         shell: bash
@@ -362,6 +372,8 @@ jobs:
           if [ "$TRACE" = true ]; then set -- "$@" --trace; fi
           if [ "$FRICTION" != 1.0 ]; then set -- "$@" --friction "$FRICTION"; fi
           if [ "$PAYLOAD" != 0.0 ]; then set -- "$@" --payload-mass "$PAYLOAD"; fi
+          if [ -n "$SERVO_SPEED" ]; then set -- "$@" --servo-speed "$SERVO_SPEED"; fi
+          if [ -n "$SERVO_DELAY" ]; then set -- "$@" --servo-delay-ms "$SERVO_DELAY"; fi
           ros2 run dog_gazebo acceptance "$@"
       - name: Job summary
         if: always()

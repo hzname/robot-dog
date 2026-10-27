@@ -490,3 +490,39 @@ def test_perturbations_reach_the_launch_only_when_asked(tmp_path, monkeypatch):
                            environ={'GITHUB_ACTIONS': 'true'}) == 0
     for call in pert.calls:
         assert call['launch_args'] == base + ['friction:=0.6', 'payload_mass:=0.296']
+
+
+# ---------- the servo bottleneck as an input (02-04)
+
+def test_parse_servo_speed_and_delay():
+    plain = acceptance.parse_args(['--distro', 'jazzy'])
+    assert plain.servo_speed is None and plain.servo_delay_ms is None
+    asked = acceptance.parse_args(['--distro', 'jazzy', '--servo-speed', '3.5',
+                                   '--servo-delay-ms', '50'])
+    assert asked.servo_speed == 3.5 and asked.servo_delay_ms == 50
+    zero_delay = acceptance.parse_args(['--distro', 'jazzy', '--servo-delay-ms', '0'])
+    assert zero_delay.servo_delay_ms == 0
+
+
+def test_negative_servo_speed_is_refused():
+    with pytest.raises(SystemExit):
+        acceptance.parse_args(['--distro', 'jazzy', '--servo-speed', '-3.5'])
+
+
+def test_servo_inputs_reach_the_launch_only_when_asked(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    base = acceptance.cell_launch_args('flat_A_bwd10', 'real')
+    common = ['--cells', 'flat_A_bwd10', '--repeats', '5', '--distro', 'jazzy',
+              '--servo-model', 'real']
+
+    plain = _Runner([_walk(0.6) for _ in range(5)])
+    assert acceptance.main(common + ['--out', 'plain.json'], runner=plain, clock=_clock(),
+                           environ={'GITHUB_ACTIONS': 'true'}) == 0
+    assert all(call['launch_args'] == base for call in plain.calls)
+
+    slow = _Runner([_walk(0.6) for _ in range(5)])
+    assert acceptance.main(common + ['--out', 'slow.json', '--servo-speed', '3.5',
+                                     '--servo-delay-ms', '50'], runner=slow, clock=_clock(),
+                           environ={'GITHUB_ACTIONS': 'true'}) == 0
+    for call in slow.calls:
+        assert call['launch_args'] == base + ['servo_speed:=3.5', 'servo_delay_ms:=50']

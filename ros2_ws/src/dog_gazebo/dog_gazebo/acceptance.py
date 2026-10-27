@@ -101,6 +101,22 @@ def _positive_float(text):
     return value
 
 
+def _positive_number(text):
+    """--servo-speed: a finite number above zero (rad/s, not a share)."""
+    value = float(text)
+    if not math.isfinite(value) or value <= 0:
+        raise argparse.ArgumentTypeError('must be a finite number > 0, got %r' % (text,))
+    return value
+
+
+def _non_negative_number(text):
+    """--servo-delay-ms: a finite number from zero up."""
+    value = float(text)
+    if not math.isfinite(value) or value < 0:
+        raise argparse.ArgumentTypeError('must be a finite number >= 0, got %r' % (text,))
+    return value
+
+
 def _repeats(text):
     """--repeats: 1..MAX_REPEATS."""
     value = int(text)
@@ -172,6 +188,12 @@ def build_parser(environ=None):
     ap.add_argument('--payload-mass', type=float, default=None, metavar='KG',
                     help='load on the trunk [kg]: +0.296 is +20 %% of the total mass '
                          '(default: 0, the shipped robot)')
+    ap.add_argument('--servo-speed', type=_positive_number, default=None, metavar='RAD_S',
+                    help='servo speed [rad/s]: 3.5 is the pessimistic bottom of 02-CONTEXT.md '
+                         '(default: description.servo_velocity, 6.0)')
+    ap.add_argument('--servo-delay-ms', type=_non_negative_number, default=None, metavar='MS',
+                    help='command delay [ms]: 50 is the top of the 30-50 range of 02-CONTEXT.md '
+                         '(default: servo_sim delay_ms, 40)')
     ap.add_argument('--dry-run', action='store_true',
                     help='print the launch plan and exit without running anything')
     return ap
@@ -236,6 +258,10 @@ def execute(args, runner=run_level, clock=time.monotonic):
             launch_args = list(launch_args) + ['friction:={:g}'.format(args.friction)]
         if args.payload_mass is not None and args.payload_mass != 0.0:
             launch_args = list(launch_args) + ['payload_mass:={:g}'.format(args.payload_mass)]
+        if args.servo_speed is not None:
+            launch_args = list(launch_args) + ['servo_speed:={:g}'.format(args.servo_speed)]
+        if args.servo_delay_ms is not None:
+            launch_args = list(launch_args) + ['servo_delay_ms:={:g}'.format(args.servo_delay_ms)]
         if args.trace:
             # the controller's own view of the drift, 5 Hz into the sim log
             launch_args = list(launch_args) + ['heading_debug:=true']
