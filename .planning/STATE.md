@@ -3,11 +3,11 @@ gsd_state_version: "1.0"
 current_phase: 02
 current_phase_name: Устойчивость хода в симуляции
 status: executing
-stopped_at: Wave 02-02 closed — the tilt governor slows the walk, the full stop at 20 deg needs the owner's call
-last_updated: "2026-10-27T19:40:00.000Z"
+stopped_at: Wave 02-02 closed — GAIT-04 met: the walk slows from 15 deg and stops at 20 deg
+last_updated: "2026-10-27T21:05:00.000Z"
 last_activity: 2026-10-27
-last_activity_desc: Wave 02-02 closed — tilt governor 15/20 in the controller with tests, measured: slowdown works, the slope estimate never reaches 20 deg
-state_head: 154d1a8
+last_activity_desc: Wave 02-02 closed — GAIT-04 met: the slope estimate now averages over one gait period, so the 20 deg stop engages (scale 0.00)
+state_head: 559f316
 progress:
   total_phases: 8
   completed_phases: 1
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 02 (Устойчивость хода в симуляции) — EXECUTING
-Plan: 02-02 из 4 волн (закрыт с замечанием), следующий — 02-03 (распределение наклона)
+Plan: 02-02 из 4 волн (закрыт), следующий — 02-03 (распределение наклона по ячейкам)
 Status: решения фазы приняты владельцем 2026-10-27 (мягкий порог 15°/20°, зачёт по каждому параметру плюс комбинация, `mu = 0.6`, груз на корпусе ±20 %); волна 1 — входы возмущений и базовая линия
-Last activity: 2026-10-27 - волна 02-02 закрыта: губернатор наклона 15°/20° в контроллере (dc2a4ab), замер 40515554501 — снижение подтверждено, полного стопа на 20° нет из-за недобора оценки уклона
+Last activity: 2026-10-27 - волна 02-02 закрыта: губернатор 15°/20° (dc2a4ab) + оценка уклона как среднее по периоду шага (559f316), замер 40523452684 — на 20° масштаб 0.00, робот стоит, GAIT-04 закрыт
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -152,7 +152,8 @@ Recent decisions affecting current work:
 - [Phase 02]: Plan 02-01, база: спуск назад на 7° и 10° проходит текущей походкой (доля 0.70 и 0.68, наклон 10.7° и 12.0° при воротах 40 % и 20 %) — GAIT-03 на чистом полу уже выполняется
 - [Phase 02]: Plan 02-01, база: ни одно возмущение по отдельности ход не валит. Трение 0.6 даже увеличивает долю команды (Jazzy real min 67.9 % против 46.9 % на `mu = 1.0`, увод 5.8°); груз +20 % проходит (min 59.6 %), а самый слабый угол — облегчённый корпус: Lyrical real min 40.6 % при воротах 40 %. В комбинацию худших для GAIT-05 брать лёгкий корпус, а не тяжёлый
 - [Phase 02]: Plan 02-02: губернатор наклона живёт в `update()` рядом со стражем препятствий — масштабирует `vx/vy/wz` по `max(|slope_pitch_|, |slope_roll_|)`; нулевая команда в ходьбе уже означает «стоять», режим не переключается; пороги `tilt.soft_deg` 15 / `tilt.stop_deg` 20, строки `tilt_guard` раз в секунду
-- [Phase 02]: Plan 02-02, замер `40515554501`: снижение подтверждено (10° 0.78/0.69 без губернатора, 15° 0.70/0.70, 17° 0.62/0.67, 20° 0.42/0.55), но полного стопа на 20° нет: оценка уклона на 20° склоне колеблется 15.0…19.1° и до порога не доходит (недобор 1–2° плюс качки корпуса). Решение за владельцем: оставить, удлинить `filter_tau`, опустить `stop_deg` или разбираться с оценкой
+- [Phase 02]: Plan 02-02, прогон 1 `40515554501`: снижение подтверждено (10° без губернатора, 17° ×0.45–0.65), но полного стопа на 20° не было — оценка уклона на склоне колебалась 15.0…19.1° (качка шага периодическая, фильтр 0.8 с её размазывал, а не убирал)
+- [Phase 02]: Plan 02-02, починка `559f316`: оценка уклона стала средневзвешенным по времени за ОДИН период походки (окно = текущий период, сверху `2 × slope.filter_tau`); прогон 2 `40523452684`: на 20° оценка 20.0–20.6°, масштаб 0.00, робот стоит, на 10° ни одной строки губернатора — GAIT-04 закрыт
 - [Phase 02]: Plan 02-02: `terrain` job на замере красный по замыслу — выше 15° доля команды ниже ворот 40 %, это работа губернатора; логи `tilt_guard` теперь в артефакте `terrain-json`
 
 ### Pending Todos
@@ -187,6 +188,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-27T19:40:00.000Z
-Stopped at: Wave 02-02 closed; the 20 deg full stop waits for the owner's decision on the slope estimate
+Last session: 2026-10-27T21:05:00.000Z
+Stopped at: Wave 02-02 closed with GAIT-04 met; wave 02-03 (tilt distribution across cells) is next
 Resume file: .planning/phases/02-ustoychivost-hoda-v-simulyatsii/02-02-SUMMARY.md
