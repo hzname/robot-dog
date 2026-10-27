@@ -117,9 +117,12 @@ jobs:
         run: |
           source install/setup.bash
           ros2 launch dog_gazebo sim.launch.py headless:=true web:=false > sim.log 2>&1 &
-          # backward is the weak manoeuvre (TERRAIN.md): it varies widely run to
-          # run; on the flat the default 40 % failed once at 39 %
-          ros2 run dog_gazebo walk_check --backward-ratio 0.2
+          # D-05: 0.8 x the lowest backward ratio over 15 repeats of the ideal model,
+          # rounded down to 0.05 -> jazzy 0.30, lyrical 0.30 (the lyrical number is an
+          # assumption: the owner has not confirmed per-distro thresholds). Source:
+          # acceptance/final2/, 01-ACCEPTANCE-REPORT.md, docs/TERRAIN.md. It used to
+          # be 0.2, back when the 40 % default failed once at 39 %.
+          ros2 run dog_gazebo walk_check --backward-ratio ${{ matrix.distro == 'jazzy' && '0.30' || '0.30' }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
