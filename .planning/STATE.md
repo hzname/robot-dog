@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 02
 current_phase_name: Устойчивость хода в симуляции
 status: executing
-stopped_at: Plan 02-01 written, waiting for the owner's approval
-last_updated: "2026-10-27T13:40:00.000Z"
+stopped_at: Wave 02-01 closed — perturbations are inputs, the baseline is measured
+last_updated: "2026-10-27T18:10:00.000Z"
 last_activity: 2026-10-27
-last_activity_desc: Phase 02 opened — four decisions taken (15°/20° tilt, mu 0.6, body payload ±20 %, per-parameter credit), wave 1 plan written
-state_head: 0deb73b
+last_activity_desc: Wave 02-01 closed — friction and payload as launch inputs, baseline: slope 7/10 passes, mu 0.6 does not hurt, the light body is the weak corner
+state_head: 259f9df
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 22
-  completed_plans: 18
-  percent: 13
+  completed_plans: 19
+  percent: 14
 ---
 
 # Project State
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 02 (Устойчивость хода в симуляции) — EXECUTING
-Plan: 02-01 из 4 волн (написан, ждёт утверждения)
+Plan: 02-01 из 4 волн (закрыт), следующий — 02-02 (мягкий порог наклона)
 Status: решения фазы приняты владельцем 2026-10-27 (мягкий порог 15°/20°, зачёт по каждому параметру плюс комбинация, `mu = 0.6`, груз на корпусе ±20 %); волна 1 — входы возмущений и базовая линия
-Last activity: 2026-10-27 - фаза 02 открыта: `02-CONTEXT.md` с решениями D-01…D-11, `02-01-PLAN.md` (три задачи: трение пола, груз на корпусе, базовая линия)
+Last activity: 2026-10-27 - волна 02-01 закрыта: входы `friction`/`payload_mass` в launch, приёмке и CI, базовая линия в `02-BASELINE.md` (уклон 40505952461, трение 40508787100, груз 40511294102 и 40512322041)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -76,6 +76,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P16 | 1 h 10m | 1 task | 8 files |
 | Phase 01 P17 | 1 h 45m | 2 tasks | 10 files |
 | Phase 01 P18 | 4 h 10m | 4 tasks | 18 files |
+| Phase 02 P01 | 3 h 30m | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -145,6 +146,10 @@ Recent decisions affecting current work:
 - [Phase 01]: Plan 01-18: правка `kp` подрезает хвост, но не медиану — выброс идеальной модели 17.7° → 7.8°, медиана Jazzy real 3.4° → 3.5°, доля хода по медиане 0.56 → 0.56, насыщение 1 % → 5 %. Причина увода остаётся в сцеплении стоп
 - [Phase 01]: Plan 01-18: зачёт GAIT-01 получен на 19d9eb6 — прогон A `40474588817` (5×5 ячеек, strict) все зачётные ячейки зелёные, `flat_A_bwd10` min 46.9 % при уводе 6.1°; прогон B `40474628029` на десяти повторах даёт max 7.2° и min 46.9 %
 - [Phase 01]: Plan 01-18: порог push-CI по формуле D-05 стал 0.30 для обоих дистрибутивов (коммит `753dd07`, отдельно от данных), проверен в push-CI `40477848116`: оба `gazebo walk check` зелёные, задний ход 62 % и 64 % команды, `10/10 passed`. Порог Lyrical — допущение, владельцем не подтверждён
+- [Phase 02]: Plan 02-01: трение пола и груз на корпусе стали входами запуска (`friction`, `payload_mass`), умолчания воспроизводят прежние мир и URDF побайтово (три эталонных хеша мира и пин идеальной модели зелёные); в `ci.yml` оба входа идут через `env:`, список углов уклона передаётся через запятую — `ci_dispatch.sh` не пропускает пробел в `-f`
+- [Phase 02]: Plan 02-01: `payload_mass` обязан жить и в `robot.yaml` — сторож 01-15 сравнивает наборы ключей `DEFAULT_DESCRIPTION` и блока `description`, и без ключа в YAML краснеет job `robot parameter form`
+- [Phase 02]: Plan 02-01, база: спуск назад на 7° и 10° проходит текущей походкой (доля 0.70 и 0.68, наклон 10.7° и 12.0° при воротах 40 % и 20 %) — GAIT-03 на чистом полу уже выполняется
+- [Phase 02]: Plan 02-01, база: ни одно возмущение по отдельности ход не валит. Трение 0.6 даже увеличивает долю команды (Jazzy real min 67.9 % против 46.9 % на `mu = 1.0`, увод 5.8°); груз +20 % проходит (min 59.6 %), а самый слабый угол — облегчённый корпус: Lyrical real min 40.6 % при воротах 40 %. В комбинацию худших для GAIT-05 брать лёгкий корпус, а не тяжёлый
 
 ### Pending Todos
 
@@ -178,6 +183,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-27T13:40:00.000Z
-Stopped at: Plan 02-01 written, waiting for the owner's approval
-Resume file: .planning/phases/02-ustoychivost-hoda-v-simulyatsii/02-01-PLAN.md
+Last session: 2026-10-27T18:10:00.000Z
+Stopped at: Wave 02-01 closed; wave 02-02 (the soft tilt threshold) is next
+Resume file: .planning/phases/02-ustoychivost-hoda-v-simulyatsii/02-01-SUMMARY.md
