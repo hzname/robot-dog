@@ -63,12 +63,13 @@ class TestServoDriverFault(unittest.TestCase):
         self.assertIn(True, self.estops,
                       'a driver that latched a bus fault must publish estop=true')
 
-        client = self.node.create_client(Trigger, '/dog/servo_driver/release_fault')
-        # A freshly created client is unknown to the graph until the node spins
-        # once more, and wait_for_service alone would just time out.
-        self.spin(0.5, publish=False)
+        self.spin(1.0, publish=False)  # let the graph settle before asking about names
+        services = sorted(n for n, _ in self.node.get_service_names_and_types())
+        names = [n for n in services if n.endswith('/release_fault')]
+        self.assertTrue(names, 'release_fault is not among %s' % services)
+        client = self.node.create_client(Trigger, names[0])
         self.assertTrue(client.wait_for_service(timeout_sec=5.0),
-                        'release_fault service is missing')
+                        'release_fault service is not reachable at %s' % names[0])
         future = client.call_async(Trigger.Request())
         rclpy.spin_until_future_complete(self.node, future, timeout_sec=5.0)
         self.assertIsNotNone(future.result(), 'release_fault did not answer')
