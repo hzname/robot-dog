@@ -447,3 +447,110 @@ TEST(CoupledKnee, DriverClampsThePairAndCountsIt)
   EXPECT_NEAR(driver.pulses()[1], calf.centerUs(), 1e-6);
   EXPECT_EQ(driver.clampedCount(), 0);
 }
+
+// ------------------------------------------------------------- bus faults
+//
+// A write that comes back false means the chip kept its previous pulse. The
+// driver must count it, retry the channel, and after three consecutive bad
+// frames latch its own emergency release (SAF-01).
+
+class FaultTest : public ::testing::Test
+{
+protected:
+  void SetUp() override
+  {
+    bus = std::make_shared<MockBus>();
+    names = {"a0", "a1", "a2", "b0", "b1", "b2"};
+    std::vector<ServoCalibration> cals;
+    for (int i = 0; i < 6; ++i) {
+      ServoCalibration c;
+      c.channel = i;
+      cals.push_back(c);
+    }
+    DriverParams p;
+    p.max_joint_speed = 1.0;
+    p.enable_stagger = 0.1;
+    driver = std::make_unique<ServoDriver>(bus, names, cals, p);
+  }
+
+  std::shared_ptr<MockBus> bus;
+  std::vector<std::string> names;
+  std::unique_ptr<ServoDriver> driver;
+};
+
+TEST_F(FaultTest, AFailedWriteIsRetriedUntilThePulseLands)
+{
+  bus->failNext(1);
+  driver->setTargets({"a0"}, {0.3}, 0.0);
+  driver->update(0.0);  // power-on write fails: the output stays where it was
+  EXPECT_DOUBLE_EQ(bus->pulse(0), 0.0);
+  EXPECT_EQ(driver->channelFaults(0), 1);
+  EXPECT_EQ(driver->busFaults(), 1);
+  EXPECT_EQ(driver->failedFrames(), 1);
+  EXPECT_FALSE(driver->fault());
+
+  driver->update(0.1);  // nothing moved, but the channel is dirty: retry
+  EXPECT_NEAR(bus->pulse(0), jointToPulseUs(driver->calibrations()[0], 0.3), 1e-9);
+  EXPECT_EQ(bus->attempts(0), 2);
+  EXPECT_EQ(driver->failedFrames(), 0);
+  EXPECT_FALSE(driver->fault());
+}
+
+TEST_F(FaultTest, TwoBadFramesAreCountedButDoNotLatch)
+{
+  bus->failNext(2);
+  driver->setTargets({"a0"}, {0.3}, 0.0);
+  driver->update(0.0);
+  driver->update(0.1);
+  EXPECT_FALSE(driver->fault());
+  EXPECT_EQ(driver->failedFrames(), 2);
+  driver->update(0.2);  // third attempt succeeds
+  EXPECT_FALSE(driver->fault());
+  EXPECT_EQ(driver->failedFrames(), 0);
+  EXPECT_NEAR(bus->pulse(0), jointToPulseUs(driver->calibrations()[0], 0.3), 1e-9);
+}
+
+TEST_F(FaultTest, ThreeBadFramesLatchTheDriver)
+{
+  driver->setTargets({"a0"}, {0.0}, 0.0);
+  driver->update(0.0);  // enabled and written once, clean
+  ASSERT_FALSE(driver->fault());
+  bus->failNext(100);
+  for (int f = 1; f <= ServoDriver::kFaultFrames; ++f) {
+    driver->setTargets({"a0"}, {0.1 * f}, 0.1 * f);  // keep the joint moving
+    driver->update(0.1 * f);
+    if (f < ServoDriver::kFaultFrames) {
+      EXPECT_FALSE(driver->fault()) << "latched after " << f << " frame(s)";
+    }
+  }
+  EXPECT_TRUE(driver->fault());
+  EXPECT_EQ(driver->failedFrames(), ServoDriver::kFaultFrames);
+  EXPECT_EQ(driver->channelFaults(0), ServoDriver::kFaultFrames);
+  EXPECT_EQ(driver->channelFaults(1), 0) << "another channel must not be blamed";
+  EXPECT_FALSE(driver->faultReason().empty());
+}
+
+TEST_F(FaultTest, LatchedDriverIgnoresCommandsAndStopsWriting)
+{
+  driver->setTargets({"a0"}, {0.0}, 0.0);
+  driver->update(0.0);
+  bus->failNext(100);
+  for (int f = 1; f <= ServoDriver::kFaultFrames; ++f) {
+    driver->setTargets({"a0"}, {0.1 * f}, 0.1 * f);
+    driver->update(0.1 * f);
+  }
+  ASSERT_TRUE(driver->fault());
+  EXPECT_FALSE(driver->anyEnabled());
+  for (int i = 0; i < 6; ++i) {EXPECT_DOUBLE_EQ(bus->pulse(i), 0.0);}
+
+  const int attempts = bus->attempts(0);
+  EXPECT_EQ(driver->setTargets({"a0"}, {0.5}, 2.0), 0);
+  driver->update(2.0);
+  EXPECT_EQ(bus->attempts(0), attempts) << "a latched driver must not touch the bus";
+
+  driver->clearFault();  // no outputs yet: clearing only re-arms the driver
+  EXPECT_FALSE(driver->fault());
+  EXPECT_EQ(driver->setTargets({"a0"}, {0.5}, 2.1), 1);
+  driver->update(2.1);
+  EXPECT_TRUE(driver->enabled(0));
+}

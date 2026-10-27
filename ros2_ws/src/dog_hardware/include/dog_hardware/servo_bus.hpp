@@ -21,6 +21,9 @@ public:
 };
 
 /// In-memory bus for tests and PC runs. pulse(ch) == 0 means output off.
+///
+/// Failures can be injected: a real I2C write can fail, and a driver that
+/// swallows that failure leaves the servos frozen at the last pulse (SAF-01).
 class MockBus : public ServoBus
 {
 public:
@@ -31,9 +34,22 @@ public:
 
   double pulse(int channel) const {return pulses_.at(channel);}
   int writes() const {return writes_;}
+  /// Calls that reached the bus for a channel, failed ones included.
+  int attempts(int channel) const {return attempts_.at(channel);}
+
+  /// The next `n` setPulseUs calls fail, whatever the channel.
+  void failNext(int n) {fail_next_ += n;}
+  /// The next `n` calls on `channel` fail.
+  void failChannel(int channel, int n) {fail_channel_.at(channel) += n;}
+  /// The next `n` disableAll calls fail.
+  void failDisableAll(int n) {fail_disable_all_ += n;}
 
 private:
   std::array<double, kPwmChannels> pulses_{};
+  std::array<int, kPwmChannels> attempts_{};
+  std::array<int, kPwmChannels> fail_channel_{};
+  int fail_next_{0};
+  int fail_disable_all_{0};
   int writes_{0};
 };
 

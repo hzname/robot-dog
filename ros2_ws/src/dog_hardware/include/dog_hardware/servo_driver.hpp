@@ -3,6 +3,7 @@
 // power-on and e-stop.
 #pragma once
 
+#include <array>
 #include <memory>
 #include <utility>
 #include <string>
@@ -106,6 +107,20 @@ public:
   bool estop() const {return estop_;}
   bool setCalibration(size_t index, const ServoCalibration & cal);
 
+  /// Latch the driver's own emergency release: every output off, commands
+  /// ignored. Only an explicit operator action clears it (see `clearFault`).
+  void latchFault(const std::string & reason);
+  void clearFault();
+  bool fault() const {return fault_;}
+  const std::string & faultReason() const {return fault_reason_;}
+  /// Bus writes that came back false, in total and per PCA9685 channel.
+  int busFaults() const {return bus_faults_;}
+  int channelFaults(int channel) const {return channel_faults_.at(channel);}
+  /// Consecutive update() cycles with at least one failed write.
+  int failedFrames() const {return failed_frames_;}
+  /// Failed frames that latch a fault (SAF-01: three at 50 Hz).
+  static constexpr int kFaultFrames = 3;
+
   const std::vector<std::string> & names() const {return names_;}
   const std::vector<ServoCalibration> & calibrations() const {return cals_;}
   const std::vector<double> & positions() const {return current_;}
@@ -117,7 +132,7 @@ public:
 
 private:
   enum class State { OFF, PENDING, ON };
-  void write(size_t i);
+  bool write(size_t i);
   double parentAngle(size_t i) const;
 
   std::shared_ptr<ServoBus> bus_;
@@ -130,8 +145,16 @@ private:
   std::vector<double> pulses_;
   std::vector<State> state_;
   std::vector<double> enable_at_;
+  std::vector<bool> dirty_;   // last write failed: retry even if the target holds
+  std::array<int, kPwmChannels> channel_faults_{};
+  std::string fault_reason_;
   double last_update_{-1.0};
+  int bus_faults_{0};
+  int failed_frames_{0};
+  bool frame_failed_{false};
+  bool frame_written_{false};
   bool estop_{false};
+  bool fault_{false};
   int clamped_{0};
 };
 

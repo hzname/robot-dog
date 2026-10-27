@@ -10,8 +10,7 @@
 # Usage:
 #   tools/local_gtest/run.sh <package> <test> [gtest args...]
 #
-#   <package>  dog_control or dog_bench (dog_hardware belongs to phase 3 and is
-#              deliberately not buildable here)
+#   <package>  dog_control, dog_bench or dog_hardware (its core is ROS-free)
 #   <test>     ros2_ws/src/<package>/test/test_<test>.cpp
 #
 # Example:
@@ -29,7 +28,7 @@ set -euo pipefail
 
 usage() {
   echo "usage: $0 <package> <test> [gtest args...]" >&2
-  echo "  package: dog_control | dog_bench" >&2
+  echo "  package: dog_control | dog_bench | dog_hardware" >&2
 }
 
 if [ $# -lt 2 ]; then
@@ -42,9 +41,9 @@ TEST="$2"
 shift 2
 
 case "$PACKAGE" in
-  dog_control|dog_bench) ;;
+  dog_control|dog_bench|dog_hardware) ;;
   *)
-    echo "error: package '$PACKAGE' is not supported here (dog_control, dog_bench); dog_hardware belongs to phase 3" >&2
+    echo "error: package '$PACKAGE' is not supported here (dog_control, dog_bench, dog_hardware)" >&2
     exit 2
     ;;
 esac
@@ -70,6 +69,9 @@ for src in "$PKG_DIR"/src/*.cpp; do
   case "$src" in
     *_node.cpp|*_main.cpp) continue ;;
   esac
+  # A CLI tool (pca9685_probe) carries its own main(): linking it next to
+  # gtest_main makes the tool's main win and the test binary prints usage.
+  if grep -q 'int main(' "$src"; then continue; fi
   sources+=("$src")
 done
 shopt -u nullglob

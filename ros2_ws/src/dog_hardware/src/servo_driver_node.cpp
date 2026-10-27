@@ -12,6 +12,7 @@
 // coupling <joint>.coupled_to / .coupling) can be changed at runtime with
 // `ros2 param set`; an enabled servo moves to the new mapping immediately.
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <memory>
@@ -200,9 +201,11 @@ private:
     const double now = steadySeconds();
     if (!timed_out_ && driver_->anyEnabled() && now - last_cmd_ > cmd_timeout_) {
       timed_out_ = true;
+      ++timeouts_;
       RCLCPP_WARN(get_logger(), "no joint commands for %.2fs - holding position", cmd_timeout_);
     }
     driver_->update(now);
+    logBusFaults();
     if (driver_->clampedCount() > 0) {
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
         "%d joint(s) clamped by limits/servo range - check calibration", driver_->clampedCount());
@@ -275,6 +278,27 @@ private:
     return result;
   }
 
+  /// A failed write is the one failure the servos cannot show themselves: the
+  /// chip keeps the old pulse, the robot looks alive but is frozen. Every
+  /// channel gets a line once a second, and the latch gets one summary with
+  /// the counters DIA-03 asks for.
+  void logBusFaults()
+  {
+    for (int ch = 0; ch < kPwmChannels; ++ch) {
+      const int faults = driver_->channelFaults(ch);
+      if (faults == logged_faults_[ch]) {continue;}
+      logged_faults_[ch] = faults;
+      RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 1000,
+        "write failed ch=%d (faults=%d, failed frames=%d)", ch, faults, driver_->failedFrames());
+    }
+    if (driver_->fault() && !fault_logged_) {
+      fault_logged_ = true;
+      RCLCPP_ERROR(get_logger(),
+        "bus fault latched: %s; %d bus fault(s), %d clamped, %d command timeout(s)",
+        driver_->faultReason().c_str(), driver_->busFaults(), driver_->clampedCount(), timeouts_);
+    }
+  }
+
   std::vector<std::string> names_;
   std::vector<std::string> coupled_names_;
   std::shared_ptr<ServoBus> bus_;
@@ -283,6 +307,9 @@ private:
   bool relax_on_exit_{true};
   double last_cmd_{0.0};
   bool timed_out_{false};
+  int timeouts_{0};
+  std::array<int, kPwmChannels> logged_faults_{};
+  bool fault_logged_{false};
   sensor_msgs::msg::JointState state_msg_;
 
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr state_pub_;

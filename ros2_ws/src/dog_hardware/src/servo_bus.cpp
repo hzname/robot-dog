@@ -21,8 +21,16 @@ namespace dog_hardware
 bool MockBus::setPulseUs(int channel, double us)
 {
   if (channel < 0 || channel >= kPwmChannels) {return false;}
-  pulses_[channel] = us;
+  ++attempts_[channel];
   ++writes_;
+  // A failed transfer leaves the chip at its previous pulse, like real I2C:
+  // the mock must not change the output either, or the driver could never be
+  // caught trusting a write it did not get.
+  bool failed = false;
+  if (fail_next_ > 0) {--fail_next_; failed = true;}
+  if (fail_channel_[channel] > 0) {--fail_channel_[channel]; failed = true;}
+  if (failed) {return false;}
+  pulses_[channel] = us;
   return true;
 }
 
@@ -36,6 +44,7 @@ bool MockBus::disable(int channel)
 
 bool MockBus::disableAll()
 {
+  if (fail_disable_all_ > 0) {--fail_disable_all_; return false;}
   pulses_.fill(0.0);
   ++writes_;
   return true;

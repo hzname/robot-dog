@@ -173,6 +173,7 @@ ServoDriver::ServoDriver(std::shared_ptr<ServoBus> bus, std::vector<std::string>
   pulses_.assign(names_.size(), 0.0);
   state_.assign(names_.size(), State::OFF);
   enable_at_.assign(names_.size(), 0.0);
+  dirty_.assign(names_.size(), false);
   params_.joints_per_group = std::max(params_.joints_per_group, 1);
   for (size_t i = 0; i < cals_.size(); ++i) {
     if (cals_[i].coupled_to == static_cast<int>(i) || cals_[i].coupled_to >= static_cast<int>(cals_.size())) {
@@ -184,7 +185,7 @@ ServoDriver::ServoDriver(std::shared_ptr<ServoBus> bus, std::vector<std::string>
 int ServoDriver::setTargets(const std::vector<std::string> & names,
   const std::vector<double> & positions, double now)
 {
-  if (estop_) {return 0;}
+  if (estop_ || fault_) {return 0;}
   int matched = 0;
   int group_rank = 0;  // stagger counter among servos powered by this call
   int last_group = -1;
@@ -221,8 +222,10 @@ void ServoDriver::update(double now)
 {
   const double dt = last_update_ < 0.0 ? 0.0 : std::clamp(now - last_update_, 0.0, 0.1);
   last_update_ = now;
-  if (estop_) {return;}
+  if (estop_ || fault_) {return;}
   clamped_ = 0;
+  frame_failed_ = false;
+  frame_written_ = false;
   const double max_step = params_.max_joint_speed * dt;
   std::vector<bool> changed(names_.size(), false);
   for (size_t i = 0; i < names_.size(); ++i) {
@@ -246,21 +249,58 @@ void ServoDriver::update(double now)
       }
     }
   }
-  // A coupled servo must follow its parent even when its own target is still.
+  // A coupled servo must follow its parent even when its own target is still,
+  // and a channel whose last write failed is retried until the pulse lands.
   for (size_t i = 0; i < names_.size(); ++i) {
     const int p = cals_[i].coupled_to;
-    if (state_[i] == State::ON && (changed[i] || (p >= 0 && changed[p]))) {
+    if (state_[i] == State::ON && (changed[i] || (p >= 0 && changed[p]) || dirty_[i])) {
       write(i);
+    }
+  }
+  if (frame_written_) {
+    if (frame_failed_) {
+      if (++failed_frames_ >= kFaultFrames) {
+        latchFault("bus write failed " + std::to_string(failed_frames_) + " frames in a row");
+      }
+    } else {
+      failed_frames_ = 0;
     }
   }
 }
 
-void ServoDriver::write(size_t i)
+bool ServoDriver::write(size_t i)
 {
   bool clamped = false;
   pulses_[i] = jointToPulseUs(cals_[i], current_[i], &clamped, parentAngle(i));
-  bus_->setPulseUs(cals_[i].channel, pulses_[i]);
   if (clamped) {++clamped_;}
+  frame_written_ = true;
+  const int channel = cals_[i].channel;
+  if (!bus_->setPulseUs(channel, pulses_[i])) {
+    // The chip kept its previous pulse; the driver must not pretend otherwise.
+    ++bus_faults_;
+    ++channel_faults_[channel];
+    frame_failed_ = true;
+    dirty_[i] = true;
+    return false;
+  }
+  dirty_[i] = false;
+  return true;
+}
+
+void ServoDriver::latchFault(const std::string & reason)
+{
+  if (fault_) {return;}
+  fault_ = true;
+  fault_reason_ = reason;
+  estop_ = false;  // the fault is its own latch; the estop flag stays the operator's
+  relax();
+}
+
+void ServoDriver::clearFault()
+{
+  fault_ = false;
+  fault_reason_.clear();
+  failed_frames_ = 0;
 }
 
 void ServoDriver::setEstop(bool active)
