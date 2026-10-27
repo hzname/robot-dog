@@ -191,6 +191,7 @@ jobs:
             ros2_ws/slope*.json
             ros2_ws/waves*.json
             ros2_ws/rough*.json
+            ros2_ws/*.sim.log
       - name: Perception (X lidars, GS2, ToF) - flat, no false alarms, guard never stops
         timeout-minutes: 8
         run: |
