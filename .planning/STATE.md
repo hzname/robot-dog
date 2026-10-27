@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Замеры на столе и ход назад в симуляции
-status: executing
-stopped_at: Checkpoint in 01-17-PLAN.md (the Jazzy scoring gate failed on heading)
-last_updated: "2026-10-26T16:05:00.000Z"
-last_activity: 2026-10-26
-last_activity_desc: Plan 01-17 stopped at the checkpoint — heading 10.8° against 10° in one repeat, ci.yml untouched
-state_head: ac11642
+status: phase_complete
+stopped_at: Phase 01 complete — all 18 plans closed, GAIT-01 obtained on 2026-10-27
+last_updated: "2026-10-27T09:20:00.000Z"
+last_activity: 2026-10-27
+last_activity_desc: Plan 01-18 closed — kp 2.5 to 5.0 cut the yaw tail, the final acceptance passed, the push threshold moved to 0.30
+state_head: 65329c8
 progress:
   total_phases: 8
   completed_phases: 0
-  total_plans: 17
-  completed_plans: 16
+  total_plans: 18
+  completed_plans: 18
   percent: 0
 ---
 
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 
 ## Current Position
 
-Phase: 01 (Замеры на столе и ход назад в симуляции) — EXECUTING
-Plan: 17 of 17 (CHECKPOINT REACHED)
-Status: зачёт GAIT-01 на Jazzy `real` не получен: увод 10.8° против допуска 10° в одном повторе из пяти; отчёт и данные закоммичены, `ci.yml` и `docs/TERRAIN.md` не менялись
-Last activity: 2026-10-26 - 01-17 остановлен на CHECKPOINT: прогоны 40328414499 (repeats=5 cells=all) и 40328467878 (repeats=10 flat_A) сняты на 0917551, отчёт 01-ACCEPTANCE-REPORT.md, пороги 0.30/0.40 посчитаны но не применены
+Phase: 01 (Замеры на столе и ход назад в симуляции) — COMPLETE
+Plan: 18 of 18 (closed)
+Status: зачёт GAIT-01 получен на исправленном коде: `flat_A_bwd10` min 46.9 % при воротах 40 %, увод 6.1° при допуске 10°, падений нет; порог push-CI 0.30 применён и проверен в push-CI 40477848116
+Last activity: 2026-10-27 - 01-18 закрыт: прогоны 40474588817 (repeats=5 cells=all strict) и 40474628029 (repeats=10 flat_A) на 19d9eb6, правка kp 2.5→5.0 (0f606c7), отчёт и docs/TERRAIN.md обновлены
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -75,6 +75,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P15 | 40 min | 1 task | 6 files |
 | Phase 01 P16 | 1 h 10m | 1 task | 8 files |
 | Phase 01 P17 | 1 h 45m | 2 tasks | 10 files |
+| Phase 01 P18 | 4 h 10m | 4 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -139,6 +140,11 @@ Recent decisions affecting current work:
 - [Phase 01]: Plan 01-16: `build + test` был красным на ветке с коммита 61878f1 — `dog_bringup/test_mock_bringup.py` хардкодил offset 45°, после подстроек стало 56°, поза 45° давала 1266.1 мкс вместо 1370. Тест теперь читает `offset_deg` из `cal_info` (e112250); на нём оба `build + test` зелёные
 - [Phase 01]: Plan 01-17: итоговая приёмка на 0917551 — Jazzy `real` min 61.9 % (медиана 65.6 %) при воротах 40 %, `flat_B` 48.2 %, падений нет, волны и камни пройдены, но увод в `flat_A_bwd10` 10.8° против 10° → `jazzy_real_scoring: FAIL`, CHECKPOINT. Нарушение — один повтор из пяти (3.3…6.1° в остальных), на 10 повторах той же ячейки максимум 6.8°
 - [Phase 01]: Plan 01-17: по ветке провала `ci.yml` не менялся (остаётся `--backward-ratio 0.2`), `docs/TERRAIN.md` не правился, пороги по дистрибутивам 0.30 / 0.40 посчитаны и записаны в отчёт, но не применены (D-17). Владелец отказался от повторного прогона 2026-10-26 («не. закрывай»)
+- [Phase 01]: Plan 01-18: увод в режиме A — не ступенька и не асимметрия шага, а случайный доворот корпуса 1–8° за цикл шага со случайным знаком (40 трейсов, `01-YAW-DIAGNOSIS.md`, вердикт H1). Идеальная и реальная модель дают одинаковую медиану (5.6° и 5.5°), поэтому сервы и люфт к уводу отношения не имеют, а править форму шага бессмысленно
+- [Phase 01]: Plan 01-18: лог `heading_debug` (5 Гц) показал, что коррекция упирается в предел 0.3 рад/с в 0–1 % отсчётов, интегратор активен 57–69 %, ошибка к концу прогона возвращается к нулю — ограничение в скорости реакции, поэтому правился `heading.kp` 2.5 → 5.0, а не `max_rate` и не расписание интегратора (отклонение от закрытого списка плана записано в `acceptance/fix-kp5/summary.md`)
+- [Phase 01]: Plan 01-18: правка `kp` подрезает хвост, но не медиану — выброс идеальной модели 17.7° → 7.8°, медиана Jazzy real 3.4° → 3.5°, доля хода по медиане 0.56 → 0.56, насыщение 1 % → 5 %. Причина увода остаётся в сцеплении стоп
+- [Phase 01]: Plan 01-18: зачёт GAIT-01 получен на 19d9eb6 — прогон A `40474588817` (5×5 ячеек, strict) все зачётные ячейки зелёные, `flat_A_bwd10` min 46.9 % при уводе 6.1°; прогон B `40474628029` на десяти повторах даёт max 7.2° и min 46.9 %
+- [Phase 01]: Plan 01-18: порог push-CI по формуле D-05 стал 0.30 для обоих дистрибутивов (коммит `753dd07`, отдельно от данных), проверен в push-CI `40477848116`: оба `gazebo walk check` зелёные, задний ход 62 % и 64 % команды, `10/10 passed`. Порог Lyrical — допущение, владельцем не подтверждён
 
 ### Pending Todos
 
@@ -153,7 +159,7 @@ Recent decisions affecting current work:
 - Пороги наклона и тока предварительные; уточнять по данным Phase 2 и записи ходьбы в Phase 7-8
 - Phase 1: скорость серв не измерена. Причина отказа 01-14 — не механика, а методика: разброс между одинаковыми ходами (σ 9…11 % плато) втрое больше разницы между соседними скоростями (6…19 %), порог значимости 3σ = 27…32 %, поэтому анализатор не находит излом ни на одной из четырёх записей. Чтобы получить число, нужны другие условия съёма (робот на боку, чтобы убрать вес ноги, либо в разы больше повторов на скорость)
 - Калибровка драйвера: при 12.065 мкс/град окно импульсов 520..2220 задаёт ~141° при range_deg 180. Принято как данность (2026-10-26): фактический ход серв такой и есть, окно не расширяется; учитывать при планировании походки
-- Phase 1, зачёт GAIT-01 не получен (2026-10-26): на Jazzy `real` в `flat_A_bwd10` увод за 5 с 10.8° против допуска 10°, при этом доля хода 61.9 % (медиана 65.6 %) и падений нет. Нарушение — один повтор из пяти (остальные 3.3…6.1°), на десяти повторах той же ячейки максимум 6.8°. Нужно решение владельца: правки походки по уводу, повторная приёмка или пересмотр критерия D-01 (максимум по пяти повторам). `ci.yml` остаётся с `--backward-ratio 0.2`, пороги по дистрибутивам (0.30 / 0.40) посчитаны, но не применены
+- Phase 1: увод при ходьбе назад снят с зачёта, но не устранён по причине: в каждом цикле шага корпус получает случайный доворот 1–8° (проскальзывание стоп), и контур удержания курса снимает его лишь частично. На `flat_B_bwd10` увод в итоговой приёмке 29.3° против 19.2° в 01-17 — эта ячейка по уводу не зачётная, но в следующей фазе стоит посмотреть. Радикальное снижение — не контур, а контакт: ток по ногам или концевики в стопах
 
 ### Quick Tasks Completed
 
@@ -172,6 +178,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-26T16:05:00.000Z
-Stopped at: Checkpoint in 01-17-PLAN.md (the Jazzy scoring gate failed on heading)
-Resume file: .planning/phases/01-zamery-na-stole-i-hod-nazad-v-simulyatsii/01-17-SUMMARY.md
+Last session: 2026-10-27T09:20:00.000Z
+Stopped at: Phase 01 complete — all 18 plans closed, GAIT-01 obtained
+Resume file: .planning/phases/01-zamery-na-stole-i-hod-nazad-v-simulyatsii/01-18-SUMMARY.md
