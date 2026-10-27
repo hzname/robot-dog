@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 02
 current_phase_name: Устойчивость хода в симуляции
 status: executing
-stopped_at: Wave 02-02 closed — GAIT-04 met: the walk slows from 15 deg and stops at 20 deg
-last_updated: "2026-10-27T21:05:00.000Z"
+stopped_at: Wave 02-03 closed — the governor is quiet on every acceptance cell, thresholds 15/20 stand
+last_updated: "2026-10-27T22:35:00.000Z"
 last_activity: 2026-10-27
-last_activity_desc: Wave 02-02 closed — GAIT-04 met: the slope estimate now averages over one gait period, so the 20 deg stop engages (scale 0.00)
-state_head: 559f316
+last_activity_desc: Wave 02-03 closed — tilt map over five cells: governor silent (0 % cut, p95 <= 2.5 deg), body tilt max 11.1 deg, thresholds 15/20 justified
+state_head: 40575c8
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 22
-  completed_plans: 20
-  percent: 15
+  completed_plans: 21
+  percent: 16
 ---
 
 # Project State
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 02 (Устойчивость хода в симуляции) — EXECUTING
-Plan: 02-02 из 4 волн (закрыт), следующий — 02-03 (распределение наклона по ячейкам)
+Plan: 02-03 из 4 волн (закрыт), следующий — 02-04 (зачёт: спуск назад и матрица возмущений)
 Status: решения фазы приняты владельцем 2026-10-27 (мягкий порог 15°/20°, зачёт по каждому параметру плюс комбинация, `mu = 0.6`, груз на корпусе ±20 %); волна 1 — входы возмущений и базовая линия
-Last activity: 2026-10-27 - волна 02-02 закрыта: губернатор 15°/20° (dc2a4ab) + оценка уклона как среднее по периоду шага (559f316), замер 40523452684 — на 20° масштаб 0.00, робот стоит, GAIT-04 закрыт
+Last activity: 2026-10-27 - волна 02-03 закрыта: карта наклона по пяти ячейкам (40524939712), губернатор молчит на всех ячейках (0 % включений), наклон корпуса максимум 11.1° при воротах 20°, пороги 15/20 остаются
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -78,6 +78,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P18 | 4 h 10m | 4 tasks | 18 files |
 | Phase 02 P01 | 3 h 30m | 3 tasks | 14 files |
 | Phase 02 P02 | 1 h 40m | 3 tasks | 9 files |
+| Phase 02 P03 | 1 h 30m | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -154,6 +155,9 @@ Recent decisions affecting current work:
 - [Phase 02]: Plan 02-02: губернатор наклона живёт в `update()` рядом со стражем препятствий — масштабирует `vx/vy/wz` по `max(|slope_pitch_|, |slope_roll_|)`; нулевая команда в ходьбе уже означает «стоять», режим не переключается; пороги `tilt.soft_deg` 15 / `tilt.stop_deg` 20, строки `tilt_guard` раз в секунду
 - [Phase 02]: Plan 02-02, прогон 1 `40515554501`: снижение подтверждено (10° без губернатора, 17° ×0.45–0.65), но полного стопа на 20° не было — оценка уклона на склоне колебалась 15.0…19.1° (качка шага периодическая, фильтр 0.8 с её размазывал, а не убирал)
 - [Phase 02]: Plan 02-02, починка `559f316`: оценка уклона стала средневзвешенным по времени за ОДИН период походки (окно = текущий период, сверху `2 × slope.filter_tau`); прогон 2 `40523452684`: на 20° оценка 20.0–20.6°, масштаб 0.00, робот стоит, на 10° ни одной строки губернатора — GAIT-04 закрыт
+- [Phase 02]: Plan 02-03: на ячейках приёмки губернатор наклона не включается ни разу (0 % отсчётов из ~2500 на элемент, худший p95 входа 2.5° на волнах) — числа плоскостных и неровных ячеек остаются сравнимыми с фазой 1; наклон корпуса к поверхности максимум 11.1° при воротах 20°
+- [Phase 02]: Plan 02-03: три ячейки вышли за ±5 п.п. против фазы 1 (`flat_A` Lyrical −11.8/−17.9, `waves10` Lyrical real −23.3, Jazzy ideal +17.4) — это разброс пяти повторов, губернатор там не включался; в фазах 3–4 по этим ячейкам сравнивать только парные прогоны на одном SHA
+- [Phase 02]: Plan 02-03: пороги 15/20 предложено оставить; если в фазе 4 появится ячейка круче 10°, падение доли команды — работа губернатора, а не регресс, и это надо оговорить в критериях заранее
 - [Phase 02]: Plan 02-02: `terrain` job на замере красный по замыслу — выше 15° доля команды ниже ворот 40 %, это работа губернатора; логи `tilt_guard` теперь в артефакте `terrain-json`
 
 ### Pending Todos
@@ -188,6 +192,44 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-27T21:05:00.000Z
-Stopped at: Wave 02-02 closed with GAIT-04 met; wave 02-03 (tilt distribution across cells) is next
-Resume file: .planning/phases/02-ustoychivost-hoda-v-simulyatsii/02-02-SUMMARY.md
+Last session: 2026-10-27T22:35:00.000Z
+Stopped at: Wave 02-03 closed; wave 02-04 (the acceptance: backward descent and the perturbation matrix) is next
+Resume file: .planning/phases/02-ustoychivost-hoda-v-simulyatsii/02-03-SUMMARY.md
+
+- [Phase 02]: Plan 02-02: `terrain` job на замере красный по замыслу — выше 15° доля команды ниже ворот 40 %, это работа губернатора; логи `tilt_guard` теперь в артефакте `terrain-json`
+
+### Pending Todos
+
+- Заказать детали физического выключателя V+ серв (SAF-09) и сигнализатора низкого напряжения LiPo (SAF-17) в начале Phase 1, чтобы они пришли к Phase 6
+- Перевыпустить токен GitHub, вшитый в URL remote `origin`, и перейти на SSH или credential helper (не связано с фазами)
+
+### Blockers/Concerns
+
+- Phase 1: неизвестно, как внедрять задержку, трение, люфт и скорость серв в симуляцию; фазе нужен `--research-phase`, начинать со спайка
+- Phase 6-7: датчик тока INA226/INA219 установлен (подтверждено владельцем 2026-09-29), но значение шунта не проверено (10 мОм насыщается около 8 А); напряжение элемента батареи датчик не видит
+- Phase 6: неизвестны I2C-нумерация на разъёме M4 Zero, поведение TWI H618 при `I2C_TIMEOUT`, доступность пина OE
+- Пороги наклона и тока предварительные; уточнять по данным Phase 2 и записи ходьбы в Phase 7-8
+- Phase 1: скорость серв не измерена. Причина отказа 01-14 — не механика, а методика: разброс между одинаковыми ходами (σ 9…11 % плато) втрое больше разницы между соседними скоростями (6…19 %), порог значимости 3σ = 27…32 %, поэтому анализатор не находит излом ни на одной из четырёх записей. Чтобы получить число, нужны другие условия съёма (робот на боку, чтобы убрать вес ноги, либо в разы больше повторов на скорость)
+- Калибровка драйвера: при 12.065 мкс/град окно импульсов 520..2220 задаёт ~141° при range_deg 180. Принято как данность (2026-10-26): фактический ход серв такой и есть, окно не расширяется; учитывать при планировании походки
+- Phase 1: увод при ходьбе назад снят с зачёта, но не устранён по причине: в каждом цикле шага корпус получает случайный доворот 1–8° (проскальзывание стоп), и контур удержания курса снимает его лишь частично. На `flat_B_bwd10` увод в итоговой приёмке 29.3° против 19.2° в 01-17 — эта ячейка по уводу не зачётная, но в следующей фазе стоит посмотреть. Радикальное снижение — не контур, а контакт: ток по ногам или концевики в стопах
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 261013-e4x | Пределы бедра и колена: карта допустимых (q1,q2) по CAD, график, окно сервы колена в servos.yaml/robot.yaml, тесты драйвера | 2026-10-13 | fb852fc | [261013-e4x-predely-bedra-i-kolena-karta-dopustimyh-](./quick/261013-e4x-predely-bedra-i-kolena-karta-dopustimyh-/) |
+| 2 | Убрать из документации пункты про опоры для лежания (вариант корпуса отклонён владельцем) | 2026-10-13 | 6df9fab | — |
+
+## Deferred Items
+
+Items acknowledged and deferred at milestone close, most recent first:
+
+| Category | Item | Status | Deferred At | Milestone |
+|----------|------|--------|-------------|-----------|
+| *(none)* | | | | |
+
+## Session Continuity
+
+Last session: 2026-10-27T22:35:00.000Z
+Stopped at: Wave 02-03 closed; wave 02-04 (the acceptance: backward descent and the perturbation matrix) is next
+Resume file: .planning/phases/02-ustoychivost-hoda-v-simulyatsii/02-03-SUMMARY.md
