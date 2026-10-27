@@ -3,8 +3,9 @@
 #   docker build -f docker/Dockerfile -t robot-dog:2.0 .
 #   docker build -f docker/Dockerfile --build-arg ROS_DISTRO=lyrical -t robot-dog:2.0-lyrical .
 #
-# Only ros-base is needed: the workspace has no dependencies outside it
-# (no xacro, no joy, no ros2_control), which keeps the image small on the Pi.
+# ros-base plus std_srvs (the driver's release_fault service type): nothing else
+# outside it (no xacro, no joy, no ros2_control), which keeps the image small on
+# the Pi.
 ARG ROS_DISTRO=jazzy
 FROM ros:${ROS_DISTRO}-ros-base
 ARG ROS_DISTRO
@@ -12,6 +13,9 @@ ARG ROS_DISTRO
 ARG BUILD_JOBS=2
 
 SHELL ["/bin/bash", "-c"]
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ros-${ROS_DISTRO}-std-srvs \
+ && rm -rf /var/lib/apt/lists/*
 WORKDIR /ws
 COPY ros2_ws/src ./src
 
