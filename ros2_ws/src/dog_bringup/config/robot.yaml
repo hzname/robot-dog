@@ -248,6 +248,7 @@
       body_width: 0.10
       body_height: 0.05
       body_mass: 0.80       # trunk + electronics + battery + 4 hip servos [kg] (estimate)
+      payload_mass: 0.0     # [kg] load on the trunk, added to body_mass; the acceptance overrides it with payload_mass:=<kg> (+-20 % of 1.48 kg is +-0.296, 02-CONTEXT.md D-04)
       body_com_x: 0.0       # [m] trunk centre of mass forward of the body centre; 0 = at the centre (balance on a rod, docs/DEPLOYMENT.md stage 1; write "measured DATE" after the measurement)
       hip_mass: 0.06        # hip link incl. thigh servo (MG996R 55 g)
       thigh_mass: 0.08      # thigh incl. knee servo
