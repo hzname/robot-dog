@@ -438,9 +438,16 @@ private:
     if (heading_debug_ && (++heading_debug_tick_ % 10) == 0) {
       // 5 Hz at the 50 Hz loop: err, integral, the applied correction and the
       // gyro rate, so the acceptance trace can tell a steady drift from a step.
-      RCLCPP_INFO(get_logger(), "heading_debug err=%.3f int=%.3f corr=%.3f wz_meas=%.3f",
+      // tilt is the governor's own input (the worse of pitch and roll, degrees) and
+      // scale what it did with it: the trace then answers whether the governor
+      // interfered with a cell, not just whether the walk was weak (02-03).
+      const double tilt_deg = 180.0 / M_PI * std::max(
+        std::abs(controller_->slopePitch()), std::abs(controller_->slopeRoll()));
+      RCLCPP_INFO(get_logger(),
+        "heading_debug err=%.3f int=%.3f corr=%.3f wz_meas=%.3f tilt=%.1f scale=%.2f",
         controller_->headingError(), controller_->headingIntegral(),
-        controller_->headingCorrection(), controller_->yawRateMeasured());
+        controller_->headingCorrection(), controller_->yawRateMeasured(),
+        tilt_deg, controller_->tiltScale());
     }
     if (controller_->tiltScale() < 1.0) {
       // The governor speaks up once a second, not every tick: a slowed walk must
