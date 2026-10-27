@@ -989,3 +989,42 @@ TEST(Locomotion, TiltGovernorRejectsImpossibleThresholds)
   p.tilt_stop_deg = 50.0;
   EXPECT_THROW(make(p), std::invalid_argument);
 }
+
+TEST(Locomotion, SlopeEstimateIgnoresTheGaitRocking)
+{
+  // GAIT-04's first version filtered the slope with a plain low-pass, and the
+  // body's own rocking went straight through: on a 20 deg ramp the estimate swung
+  // between 15 and 19 deg and the tilt governor never reached its stop. The mean
+  // over one gait period must not care about a periodic wobble at that period.
+  const double deg = M_PI / 180.0;
+  LocomotionController c(LocomotionParams{});
+  c.request("stand");
+  run(c, 2.0);
+  const double period = c.gaitPeriod();
+  double worst = 0.0;
+  for (int i = 0; i < 600; ++i) {
+    const double t = i * kDt;
+    const double rock = 2.0 * std::sin(2.0 * M_PI * t / period);
+    c.setImuAttitude(0.0, (-20.0 + rock) * deg, kDt);
+    c.update(kDt);
+    if (t > 3.0) {
+      worst = std::max(worst, std::abs(std::abs(c.slopePitch()) / deg - 20.0));
+    }
+  }
+  EXPECT_LT(worst, 0.3);
+  EXPECT_NEAR(c.tiltScale(), 0.0, 0.05);
+}
+
+TEST(Locomotion, SlopeEstimateSettlesWithinOneGaitPeriod)
+{
+  const double deg = M_PI / 180.0;
+  LocomotionController c(LocomotionParams{});
+  c.request("stand");
+  run(c, 2.0);
+  EXPECT_NEAR(c.slopePitch(), 0.0, 1e-9);
+  for (int i = 0; i < 150; ++i) {  // 3 s on a 12 deg slope
+    c.setImuAttitude(0.0, -12.0 * deg, kDt);
+    c.update(kDt);
+  }
+  EXPECT_NEAR(c.slopePitch(), -12.0 * deg, 0.2 * deg);
+}

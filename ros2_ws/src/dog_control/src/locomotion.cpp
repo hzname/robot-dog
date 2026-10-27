@@ -304,22 +304,50 @@ void LocomotionController::setImuAttitude(double roll, double pitch, double dt)
   if (!upright) {  // the hold starts from the heading at the next walk
     yaw_turned_ = 0.0;
     yaw_turned_dt_ = 0.0;
+    // The legs are about to move under the body: the old window describes a pose
+    // that no longer exists, so the next upright sample starts a fresh mean.
+    slope_count_ = 0;
+    slope_head_ = 0;
+    slope_sum_p_ = 0.0;
+    slope_sum_r_ = 0.0;
+    slope_sum_dt_ = 0.0;
+    return;
   }
   const double lim = p_.slope_max_deg * M_PI / 180.0;
   // The body is commanded parallel to the ground plus pose_: what remains is
   // the ground's slope. Only trust it while standing on the legs.
   const double gp = pitch - pose_.pitch;
   const double gr = roll - pose_.roll;
-  if (!upright || std::abs(gp) > lim || std::abs(gr) > lim) {return;}
-  const double k = 1.0 - std::exp(-dt / std::max(p_.slope_filter_tau, 1e-3));
-  if (!slope_valid_) {
-    slope_pitch_ = gp;
-    slope_roll_ = gr;
-    slope_valid_ = true;
-  } else {
-    slope_pitch_ += (gp - slope_pitch_) * k;
-    slope_roll_ += (gr - slope_roll_) * k;
+  if (std::abs(gp) > lim || std::abs(gr) > lim) {return;}
+  // A time-weighted mean over one gait period. The body pitches with every step
+  // and that rocking is periodic, so a plain low-pass only smears it: on a 20 deg
+  // ramp the filtered estimate swung 15...19 deg, the mean sat 3 deg low and the
+  // tilt governor never reached its stop (GAIT-04). Averaging over exactly one
+  // period cancels the periodic part and leaves the slope.
+  const int slot = slope_head_;
+  slope_buf_p_[slot] = gp;
+  slope_buf_r_[slot] = gr;
+  slope_buf_dt_[slot] = dt;
+  slope_head_ = (slot + 1) % kSlopeSamples;
+  if (slope_count_ < kSlopeSamples) {++slope_count_;}
+  slope_sum_p_ += gp * dt;
+  slope_sum_r_ += gr * dt;
+  slope_sum_dt_ += dt;
+  // The window follows the gait in force; the crawl's nine seconds would make the
+  // estimate uselessly slow, so it is capped by the configured tau.
+  const double window = std::clamp(gaitPeriod(), 0.30, 2.0 * p_.slope_filter_tau);
+  while (slope_count_ > 1) {
+    const int oldest = (slope_head_ - slope_count_ + kSlopeSamples) % kSlopeSamples;
+    const double odt = slope_buf_dt_[oldest];
+    if (slope_sum_dt_ - odt < window) {break;}
+    slope_sum_p_ -= slope_buf_p_[oldest] * odt;
+    slope_sum_r_ -= slope_buf_r_[oldest] * odt;
+    slope_sum_dt_ -= odt;
+    --slope_count_;
   }
+  slope_pitch_ = slope_sum_p_ / slope_sum_dt_;
+  slope_roll_ = slope_sum_r_ / slope_sum_dt_;
+  slope_valid_ = true;
 }
 
 void LocomotionController::setYawRate(double wz)

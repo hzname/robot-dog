@@ -64,7 +64,8 @@ struct LocomotionParams
   // gain * height * tan(slope) so the centre of mass stays over the support.
   bool slope_compensation{true};
   double slope_gain{1.0};
-  double slope_filter_tau{0.8};  // [s] averages out the gait's own rocking
+  double slope_filter_tau{0.8};  // [s] upper bound on the averaging window: the window is one
+                                 // gait period, clamped to [0.3, 2 * tau]
   double slope_max_shift{0.04};  // [m]
   double slope_max_deg{25.0};    // ignore readings beyond this (robot falling / lifted)
 
@@ -231,6 +232,18 @@ private:
   double tilt_scale_{1.0};   // tilt governor's speed factor (GAIT-04)
   double slope_roll_{0.0};
   bool slope_valid_{false};
+  // The estimate is a time-weighted mean over one gait period: the body pitches
+  // with every step, and that rocking is periodic, so a low-pass only smears it
+  // (GAIT-04: with the plain filter the estimate swung 15...19 deg on a 20 deg ramp).
+  static constexpr int kSlopeSamples = 256;
+  std::array<double, kSlopeSamples> slope_buf_p_{};
+  std::array<double, kSlopeSamples> slope_buf_r_{};
+  std::array<double, kSlopeSamples> slope_buf_dt_{};
+  int slope_head_{0};
+  int slope_count_{0};
+  double slope_sum_p_{0.0};   // sum of sample * dt over the window
+  double slope_sum_r_{0.0};
+  double slope_sum_dt_{0.0};
   double shift_x_{0.0};  // applied (rate-limited) slope shift [m]
   double shift_y_{0.0};
   double yaw_rate_{0.0};

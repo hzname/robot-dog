@@ -108,7 +108,9 @@
     slope:
       compensation: true
       gain: 1.0
-      filter_tau: 0.8       # [s] averages out the gait's own rocking
+      filter_tau: 0.8       # [s] cap on the averaging window: the slope is averaged over one
+                            # gait period (0.3..2*tau), which cancels the body's rocking rather
+                            # than smearing it
       max_shift: 0.04       # [m]
       max_deg: 25.0         # readings beyond this are ignored (falling / lifted)
     # Soft tilt governor (GAIT-04, owner 2026-10-27): above soft_deg the walk slows
