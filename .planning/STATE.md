@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 02
 current_phase_name: Устойчивость хода в симуляции
-status: executing
-stopped_at: Wave 02-05 measured — no constant gait setting fixes both ends of the +-20 % payload band; three options wait for the owner
-last_updated: "2026-10-28T06:30:00.000Z"
+status: phase_complete
+stopped_at: Phase 02 complete — GAIT-03, GAIT-04 and GAIT-05 met; GAIT-05 closed on the 0..+20 % payload band
+last_updated: "2026-10-28T07:45:00.000Z"
 last_activity: 2026-10-27
-last_activity_desc: Wave 02-05 measured — the 15 mm step fixes the light trunk and breaks the heavy one, duty above 0.65 breaks the servo contract; GAIT-05 needs a load-aware gait, a narrower band, or a recorded limitation
-state_head: 22edb12
+last_activity_desc: Phase 02 complete — the payload band is 0..+20 % (D-04a); all six perturbation corners and the worst combination pass the shipped gait (58.8 % and 7.6 deg yaw), GAIT-03/04/05 closed
+state_head: 4ca7e5c
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 22
-  completed_plans: 21
-  percent: 16
+  completed_plans: 22
+  percent: 17
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 02 (Устойчивость хода в симуляции) — EXECUTING
-Plan: 02-05 (замеры сделаны), следующий шаг — решение владельца по GAIT-05: походка по нагрузке, полоса ±10 % или записанное ограничение
+Plan: все волны фазы 2 закрыты (02-01…02-05). Следующая фаза — по ROADMAP (фаза 3)
 Status: решения фазы приняты владельцем 2026-10-27 (мягкий порог 15°/20°, зачёт по каждому параметру плюс комбинация, `mu = 0.6`, груз на корпусе ±20 %); волна 1 — входы возмущений и базовая линия
 Last activity: 2026-10-28 - волна 02-04: GAIT-03 закрыт (склон 7/10, 0.70 и 0.61), матрица 6 углов — 5 проходят, облегчённый корпус на Jazzy 39.8 % и 25.9 % (ворота 40 %), причина по трассе — проскальзывание стоп при раскачке корпуса 14° против 9°
 
@@ -196,9 +196,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-28T06:30:00.000Z
-Stopped at: Wave 02-05 measured; the payload band is a bifurcation and the owner picks the way out
-Resume file: .planning/phases/02-ustoychivost-hoda-v-simulyatsii/02-LIGHT-BODY.md
+Last session: 2026-10-28T07:45:00.000Z
+Stopped at: Phase 02 complete; next is phase 3 per ROADMAP
+Resume file: .planning/phases/02-ustoychivost-hoda-v-simulyatsii/02-04-SUMMARY.md
 
 - [Phase 02]: Plan 02-02: `terrain` job на замере красный по замыслу — выше 15° доля команды ниже ворот 40 %, это работа губернатора; логи `tilt_guard` теперь в артефакте `terrain-json`
 
