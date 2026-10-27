@@ -424,23 +424,12 @@ def test_module_entry_point(tmp_path):
 
 # ---------- trace capture (01-18)
 
-def test_traced_walk_check_args_names_the_file_after_the_log():
-    base = acceptance.cell_walk_check_args('flat_A_bwd10')
-    assert acceptance.traced_walk_check_args(base, 'acc_flat_A_bwd10_r03.sim.log')[-3:] == [
-        '--trace', 'acc_flat_A_bwd10_r03.trace.json', '--record']
-    # a relaunch keeps its own file instead of overwriting the first one
-    assert acceptance.traced_walk_check_args(base, 'acc_x.retry.sim.log')[-2] == \
-        'acc_x.retry.trace.json'
-    # the base tail is not mutated
-    assert base == acceptance.cell_walk_check_args('flat_A_bwd10')
-
-
 def test_parse_trace_flag():
     assert acceptance.parse_args(['--distro', 'jazzy']).trace is False
     assert acceptance.parse_args(['--distro', 'jazzy', '--trace']).trace is True
 
 
-def test_runner_gets_trace_pairs_only_with_the_flag(tmp_path, monkeypatch):
+def test_runner_keeps_a_trace_only_with_the_flag(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     base = acceptance.cell_walk_check_args('flat_A_bwd10')
 
@@ -449,7 +438,9 @@ def test_runner_gets_trace_pairs_only_with_the_flag(tmp_path, monkeypatch):
                             '--servo-model', 'real', '--out', 'quiet.json'],
                            runner=quiet, clock=_clock(),
                            environ={'GITHUB_ACTIONS': 'true'}) == 0
+    assert all(call['keep'] is None for call in quiet.calls)
     assert all(call['extra'] == base for call in quiet.calls)
+    assert all('heading_debug:=true' not in call['launch_args'] for call in quiet.calls)
 
     traced = _Runner([_walk(0.6) for _ in range(5)])
     assert acceptance.main(['--cells', 'flat_A_bwd10', '--repeats', '5', '--distro', 'jazzy',
@@ -457,5 +448,9 @@ def test_runner_gets_trace_pairs_only_with_the_flag(tmp_path, monkeypatch):
                            runner=traced, clock=_clock(),
                            environ={'GITHUB_ACTIONS': 'true'}) == 0
     for call in traced.calls:
-        stem = call['sim_log'][:-len('.sim.log')]
-        assert call['extra'] == base + ['--trace', stem + '.trace.json', '--record']
+        # the tail is untouched: run_level owns the single --trace/--record pair
+        assert call['extra'] == base
+        assert call['keep'] == call['sim_log'][:-len('.sim.log')] + '.trace.json'
+        # the trace run also asks the controller for its 5 Hz heading line
+        assert call['launch_args'] == acceptance.cell_launch_args('flat_A_bwd10', 'real') + [
+            'heading_debug:=true']

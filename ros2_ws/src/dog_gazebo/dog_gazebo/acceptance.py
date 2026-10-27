@@ -65,13 +65,6 @@ def cell_walk_check_args(cell):
             '--min-ratio', '0', '--backward-ratio', '0']
 
 
-def traced_walk_check_args(base, sim_log):
-    """The walk_check tail plus the trace pair, named after the sim log so a
-    relaunch writes its own file (`.retry.trace.json`) instead of overwriting
-    the first one (01-18)."""
-    return list(base) + ['--trace', sim_log[:-len('.sim.log')] + '.trace.json', '--record']
-
-
 def domain_for(base, launch_no):
     """The ROS domain of a launch: base + launch_no wrapping over 80..89
     (60-77 belong to the terrain job, 41-43 to the launch tests)."""
@@ -233,6 +226,9 @@ def execute(args, runner=run_level, clock=time.monotonic):
         cell = stats.CELLS[name]
         base_extra = cell_walk_check_args(name)
         launch_args = cell_launch_args(name, args.servo_model)
+        if args.trace:
+            # the controller's own view of the drift, 5 Hz into the sim log
+            launch_args = list(launch_args) + ['heading_debug:=true']
         valid = 0
         no_stand = 0
         attempts = 0
@@ -243,18 +239,20 @@ def execute(args, runner=run_level, clock=time.monotonic):
             domain = domain_for(args.domain, launch_no)
             launch_no += 1
             sim_log = '%s_%s_r%02d.sim.log' % (stem, name, attempts)
-            extra = traced_walk_check_args(base_extra, sim_log) if args.trace else base_extra
+            # run_level already passes --trace/--record to walk_check and keeps
+            # the recording at `keep`: name it after the sim log so a relaunch
+            # writes .retry.trace.json instead of overwriting the first one.
+            keep = (sim_log[:-len('.sim.log')] + '.trace.json') if args.trace else None
             start = clock()
-            data = runner(cell['terrain'], cell['level'], seed, domain, extra,
-                          launch_args=launch_args, keep=None, sim_log=sim_log)
+            data = runner(cell['terrain'], cell['level'], seed, domain, base_extra,
+                          launch_args=launch_args, keep=keep, sim_log=sim_log)
             if never_stood(data):
                 print('%s: robot never left passive - relaunching the simulation once'
                       % name, flush=True)
                 retry_log = sim_log.replace('.sim.log', '.retry.sim.log')
-                data = runner(cell['terrain'], cell['level'], seed, domain,
-                              traced_walk_check_args(base_extra, retry_log)
-                              if args.trace else base_extra,
-                              launch_args=launch_args, keep=None, sim_log=retry_log)
+                retry_keep = (retry_log[:-len('.sim.log')] + '.trace.json') if args.trace else None
+                data = runner(cell['terrain'], cell['level'], seed, domain, base_extra,
+                              launch_args=launch_args, keep=retry_keep, sim_log=retry_log)
             wall_s = clock() - start
             record = stats.run_record(data, wall_s)
             cells_runs[name].append(record)
