@@ -5,6 +5,7 @@ an explicit release brings it back (SAF-01, SAF-02, SAF-03).
 mock bus fails, which is what a broken I2C line looks like from the driver.
 """
 
+import math
 import time
 import unittest
 
@@ -42,14 +43,18 @@ class TestServoDriverFault(unittest.TestCase):
         rclpy.shutdown()
 
     def spin(self, seconds, publish=True):
+        # A moving joint keeps the driver writing: with a constant target it
+        # writes once on power-on and then has nothing to send, so a dead bus
+        # would go unnoticed.
         end = time.time() + seconds
+        start = time.time()
         while time.time() < end:
             rclpy.spin_once(self.node, timeout_sec=0.01)
             if not publish:
                 continue
             msg = JointState()
             msg.name = ['lf_hip_joint']
-            msg.position = [0.0]
+            msg.position = [0.3 * math.sin(2.0 * math.pi * 0.5 * (time.time() - start))]
             self.cmd.publish(msg)
 
     def test_a_dead_bus_latches_and_only_the_service_releases(self):
