@@ -24,7 +24,7 @@ struct GaitParams
 {
   double period{0.55};      // full gait cycle [s]
   double duty{0.65};        // stance fraction of the cycle (0.5 = pure trot)
-  double step_height{0.02}; // swing apex above ground [m]
+  double step_height{0.015};// swing apex above ground [m]; 20 -> 15 mm in phase 2 (02-LIGHT-BODY.md)
   double max_step{0.06};    // max foot travel during one stance [m]
   // Phase offset per leg (LF, RF, LR, RR). Trot: diagonals in phase.
   std::array<double, kNumLegs> phase_offsets{0.0, 0.5, 0.5, 0.0};

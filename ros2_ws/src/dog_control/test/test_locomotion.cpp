@@ -48,7 +48,7 @@ LocomotionParams pinnedParams()
   p.max_accel = {0.5, 0.3, 2.0};
   p.gait.period = 0.55;
   p.gait.duty = 0.65;
-  p.gait.step_height = 0.02;
+  p.gait.step_height = 0.015;
   p.gait.max_step = 0.06;
   p.gait.phase_offsets = {0.0, 0.5, 0.5, 0.0};
   p.auto_period = false;
@@ -665,20 +665,21 @@ TEST(Locomotion, SurveyLooksAroundWithTheFeetWhereTheyStand)
 TEST(Locomotion, AutoPeriodAtStart)
 {
   // D-12: with auto_period the period comes from servo.* at construction;
-  // 6.0 rad/s, margin 0.8, min_period 0.55 give 0.6000 s (the plan 01-04 table).
+  // 6.0 rad/s, margin 0.8, min_period 0.55 give 0.5500 s at the shipped 15 mm
+  // step (it was 0.6000 s at 20 mm: a lower apex is cheaper for the servos).
   LocomotionParams p = pinnedParams();
   p.auto_period = true;
   p.min_period = 0.55;
   p.servo = ServoSpeedModel{6.0, 0.8, 1.0};
   LocomotionController c(p);
-  EXPECT_NEAR(c.gaitPeriod(), 0.6000, 1e-9);
-  EXPECT_NEAR(c.gait().params().period, 0.6000, 1e-9);
+  EXPECT_NEAR(c.gaitPeriod(), 0.5500, 1e-9);
+  EXPECT_NEAR(c.gait().params().period, 0.5500, 1e-9);
   c.request("stand");
   run(c, 2.0);
   c.setVelocity({0.1, 0.0, 0.0});
   run(c, 1.0);
   EXPECT_EQ(c.mode(), Mode::WALK);
-  EXPECT_NEAR(phaseAdvance(c), kDt / 0.6, 1e-9);
+  EXPECT_NEAR(phaseAdvance(c), kDt / 0.55, 1e-9);
 
   // auto_period off: the manual gait.period stays an explicit override.
   LocomotionParams m = pinnedParams();
@@ -700,7 +701,7 @@ TEST(Locomotion, JointSpeedsFitTheServosAuto)
   // The period is computed from the assumed servo speed (D-13) and the peak
   // stays under margin * max_speed (D-11) on every row of the pinned table.
   const std::array<double, 6> speeds{3.5, 4.0, 5.0, 6.0, 6.35, 7.0};
-  const std::array<double, 6> periods{1.0300, 0.9050, 0.7200, 0.6000, 0.5575, 0.5500};
+  const std::array<double, 6> periods{0.8750, 0.7625, 0.6100, 0.5500, 0.5500, 0.5500};
   for (int i = 0; i < 6; ++i) {
     LocomotionParams p = pinnedParams();
     p.auto_period = true;
@@ -720,6 +721,7 @@ TEST(Locomotion, JointSpeedsFitTheServosAuto)
   LocomotionParams k = pinnedParams();
   k.auto_period = true;
   k.min_period = 0.55;
+  k.gait.step_height = 0.02;  // the 20 mm apex keeps the knee peak in play
   k.servo = ServoSpeedModel{8.0, 0.8, 1.388};
   LocomotionController c(k);
   EXPECT_GT(c.gaitPeriod(), 0.55 + 1e-9);
@@ -795,18 +797,18 @@ TEST(Locomotion, ReconfigureAcceptedWhenStanding)
   run(c, 1.0);
   EXPECT_NEAR(c.stepHeight(0), 0.045, 1e-9);
   ASSERT_TRUE(c.reconfigureGait(0.55, true, 0.55, {5.0, 0.8, 1.0}));
-  EXPECT_NEAR(c.gaitPeriod(), 0.7200, 1e-9);
+  EXPECT_NEAR(c.gaitPeriod(), 0.6100, 1e-9);
   EXPECT_NEAR(c.stepHeight(0), 0.045, 1e-9);
   // Standing still: the next tick gives exactly the same joints.
   const auto standing = c.joints();
   c.update(kDt);
   for (int j = 0; j < dog_control::kNumJoints; ++j) {EXPECT_NEAR(c.joints()[j], standing[j], 1e-9) << j;}
   EXPECT_EQ(c.mode(), Mode::STAND);
-  // Walking: the phase grows with the new 0.72 s period.
+  // Walking: the phase grows with the new 0.61 s period.
   c.setVelocity({0.1, 0.0, 0.0});
   run(c, 1.0);
   EXPECT_EQ(c.mode(), Mode::WALK);
-  EXPECT_NEAR(phaseAdvance(c), kDt / 0.72, 1e-9);
+  EXPECT_NEAR(phaseAdvance(c), kDt / 0.61, 1e-9);
   // Back to a manual period once stopped.
   c.setVelocity({});
   run(c, 2.0);
@@ -817,7 +819,7 @@ TEST(Locomotion, ReconfigureAcceptedWhenStanding)
   c.setEstop(true);
   EXPECT_EQ(c.mode(), Mode::PASSIVE);
   EXPECT_TRUE(c.reconfigureGait(0.55, true, 0.55, {6.0, 0.8, 1.0}));
-  EXPECT_NEAR(c.gaitPeriod(), 0.6000, 1e-9);
+  EXPECT_NEAR(c.gaitPeriod(), 0.5500, 1e-9);
 
   // LYING: the third accepted mode.
   LocomotionParams q = pinnedParams();
@@ -829,7 +831,7 @@ TEST(Locomotion, ReconfigureAcceptedWhenStanding)
   ASSERT_TRUE(d.request("lie"));
   ASSERT_EQ(d.mode(), Mode::LYING);
   EXPECT_TRUE(d.reconfigureGait(0.55, true, 0.55, {6.0, 0.8, 1.0}));
-  EXPECT_NEAR(d.gaitPeriod(), 0.6000, 1e-9);
+  EXPECT_NEAR(d.gaitPeriod(), 0.5500, 1e-9);
 }
 
 TEST(Locomotion, ReconfigureRejectedWhenWalking)
@@ -883,7 +885,7 @@ TEST(Locomotion, ReconfigureRejectedWhenWalking)
   ASSERT_EQ(c.mode(), Mode::STAND);
   EXPECT_TRUE(c.gaitReconfigurable());
   EXPECT_TRUE(c.reconfigureGait(0.55, true, 0.55, {5.0, 0.8, 1.0}));
-  EXPECT_NEAR(c.gaitPeriod(), 0.7200, 1e-9);
+  EXPECT_NEAR(c.gaitPeriod(), 0.6100, 1e-9);
 }
 
 TEST(Locomotion, ReconfigureNoFitKeepsTheGait)
