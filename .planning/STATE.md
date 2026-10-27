@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 02
-current_phase_name: Устойчивость хода в симуляции
-status: phase_complete
-stopped_at: Phase 02 complete — GAIT-03, GAIT-04 and GAIT-05 met; GAIT-05 closed on the 0..+20 % payload band
-last_updated: "2026-10-28T07:45:00.000Z"
+current_phase: 03
+current_phase_name: Защита драйвера серв
+status: executing
+stopped_at: Wave 03-01 closed — bus write failures are counted, retried and latched (SAF-01, DIA-03)
+last_updated: "2026-10-28T19:40:00.000Z"
 last_activity: 2026-10-27
-last_activity_desc: Phase 02 complete — the payload band is 0..+20 % (D-04a); all six perturbation corners and the worst combination pass the shipped gait (58.8 % and 7.6 deg yaw), GAIT-03/04/05 closed
-state_head: 4ca7e5c
+last_activity_desc: Wave 03-01 closed — write() now checks the bus result, retries the dirty channel and latches after three bad frames; MockBus injects failures, the node logs write failed with counters
+state_head: dfc8035
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 22
-  completed_plans: 22
-  percent: 17
+  completed_plans: 23
+  percent: 18
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 02 (Устойчивость хода в симуляции) — EXECUTING
-Plan: все волны фазы 2 закрыты (02-01…02-05). Следующая фаза — по ROADMAP (фаза 3)
+Plan: фаза 3, волны 03-01…03-04. 03-01 закрыта, дальше 03-02 (честный E-STOP и надзорная авария)
 Status: решения фазы приняты владельцем 2026-10-27 (мягкий порог 15°/20°, зачёт по каждому параметру плюс комбинация, `mu = 0.6`, груз на корпусе ±20 %); волна 1 — входы возмущений и базовая линия
 Last activity: 2026-10-28 - волна 02-04: GAIT-03 закрыт (склон 7/10, 0.70 и 0.61), матрица 6 углов — 5 проходят, облегчённый корпус на Jazzy 39.8 % и 25.9 % (ворота 40 %), причина по трассе — проскальзывание стоп при раскачке корпуса 14° против 9°
 
@@ -160,6 +160,7 @@ Recent decisions affecting current work:
 - [Phase 02]: Plan 02-03: на ячейках приёмки губернатор наклона не включается ни разу (0 % отсчётов из ~2500 на элемент, худший p95 входа 2.5° на волнах) — числа плоскостных и неровных ячеек остаются сравнимыми с фазой 1; наклон корпуса к поверхности максимум 11.1° при воротах 20°
 - [Phase 02]: Plan 02-03: три ячейки вышли за ±5 п.п. против фазы 1 (`flat_A` Lyrical −11.8/−17.9, `waves10` Lyrical real −23.3, Jazzy ideal +17.4) — это разброс пяти повторов, губернатор там не включался; в фазах 3–4 по этим ячейкам сравнивать только парные прогоны на одном SHA
 - [Phase 02]: Plan 02-03: пороги 15/20 предложено оставить; если в фазе 4 появится ячейка круче 10°, падение доли команды — работа губернатора, а не регресс, и это надо оговорить в критериях заранее
+- [Phase 03]: Plan 03-01: `write()` проверяет результат шины, канал с неудачной записью переписывается на следующем такте (грязный флаг), три подряд неудачных кадра защёлкивают аварию; `MockBus` получил внесение отказов, нода пишет `write failed ch=N` раз в секунду и итог счётчиков при защёлке; локальный `run.sh` принимает `dog_hardware` и пропускает файлы со своим `main()` (иначе `pca9685_probe` подменял тестовый бинарник)
 - [Phase 02]: Plan 02-05: ни одна постоянная настройка шага не держит оба конца полосы ±20 % — подъём стопы 15 мм чинит лёгкий корпус (39.8→45.7) и ломает тяжёлый (59.2→33.1), доля опоры 0.70 на штатном периоде выводит суставы за паспорт (6.04 против 5.5 рад/с), пара 0.70/0.65 с проходит паспорт но даёт увод 10.8° на тяжёлом конце
 - [Phase 02]: Plan 02-05: все провалы двугорбые (1–2 повтора из 5) — походка стоит в окрестности развилки по массе корпуса; умолчания возвращены к 20 мм, данные в `acceptance/light-body/`
 - [Phase 02]: Plan 02-02: `terrain` job на замере красный по замыслу — выше 15° доля команды ниже ворот 40 %, это работа губернатора; логи `tilt_guard` теперь в артефакте `terrain-json`
@@ -196,9 +197,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-28T07:45:00.000Z
-Stopped at: Phase 02 complete; next is phase 3 per ROADMAP
-Resume file: .planning/phases/02-ustoychivost-hoda-v-simulyatsii/02-04-SUMMARY.md
+Last session: 2026-10-28T19:40:00.000Z
+Stopped at: Wave 03-01 closed (SAF-01, DIA-03); next is 03-02 - confirmed E-STOP and the driver's own fault announcement
+Resume file: .planning/phases/03-zashchita-drayvera-serv/03-01-SUMMARY.md
 
 - [Phase 02]: Plan 02-02: `terrain` job на замере красный по замыслу — выше 15° доля команды ниже ворот 40 %, это работа губернатора; логи `tilt_guard` теперь в артефакте `terrain-json`
 
