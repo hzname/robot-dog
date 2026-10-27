@@ -910,3 +910,82 @@ TEST(Locomotion, ReconfigureNoFitKeepsTheGait)
   EXPECT_TRUE(c.reconfigureGait(0.7, false, 0.55, {6.0, 0.8, 1.0}));
   EXPECT_DOUBLE_EQ(c.gaitPeriod(), 0.7);
 }
+
+// ---------- soft tilt governor (02-02, GAIT-04)
+
+TEST(Locomotion, TiltGovernorIsOffWithoutTheImu)
+{
+  LocomotionController c(LocomotionParams{});
+  c.request("stand");
+  run(c, 2.0);
+  EXPECT_DOUBLE_EQ(c.tiltScale(), 1.0);
+}
+
+TEST(Locomotion, TiltGovernorScalesLinearlyWithTheSlope)
+{
+  const double deg = M_PI / 180.0;
+  auto settled = [deg](double pitch_deg, double roll_deg) {
+    LocomotionController c(LocomotionParams{});
+    c.request("stand");
+    for (int i = 0; i < 600; ++i) {  // 12 s: the 0.8 s slope filter settles
+      c.setImuAttitude(roll_deg * deg, pitch_deg * deg, kDt);
+      c.update(kDt);
+    }
+    return c.tiltScale();
+  };
+  EXPECT_NEAR(settled(0.0, 0.0), 1.0, 1e-9);
+  EXPECT_NEAR(settled(14.0, 0.0), 1.0, 0.01);    // below the soft threshold
+  EXPECT_NEAR(settled(17.5, 0.0), 0.5, 0.02);    // halfway between 15 and 20
+  EXPECT_NEAR(settled(20.0, 0.0), 0.0, 0.02);    // at the stop threshold
+  EXPECT_NEAR(settled(0.0, 17.5), 0.5, 0.02);    // the roll side counts the same
+}
+
+TEST(Locomotion, TiltGovernorLeavesAGentleSlopeAlone)
+{
+  const double deg = M_PI / 180.0;
+  LocomotionController c(LocomotionParams{});
+  c.request("stand");
+  run(c, 2.0);
+  c.setVelocity({0.1, 0, 0});
+  for (int i = 0; i < 300; ++i) {
+    c.setImuAttitude(0.0, -10.0 * deg, kDt);
+    c.update(kDt);
+  }
+  EXPECT_NEAR(c.tiltScale(), 1.0, 0.01);
+  EXPECT_GT(c.velocity().vx, 0.09);
+}
+
+TEST(Locomotion, TiltGovernorStopsTheWalkAtTheStopAngle)
+{
+  const double deg = M_PI / 180.0;
+  LocomotionController c(LocomotionParams{});
+  c.request("stand");
+  run(c, 2.0);
+  c.setVelocity({0.1, 0, 0});
+  run(c, 0.5);
+  ASSERT_EQ(c.mode(), Mode::WALK);
+  for (int i = 0; i < 600; ++i) {
+    c.setImuAttitude(0.0, -20.0 * deg, kDt);
+    c.update(kDt);
+  }
+  EXPECT_NEAR(c.tiltScale(), 0.0, 0.02);
+  EXPECT_LE(std::abs(c.velocity().vx), 0.01);
+  EXPECT_FALSE(c.gait().stepping());
+}
+
+TEST(Locomotion, TiltGovernorRejectsImpossibleThresholds)
+{
+  auto make = [](const LocomotionParams & q) {
+    LocomotionController c(q);
+    (void)c;
+  };
+  LocomotionParams p;
+  p.tilt_stop_deg = p.tilt_soft_deg;
+  EXPECT_THROW(make(p), std::invalid_argument);
+  p = LocomotionParams{};
+  p.tilt_soft_deg = -1.0;
+  EXPECT_THROW(make(p), std::invalid_argument);
+  p = LocomotionParams{};
+  p.tilt_stop_deg = 50.0;
+  EXPECT_THROW(make(p), std::invalid_argument);
+}

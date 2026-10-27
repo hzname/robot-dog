@@ -68,6 +68,14 @@ struct LocomotionParams
   double slope_max_shift{0.04};  // [m]
   double slope_max_deg{25.0};    // ignore readings beyond this (robot falling / lifted)
 
+  // Soft tilt governor (GAIT-04, owner 2026-10-27): above tilt_soft_deg the walk
+  // slows linearly to zero at tilt_stop_deg and stops there instead of waiting for
+  // the emergency gates (20 deg tilt vs the surface, 60 deg fall in walk_check).
+  // The tilt is the filtered ground slope estimate, so the gait's own rocking
+  // does not chop the speed.
+  double tilt_soft_deg{15.0};    // [deg] full speed up to here
+  double tilt_stop_deg{20.0};    // [deg] no command from here
+
   // Heading hold from the gyro: the heading error (commanded minus measured
   // yaw, integrated while walking) is fed back (PI) into the yaw rate of the gait.
   bool heading_hold{true};
@@ -115,6 +123,9 @@ public:
   void setImuAttitude(double roll, double pitch, double dt);
   double slopePitch() const {return slope_pitch_;}
   double slopeRoll() const {return slope_roll_;}
+  /// Speed factor from the tilt governor: 1 below tilt.soft_deg, 0 at
+  /// tilt.stop_deg and above, linear in between (GAIT-04).
+  double tiltScale() const {return tilt_scale_;}
   /// Measured body yaw rate [rad/s] (gyro z). Call every IMU sample;
   /// clearYawRate() when the IMU goes silent. Without it there is no hold.
   void setYawRate(double wz);
@@ -217,6 +228,7 @@ private:
   double trans_to_{0.0};
   double height_{0.0};
   double slope_pitch_{0.0};  // estimated ground slope in the body frame [rad]
+  double tilt_scale_{1.0};   // tilt governor's speed factor (GAIT-04)
   double slope_roll_{0.0};
   bool slope_valid_{false};
   double shift_x_{0.0};  // applied (rate-limited) slope shift [m]

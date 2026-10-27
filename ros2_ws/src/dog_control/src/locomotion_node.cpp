@@ -320,6 +320,8 @@ private:
     p.heading_crawl_ki = declare_parameter("heading.crawl_ki", p.heading_crawl_ki);
     p.heading_crawl_max_rate = declare_parameter("heading.crawl_max_rate", p.heading_crawl_max_rate);
     p.heading_debug = declare_parameter("heading.debug", p.heading_debug);
+    p.tilt_soft_deg = declare_parameter("tilt.soft_deg", p.tilt_soft_deg);
+    p.tilt_stop_deg = declare_parameter("tilt.stop_deg", p.tilt_stop_deg);
 
     p.max_velocity.vx = declare_parameter("limits.max_vx", p.max_velocity.vx);
     p.max_velocity.vy = declare_parameter("limits.max_vy", p.max_velocity.vy);
@@ -439,6 +441,15 @@ private:
       RCLCPP_INFO(get_logger(), "heading_debug err=%.3f int=%.3f corr=%.3f wz_meas=%.3f",
         controller_->headingError(), controller_->headingIntegral(),
         controller_->headingCorrection(), controller_->yawRateMeasured());
+    }
+    if (controller_->tiltScale() < 1.0) {
+      // The governor speaks up once a second, not every tick: a slowed walk must
+      // be explainable from the log, and a stand on a slope must not look like a
+      // stuck robot (GAIT-04).
+      RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 1000,
+        "tilt_guard scale=%.2f pitch=%.1f roll=%.1f",
+        controller_->tiltScale(), controller_->slopePitch() * 180.0 / M_PI,
+        controller_->slopeRoll() * 180.0 / M_PI);
     }
     if (odom_publish_) {publishOdom(t, dt);}
     if (controller_->mode() != last_mode_ || controller_->estopActive() != last_estop_) {

@@ -87,6 +87,15 @@ LocomotionController::LocomotionController(const LocomotionParams & params)
   greet_(params.greet, neutralFeet(params), params.stand_height, params.leg.thigh, params.leg.calf),
   survey_(params.survey)
 {
+  // The tilt governor must be able to interpolate at all: a stop at or below the
+  // soft threshold would divide by zero, and past 45 deg the estimate itself is
+  // out of its trusted range (slope.max_deg).
+  if (!(p_.tilt_soft_deg > 0.0) || !(p_.tilt_stop_deg > p_.tilt_soft_deg) || p_.tilt_stop_deg > 45.0) {
+    std::ostringstream msg;
+    msg << "tilt.soft_deg " << p_.tilt_soft_deg << " and tilt.stop_deg " << p_.tilt_stop_deg
+        << " must satisfy 0 < soft < stop <= 45";
+    throw std::invalid_argument(msg.str());
+  }
   height_ = p_.lie_height;
   guard_step_.fill(std::numeric_limits<double>::quiet_NaN());
 }
@@ -341,6 +350,22 @@ bool LocomotionController::update(double dt)
 
   // Accel-limited twist; zero unless upright and not about to lie down.
   BodyVelocity target = (upright && !pending_lie_) ? vel_target_ : BodyVelocity{};
+  // Tilt governor (GAIT-04): the filtered ground slope scales the whole twist, so
+  // a steep place slows the walk to a stand instead of waiting for the fall. A
+  // zero twist in WALK already means standing on planted feet - the gait then
+  // holds still, the same as when the operator releases the sticks.
+  tilt_scale_ = 1.0;
+  if (slope_valid_ && upright) {
+    const double tilt = std::max(std::abs(slope_pitch_), std::abs(slope_roll_)) * 180.0 / M_PI;
+    if (tilt >= p_.tilt_stop_deg) {
+      tilt_scale_ = 0.0;
+    } else if (tilt > p_.tilt_soft_deg) {
+      tilt_scale_ = (p_.tilt_stop_deg - tilt) / (p_.tilt_stop_deg - p_.tilt_soft_deg);
+    }
+  }
+  target.vx *= tilt_scale_;
+  target.vy *= tilt_scale_;
+  target.wz *= tilt_scale_;
   target.vx = std::min(target.vx, guard_vx_);  // hazard ahead: forward only
   if (vel_target_.vx > 0.01) {target.vy += guard_vy_;}  // going round: sideways while asked forward
   // Gait change (trot <-> crawl): stop, and switch once the gait is idle

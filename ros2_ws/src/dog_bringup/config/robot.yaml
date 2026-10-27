@@ -111,6 +111,13 @@
       filter_tau: 0.8       # [s] averages out the gait's own rocking
       max_shift: 0.04       # [m]
       max_deg: 25.0         # readings beyond this are ignored (falling / lifted)
+    # Soft tilt governor (GAIT-04, owner 2026-10-27): above soft_deg the walk slows
+    # linearly to zero at stop_deg, where the robot stands instead of waiting for
+    # the emergency gates (20 deg tilt vs the surface in walk_check, 60 deg fall).
+    # Uses the filtered slope estimate, so the gait's rocking does not chop speed.
+    tilt:
+      soft_deg: 15.0        # [deg] full speed up to here
+      stop_deg: 20.0        # [deg] no command from here
 
     # Heading hold from the IMU gyro (only while walking, only with imu/data):
     # commanded minus measured yaw is integrated and fed back (PI) into the turn rate.
