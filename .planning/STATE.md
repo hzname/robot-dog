@@ -3,11 +3,11 @@ gsd_state_version: "1.0"
 current_phase: 02
 current_phase_name: Устойчивость хода в симуляции
 status: executing
-stopped_at: Wave 02-03 closed — the governor is quiet on every acceptance cell, thresholds 15/20 stand
-last_updated: "2026-10-27T22:35:00.000Z"
+stopped_at: Wave 02-04 measured — GAIT-03 closed, GAIT-05 blocked by the light body on Jazzy
+last_updated: "2026-10-28T00:20:00.000Z"
 last_activity: 2026-10-27
-last_activity_desc: Wave 02-03 closed — tilt map over five cells: governor silent (0 % cut, p95 <= 2.5 deg), body tilt max 11.1 deg, thresholds 15/20 justified
-state_head: 40575c8
+last_activity_desc: Wave 02-04 measured — GAIT-03 closed (slope 7/10), the matrix passes 5 of 6 corners, the light body fails on Jazzy (39.8 and 25.9 %) by slipping
+state_head: 917d77c
 progress:
   total_phases: 8
   completed_phases: 1
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 02 (Устойчивость хода в симуляции) — EXECUTING
-Plan: 02-03 из 4 волн (закрыт), следующий — 02-04 (зачёт: спуск назад и матрица возмущений)
+Plan: 02-04 из 4 волн (замеры сделаны, зачёт не взят), следующий шаг — правка похода под облегчённый корпус
 Status: решения фазы приняты владельцем 2026-10-27 (мягкий порог 15°/20°, зачёт по каждому параметру плюс комбинация, `mu = 0.6`, груз на корпусе ±20 %); волна 1 — входы возмущений и базовая линия
-Last activity: 2026-10-27 - волна 02-03 закрыта: карта наклона по пяти ячейкам (40524939712), губернатор молчит на всех ячейках (0 % включений), наклон корпуса максимум 11.1° при воротах 20°, пороги 15/20 остаются
+Last activity: 2026-10-28 - волна 02-04: GAIT-03 закрыт (склон 7/10, 0.70 и 0.61), матрица 6 углов — 5 проходят, облегчённый корпус на Jazzy 39.8 % и 25.9 % (ворота 40 %), причина по трассе — проскальзывание стоп при раскачке корпуса 14° против 9°
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -79,6 +79,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02 P01 | 3 h 30m | 3 tasks | 14 files |
 | Phase 02 P02 | 1 h 40m | 3 tasks | 9 files |
 | Phase 02 P03 | 1 h 30m | 3 tasks | 8 files |
+| Phase 02 P04 | 3 h 50m | 4 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -192,9 +193,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-27T22:35:00.000Z
-Stopped at: Wave 02-03 closed; wave 02-04 (the acceptance: backward descent and the perturbation matrix) is next
-Resume file: .planning/phases/02-ustoychivost-hoda-v-simulyatsii/02-03-SUMMARY.md
+Last session: 2026-10-28T00:20:00.000Z
+Stopped at: Wave 02-04 measured; GAIT-05 waits for a gait fix for the light body
+Resume file: .planning/phases/02-ustoychivost-hoda-v-simulyatsii/02-ACCEPTANCE-REPORT.md
 
 - [Phase 02]: Plan 02-02: `terrain` job на замере красный по замыслу — выше 15° доля команды ниже ворот 40 %, это работа губернатора; логи `tilt_guard` теперь в артефакте `terrain-json`
 
