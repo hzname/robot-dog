@@ -30,7 +30,7 @@
     gait:
       period: 0.55          # full trot cycle [s]
       duty: 0.65            # stance fraction (0.5 = pure trot, rocks ~15 deg in sim)
-      step_height: 0.015    # swing apex [m]
+      step_height: 0.02     # swing apex [m]
       max_step: 0.06        # longest stance stroke [m] -> vx cap 0.17 m/s
       auto_period: false    # true: period computed from servo.max_speed and servo.margin, never shorter than min_period; false: gait.period as written (D-12)
       min_period: 0.55      # [s] lower bound of the computed period, the trot checked in docs/SIMULATION.md; faster servos do not shorten it (D-12)
