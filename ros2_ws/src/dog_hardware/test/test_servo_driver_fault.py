@@ -63,7 +63,10 @@ class TestServoDriverFault(unittest.TestCase):
         self.assertIn(True, self.estops,
                       'a driver that latched a bus fault must publish estop=true')
 
-        client = self.node.create_client(Trigger, 'servo_driver/release_fault')
+        client = self.node.create_client(Trigger, '/dog/servo_driver/release_fault')
+        # A freshly created client is unknown to the graph until the node spins
+        # once more, and wait_for_service alone would just time out.
+        self.spin(0.5, publish=False)
         self.assertTrue(client.wait_for_service(timeout_sec=5.0),
                         'release_fault service is missing')
         future = client.call_async(Trigger.Request())
