@@ -284,6 +284,7 @@ bool ServoDriver::write(size_t i)
     return false;
   }
   dirty_[i] = false;
+  outputs_confirmed_off_ = false;  // something is being driven now
   return true;
 }
 
@@ -305,15 +306,27 @@ void ServoDriver::clearFault()
 
 void ServoDriver::setEstop(bool active)
 {
-  if (active) {relax();}
+  if (active) {relax();}  // the result lands in outputsConfirmedOff()/estopDone()
   estop_ = active;
 }
 
-void ServoDriver::relax()
+bool ServoDriver::relax()
 {
-  bus_->disableAll();
+  // One retry covers an I2C hiccup; after that the all-call itself may be the
+  // broken path, so every channel is disabled on its own before giving up.
+  bool confirmed = bus_->disableAll() || bus_->disableAll();
+  if (!confirmed) {
+    confirmed = true;
+    for (int ch = 0; ch < kPwmChannels; ++ch) {
+      if (!bus_->disable(ch)) {confirmed = false;}
+    }
+  }
+  if (!confirmed) {++relax_failures_;}
+  outputs_confirmed_off_ = confirmed;
   std::fill(state_.begin(), state_.end(), State::OFF);
   std::fill(pulses_.begin(), pulses_.end(), 0.0);
+  std::fill(dirty_.begin(), dirty_.end(), false);
+  return confirmed;
 }
 
 bool ServoDriver::setCalibration(size_t index, const ServoCalibration & cal)

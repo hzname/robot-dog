@@ -25,6 +25,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "std_msgs/msg/bool.hpp"
+#include "std_srvs/srv/trigger.hpp"
 
 namespace dog_hardware
 {
@@ -83,6 +84,9 @@ public:
     const auto rate = declare_parameter("update_rate", 100.0);
     cmd_timeout_ = declare_parameter("command_timeout", 0.5);
     relax_on_exit_ = declare_parameter("relax_on_exit", true);
+    // Test hook: the mock backend starts failing every write after this many
+    // seconds, so a launch test can drive the whole fault path (SAF-01/03).
+    mock_fail_after_ = declare_parameter("mock.fail_after", 0.0);
 
     DriverParams dp;
     dp.max_joint_speed = declare_parameter("max_joint_speed", dp.max_joint_speed);
@@ -144,6 +148,27 @@ public:
 
     state_pub_ = create_publisher<sensor_msgs::msg::JointState>("joint_states", 10);
     pulse_pub_ = create_publisher<sensor_msgs::msg::JointState>("servo_pulses", 10);
+    // The driver's own emergency release must reach whoever drives the robot:
+    // it publishes on the same `estop` topic it listens to (SAF-03).
+    estop_pub_ = create_publisher<std_msgs::msg::Bool>("estop", rclcpp::QoS(10).reliable());
+    release_srv_ = create_service<std_srvs::srv::Trigger>("release_fault",
+        [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+        std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
+          if (!driver_->fault()) {
+            res->success = true;
+            res->message = "no fault latched";
+            return;
+          }
+          driver_->clearFault();
+          driver_->setEstop(false);
+          announced_ = false;
+          publishEstop(false);
+          res->success = true;
+          res->message = driver_->outputsConfirmedOff() ?
+            "fault released, outputs confirmed off - stand to move" :
+            "fault released, outputs NOT confirmed off - check the bus";
+          RCLCPP_WARN(get_logger(), "fault released: %s", res->message.c_str());
+        });
     cmd_sub_ = create_subscription<sensor_msgs::msg::JointState>(
       "joint_commands", 10, [this](sensor_msgs::msg::JointState::ConstSharedPtr msg) {
         if (driver_->setTargets(msg->name, msg->position, steadySeconds()) > 0) {
@@ -156,6 +181,9 @@ public:
       });
     estop_sub_ = create_subscription<std_msgs::msg::Bool>(
       "estop", rclcpp::QoS(10).reliable(), [this](std_msgs::msg::Bool::ConstSharedPtr msg) {
+        if (driver_->fault() && !msg->data) {
+          return;  // a latched fault is cleared by the service, not by the topic
+        }
         if (msg->data != driver_->estop()) {
           RCLCPP_WARN(get_logger(), "E-STOP %s", msg->data ? "ENGAGED - servos off" : "released");
         }
@@ -204,8 +232,10 @@ private:
       ++timeouts_;
       RCLCPP_WARN(get_logger(), "no joint commands for %.2fs - holding position", cmd_timeout_);
     }
+    armMockFault(now);
     driver_->update(now);
     logBusFaults();
+    announceFault();
     if (driver_->clampedCount() > 0) {
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
         "%d joint(s) clamped by limits/servo range - check calibration", driver_->clampedCount());
@@ -278,6 +308,38 @@ private:
     return result;
   }
 
+  /// Test hook: after `mock.fail_after` seconds every write on the mock bus
+  /// fails, which is how a launch test reaches the fault path without hardware.
+  void armMockFault(double now)
+  {
+    if (mock_fail_after_ <= 0.0 || mock_fault_armed_) {return;}
+    if (mock_start_ < 0.0) {mock_start_ = now;}
+    if (now - mock_start_ < mock_fail_after_) {return;}
+    mock_fault_armed_ = true;
+    if (auto mock = std::dynamic_pointer_cast<MockBus>(bus_)) {
+      mock->failNext(1000000);
+      RCLCPP_WARN(get_logger(), "mock bus: writes fail from now on (test hook)");
+    }
+  }
+
+  void publishEstop(bool active)
+  {
+    std_msgs::msg::Bool msg;
+    msg.data = active;
+    estop_pub_->publish(msg);
+  }
+
+  /// A fault the driver latched is announced once, so the control node can drop
+  /// to PASSIVE instead of walking a robot whose servos stopped listening.
+  void announceFault()
+  {
+    if (!driver_->fault() || announced_) {return;}
+    announced_ = true;
+    publishEstop(true);
+    RCLCPP_ERROR(get_logger(), "fault latched (%s) - estop published, release with ~/release_fault",
+      driver_->faultReason().c_str());
+  }
+
   /// A failed write is the one failure the servos cannot show themselves: the
   /// chip keeps the old pulse, the robot looks alive but is frozen. Every
   /// channel gets a line once a second, and the latch gets one summary with
@@ -310,10 +372,16 @@ private:
   int timeouts_{0};
   std::array<int, kPwmChannels> logged_faults_{};
   bool fault_logged_{false};
+  bool announced_{false};
+  double mock_fail_after_{0.0};
+  double mock_start_{-1.0};
+  bool mock_fault_armed_{false};
   sensor_msgs::msg::JointState state_msg_;
 
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr state_pub_;
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr pulse_pub_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr estop_pub_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr release_srv_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr cmd_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr estop_sub_;
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_;

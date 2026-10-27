@@ -554,3 +554,76 @@ TEST_F(FaultTest, LatchedDriverIgnoresCommandsAndStopsWriting)
   driver->update(2.1);
   EXPECT_TRUE(driver->enabled(0));
 }
+
+// ------------------------------------------------------------ e-stop proof
+//
+// An E-STOP counts only when the outputs are confirmed off: disableAll is
+// checked, retried, and falls back to per-channel disables (SAF-02).
+
+class RelaxTest : public ::testing::Test
+{
+protected:
+  void SetUp() override
+  {
+    bus = std::make_shared<MockBus>();
+    names = {"a0", "a1"};
+    std::vector<ServoCalibration> cals;
+    for (int i = 0; i < 2; ++i) {
+      ServoCalibration c;
+      c.channel = i;
+      cals.push_back(c);
+    }
+    driver = std::make_unique<ServoDriver>(bus, names, cals, DriverParams{});
+  }
+
+  std::shared_ptr<MockBus> bus;
+  std::vector<std::string> names;
+  std::unique_ptr<ServoDriver> driver;
+};
+
+TEST_F(RelaxTest, OneFailedDisableAllIsRetried)
+{
+  driver->setTargets({"a0"}, {0.2}, 0.0);
+  bus->failDisableAll(1);
+  EXPECT_TRUE(driver->relax());
+  EXPECT_EQ(driver->relaxFailures(), 0);
+  EXPECT_TRUE(driver->outputsConfirmedOff());
+  EXPECT_DOUBLE_EQ(bus->pulse(0), 0.0);
+}
+
+TEST_F(RelaxTest, AFailedAllCallFallsBackToChannels)
+{
+  driver->setTargets({"a0"}, {0.2}, 0.0);
+  bus->failDisableAll(2);  // both attempts fail, the channels must be tried
+  EXPECT_TRUE(driver->relax());
+  for (int ch = 0; ch < kPwmChannels; ++ch) {
+    EXPECT_EQ(bus->disableAttempts(ch), 1) << "channel " << ch << " was not disabled";
+    EXPECT_DOUBLE_EQ(bus->pulse(ch), 0.0);
+  }
+  EXPECT_EQ(driver->relaxFailures(), 0);
+}
+
+TEST_F(RelaxTest, AnUnconfirmedRelaxIsReportedAsSuch)
+{
+  driver->setTargets({"a0"}, {0.2}, 0.0);
+  bus->failDisableAll(2);
+  for (int ch = 0; ch < kPwmChannels; ++ch) {bus->failDisable(ch, 1);}
+  EXPECT_FALSE(driver->relax());
+  EXPECT_EQ(driver->relaxFailures(), 1);
+  EXPECT_FALSE(driver->outputsConfirmedOff());
+}
+
+TEST_F(RelaxTest, EstopIsDoneOnlyWhenOutputsAreConfirmed)
+{
+  driver->setTargets({"a0"}, {0.2}, 0.0);
+  bus->failDisableAll(2);
+  for (int ch = 0; ch < kPwmChannels; ++ch) {bus->failDisable(ch, 1);}
+  driver->setEstop(true);
+  EXPECT_TRUE(driver->estop());
+  EXPECT_FALSE(driver->estopDone()) << "an unconfirmed release is not an E-STOP";
+
+  bus->failDisableAll(0);
+  driver->setEstop(true);  // the operator asks again, the bus answers this time
+  EXPECT_TRUE(driver->estopDone());
+  EXPECT_TRUE(driver->outputsConfirmedOff());
+}

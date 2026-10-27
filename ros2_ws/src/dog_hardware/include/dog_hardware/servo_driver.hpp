@@ -101,8 +101,10 @@ public:
   void update(double now);
   /// true: all outputs off immediately, commands ignored until released.
   void setEstop(bool active);
-  /// Turn every output off (servos go limp) without latching an e-stop.
-  void relax();
+  /// Turn every output off (servos go limp) without latching a fault.
+  /// Returns true when the bus confirmed it: `disableAll`, one retry, then a
+  /// per-channel fallback. A false means the servos may still be driven (SAF-02).
+  bool relax();
 
   bool estop() const {return estop_;}
   bool setCalibration(size_t index, const ServoCalibration & cal);
@@ -120,6 +122,12 @@ public:
   int failedFrames() const {return failed_frames_;}
   /// Failed frames that latch a fault (SAF-01: three at 50 Hz).
   static constexpr int kFaultFrames = 3;
+  /// Relax calls that the bus never confirmed.
+  int relaxFailures() const {return relax_failures_;}
+  /// The outputs are known to be off (a confirmed relax since the last write).
+  bool outputsConfirmedOff() const {return outputs_confirmed_off_;}
+  /// An e-stop is done only when the outputs are confirmed off (SAF-02).
+  bool estopDone() const {return !estop_ || outputs_confirmed_off_;}
 
   const std::vector<std::string> & names() const {return names_;}
   const std::vector<ServoCalibration> & calibrations() const {return cals_;}
@@ -155,6 +163,8 @@ private:
   bool frame_written_{false};
   bool estop_{false};
   bool fault_{false};
+  bool outputs_confirmed_off_{true};  // nothing written yet: outputs are off
+  int relax_failures_{0};
   int clamped_{0};
 };
 

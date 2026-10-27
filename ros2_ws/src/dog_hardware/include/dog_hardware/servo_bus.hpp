@@ -43,11 +43,17 @@ public:
   void failChannel(int channel, int n) {fail_channel_.at(channel) += n;}
   /// The next `n` disableAll calls fail.
   void failDisableAll(int n) {fail_disable_all_ += n;}
+  /// The next `n` single-channel disable calls on `channel` fail.
+  void failDisable(int channel, int n) {fail_disable_.at(channel) += n;}
+  /// Single-channel disable calls that reached the bus.
+  int disableAttempts(int channel) const {return disable_attempts_.at(channel);}
 
 private:
   std::array<double, kPwmChannels> pulses_{};
   std::array<int, kPwmChannels> attempts_{};
   std::array<int, kPwmChannels> fail_channel_{};
+  std::array<int, kPwmChannels> fail_disable_{};
+  std::array<int, kPwmChannels> disable_attempts_{};
   int fail_next_{0};
   int fail_disable_all_{0};
   int writes_{0};

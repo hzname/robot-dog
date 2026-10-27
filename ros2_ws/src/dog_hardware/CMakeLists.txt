@@ -54,6 +54,7 @@ if(BUILD_TESTING)
   find_package(launch_testing_ament_cmake REQUIRED)
   # Own DDS domain: colcon runs packages in parallel and every test uses /dog.
   add_launch_test(test/test_power_monitor.py TIMEOUT 60 ENV ROS_DOMAIN_ID=41)
+  add_launch_test(test/test_servo_driver_fault.py TIMEOUT 60 ENV ROS_DOMAIN_ID=42)
 endif()
 
 ament_export_targets(export_dog_hardware HAS_LIBRARY_TARGET)

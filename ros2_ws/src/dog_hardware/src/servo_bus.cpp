@@ -37,6 +37,8 @@ bool MockBus::setPulseUs(int channel, double us)
 bool MockBus::disable(int channel)
 {
   if (channel < 0 || channel >= kPwmChannels) {return false;}
+  ++disable_attempts_[channel];
+  if (fail_disable_[channel] > 0) {--fail_disable_[channel]; return false;}
   pulses_[channel] = 0.0;
   ++writes_;
   return true;
