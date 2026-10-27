@@ -69,12 +69,22 @@ def main():
     ap.add_argument('--levels', type=float, nargs='+', required=True)
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--domain', type=int, default=60)
+    ap.add_argument('--friction', type=float, default=1.0,
+                    help='contact friction of the terrain, mu (1.0 = shipped floor; 0.6 is the '
+                         'pessimistic floor of 02-CONTEXT.md D-03)')
+    ap.add_argument('--payload-mass', type=float, default=0.0, metavar='KG',
+                    help='load on the trunk [kg]: +0.296 is +20 %% of the total mass (0 = shipped)')
     ap.add_argument('--out', required=True)
     ap.add_argument('--launch-arg', action='append', default=[], metavar='NAME:=VALUE',
                     help='extra sim.launch.py argument, e.g. slope_compensation:=false')
     ap.add_argument('--record-dir', help='keep full recordings (joints, IMU; 30 Hz) here, '
                     'one <terrain>_<level>.json per level, for tools/sim_video')
     args, extra = ap.parse_known_args()
+    launch_args = list(args.launch_arg)
+    if args.friction != 1.0:  # keep the shipped command line unchanged
+        launch_args.append('friction:={:g}'.format(args.friction))
+    if args.payload_mass != 0.0:
+        launch_args.append('payload_mass:={:g}'.format(args.payload_mass))
     rows = []
     for k, level in enumerate(args.levels):
         print(f'=== {args.terrain} {level:g}', flush=True)
@@ -84,12 +94,12 @@ def main():
             keep = os.path.join(args.record_dir, f'{args.terrain}_{level:g}.json')
         sim_log = f'{os.path.splitext(args.out)[0]}_{level:g}.sim.log'
         row = run_level(args.terrain, level, args.seed, args.domain + k % 5, extra,
-                        args.launch_arg, keep, sim_log)
+                        launch_args, keep, sim_log)
         if never_stood(row):
             # before any test: the simulation did not come up whole - once more
             print('robot never left passive - relaunching the simulation once', flush=True)
             row = run_level(args.terrain, level, args.seed, args.domain + k % 5, extra,
-                            args.launch_arg, keep, sim_log.replace('.sim.log', '.retry.sim.log'))
+                            launch_args, keep, sim_log.replace('.sim.log', '.retry.sim.log'))
             row['relaunched'] = True
         rows.append(row)
         with open(args.out, 'w') as f:

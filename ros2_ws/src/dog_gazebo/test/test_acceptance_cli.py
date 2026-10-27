@@ -454,3 +454,39 @@ def test_runner_keeps_a_trace_only_with_the_flag(tmp_path, monkeypatch):
         # the trace run also asks the controller for its 5 Hz heading line
         assert call['launch_args'] == acceptance.cell_launch_args('flat_A_bwd10', 'real') + [
             'heading_debug:=true']
+
+
+# ---------- perturbations: friction and payload (02-01)
+
+def test_parse_friction_and_payload():
+    plain = acceptance.parse_args(['--distro', 'jazzy'])
+    assert plain.friction is None and plain.payload_mass is None
+    asked = acceptance.parse_args(['--distro', 'jazzy', '--friction', '0.6',
+                                   '--payload-mass', '-0.296'])
+    assert asked.friction == 0.6 and asked.payload_mass == -0.296
+
+
+def test_perturbations_reach_the_launch_only_when_asked(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    base = acceptance.cell_launch_args('flat_A_bwd10', 'real')
+    common = ['--cells', 'flat_A_bwd10', '--repeats', '5', '--distro', 'jazzy',
+              '--servo-model', 'real']
+
+    plain = _Runner([_walk(0.6) for _ in range(5)])
+    assert acceptance.main(common + ['--out', 'plain.json'], runner=plain, clock=_clock(),
+                           environ={'GITHUB_ACTIONS': 'true'}) == 0
+    assert all(call['launch_args'] == base for call in plain.calls)
+
+    # the defaults are the shipped world and the shipped robot: no argument added
+    default = _Runner([_walk(0.6) for _ in range(5)])
+    assert acceptance.main(common + ['--out', 'default.json', '--friction', '1.0',
+                                     '--payload-mass', '0.0'], runner=default, clock=_clock(),
+                           environ={'GITHUB_ACTIONS': 'true'}) == 0
+    assert all(call['launch_args'] == base for call in default.calls)
+
+    pert = _Runner([_walk(0.6) for _ in range(5)])
+    assert acceptance.main(common + ['--out', 'pert.json', '--friction', '0.6',
+                                     '--payload-mass', '0.296'], runner=pert, clock=_clock(),
+                           environ={'GITHUB_ACTIONS': 'true'}) == 0
+    for call in pert.calls:
+        assert call['launch_args'] == base + ['friction:=0.6', 'payload_mass:=0.296']

@@ -91,32 +91,38 @@ def stairs_height(level, x):
     n = sum(x >= e for e in STAIRS_UP) - sum(x >= e for e in STAIRS_DOWN)
     return n * h
 STONES = ((0.80, 0.13), (1.40, -0.13))  # steps world: (x of the near edge, y) of 20 mm stones
-SURFACE = '<surface><friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction></surface>'
+def friction_surface(mu=1.0):
+    """Contact friction of the terrain. `mu` goes to the ground, the ramp and
+    every obstacle: a slippery floor is a property of the whole world, not of
+    one shape (02-CONTEXT.md D-03, owner 2026-10-27). 1.0 is the shipped floor
+    and formats back to the old string byte for byte."""
+    return ('<surface><friction><ode><mu>%s</mu><mu2>%s</mu2></ode></friction>'
+            '</surface>' % (mu, mu))
 
 
-def _box(name, pose, size, color='0.55 0.55 0.55 1'):
+def _box(name, pose, size, color='0.55 0.55 0.55 1', mu=1.0):
     x, y, z, roll, pitch, yaw = pose
     sx, sy, sz = size
     geo = f'<geometry><box><size>{sx:.4f} {sy:.4f} {sz:.4f}</size></box></geometry>'
     return (f'    <model name="{name}"><static>true</static>'
             f'<pose>{x:.4f} {y:.4f} {z:.4f} {roll:.5f} {pitch:.5f} {yaw:.5f}</pose><link name="l">'
-            f'<collision name="c">{geo}{SURFACE}</collision>'
+            f'<collision name="c">{geo}{friction_surface(mu)}</collision>'
             f'<visual name="v">{geo}<material><diffuse>{color}</diffuse><ambient>{color}</ambient>'
             f'</material></visual></link></model>\n')
 
 
-def _cylinder(name, pose, r, length, color='0.45 0.5 0.6 1'):
+def _cylinder(name, pose, r, length, color='0.45 0.5 0.6 1', mu=1.0):
     x, y, z, roll, pitch, yaw = pose
     geo = f'<geometry><cylinder><radius>{r:.4f}</radius><length>{length:.3f}</length></cylinder></geometry>'
     return (f'    <model name="{name}"><static>true</static>'
             f'<pose>{x:.4f} {y:.4f} {z:.4f} {roll:.5f} {pitch:.5f} {yaw:.5f}</pose><link name="l">'
-            f'<collision name="c">{geo}{SURFACE}</collision>'
+            f'<collision name="c">{geo}{friction_surface(mu)}</collision>'
             f'<visual name="v">{geo}<material><diffuse>{color}</diffuse><ambient>{color}</ambient>'
             f'</material></visual></link></model>\n')
 
 
-def _ground():
-    return _box('ground', (0, 0, -0.05, 0, 0, 0), (40, 40, 0.1), '0.7 0.7 0.7 1')
+def _ground(mu=1.0):
+    return _box('ground', (0, 0, -0.05, 0, 0, 0), (40, 40, 0.1), '0.7 0.7 0.7 1', mu=mu)
 
 
 def room_to_world(seed=0, kind='room'):
@@ -221,11 +227,12 @@ def obstacles(kind, level, seed=0):
     return out
 
 
-def world(kind='flat', level=0.0, seed=0):
-    """SDF text of a test world."""
+def world(kind='flat', level=0.0, seed=0, mu=1.0):
+    """SDF text of a test world. `mu` is the contact friction of every shape in
+    it (1.0 by default: the shipped floor)."""
     if kind not in KINDS:
         raise ValueError(f'unknown terrain {kind!r} ({", ".join(KINDS)})')
-    parts = [HEADER, _ground()]
+    parts = [HEADER, _ground(mu)]
     if kind == 'slope':
         th = math.radians(level)
         if th > 0:
@@ -233,7 +240,7 @@ def world(kind='flat', level=0.0, seed=0):
             L, T = RAMP_LENGTH, 0.1
             cx = RAMP_START + 0.5 * L * math.cos(th) + 0.5 * T * math.sin(th)
             cz = 0.5 * L * math.sin(th) - 0.5 * T * math.cos(th)
-            parts.append(_box('ramp', (cx, 0, cz, 0, -th, 0), (L, 4.0, T), '0.65 0.62 0.55 1'))
+            parts.append(_box('ramp', (cx, 0, cz, 0, -th, 0), (L, 4.0, T), '0.65 0.62 0.55 1', mu=mu))
     if kind == 'stairs' and level > 0:
         h = level / 1000.0
         edges = sorted(STAIRS_UP + STAIRS_DOWN) + [STAIRS_DOWN[-1] + 1.0]
@@ -241,25 +248,26 @@ def world(kind='flat', level=0.0, seed=0):
             z = stairs_height(level, edges[k])
             if z > 0:
                 parts.append(_box(f'stair{k}', ((edges[k] + edges[k + 1]) / 2, 0, z / 2, 0, 0, 0),
-                                  (edges[k + 1] - edges[k], 3.0, z), '0.62 0.62 0.66 1'))
+                                  (edges[k + 1] - edges[k], 3.0, z), '0.62 0.62 0.66 1', mu=mu))
     if kind == 'steps' and level > 0:
         h = level / 1000.0
         parts.append(_box('platform1', ((-1.0 + STEP_DOWN_X) / 2, 0, h / 2, 0, 0, 0),
-                          (STEP_DOWN_X + 1.0, 4.0, h), '0.62 0.62 0.66 1'))
+                          (STEP_DOWN_X + 1.0, 4.0, h), '0.62 0.62 0.66 1', mu=mu))
         parts.append(_box('platform2', ((STEP_UP_X + 6.0) / 2, 0, h / 2, 0, 0, 0),
-                          (6.0 - STEP_UP_X, 4.0, h), '0.62 0.62 0.66 1'))
+                          (6.0 - STEP_UP_X, 4.0, h), '0.62 0.62 0.66 1', mu=mu))
     for k, o in enumerate(obstacles(kind, level, seed)):
         if o['shape'] == 'cyl_y':
-            parts.append(_cylinder(f'wave{k}', (o['x'], 0, o['z'], math.pi / 2, 0, 0), o['r'], o['length']))
+            parts.append(_cylinder(f'wave{k}', (o['x'], 0, o['z'], math.pi / 2, 0, 0), o['r'], o['length'], mu=mu))
         elif o['shape'] == 'cyl_x':
-            parts.append(_cylinder(f'ridge{k}', (o['x'], o['y'], o['z'], 0, math.pi / 2, 0), o['r'], o['length']))
+            parts.append(_cylinder(f'ridge{k}', (o['x'], o['y'], o['z'], 0, math.pi / 2, 0), o['r'], o['length'],
+                                   mu=mu))
         elif kind in ('room', 'house'):
             wall = o['name'].startswith('wall')
             parts.append(_box(o['name'], (o['x'], o['y'], o['z'], 0, 0, o['yaw']), o['size'],
-                              '0.82 0.80 0.76 1' if wall else '0.55 0.42 0.30 1'))
+                              '0.82 0.80 0.76 1' if wall else '0.55 0.42 0.30 1', mu=mu))
         else:
             parts.append(_box(f'stone{k}', (o['x'], o['y'], o['z'], 0, 0, o['yaw']), o['size'],
-                              '0.5 0.47 0.42 1'))
+                              '0.5 0.47 0.42 1', mu=mu))
     parts.append(FOOTER)
     return ''.join(parts)
 

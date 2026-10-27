@@ -166,6 +166,12 @@ def build_parser(environ=None):
                     help='exit 1 unless the verdict passes')
     ap.add_argument('--trace', action='store_true',
                     help='keep a walk_check trace (30 Hz, joints and IMU) per repeat (01-18)')
+    ap.add_argument('--friction', type=_positive_float, default=None,
+                    help='contact friction of the terrain, mu (default: 1.0, the shipped floor; '
+                         '0.6 is the pessimistic floor of 02-CONTEXT.md D-03)')
+    ap.add_argument('--payload-mass', type=float, default=None, metavar='KG',
+                    help='load on the trunk [kg]: +0.296 is +20 %% of the total mass '
+                         '(default: 0, the shipped robot)')
     ap.add_argument('--dry-run', action='store_true',
                     help='print the launch plan and exit without running anything')
     return ap
@@ -226,6 +232,10 @@ def execute(args, runner=run_level, clock=time.monotonic):
         cell = stats.CELLS[name]
         base_extra = cell_walk_check_args(name)
         launch_args = cell_launch_args(name, args.servo_model)
+        if args.friction is not None and args.friction != 1.0:
+            launch_args = list(launch_args) + ['friction:={:g}'.format(args.friction)]
+        if args.payload_mass is not None and args.payload_mass != 0.0:
+            launch_args = list(launch_args) + ['payload_mass:={:g}'.format(args.payload_mass)]
         if args.trace:
             # the controller's own view of the drift, 5 Hz into the sim log
             launch_args = list(launch_args) + ['heading_debug:=true']

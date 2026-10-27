@@ -148,10 +148,11 @@ class CommandShaper:
         return self.delay.pop_ready(now)
 
 
-def parse_override(name, text, positive=False):
+def parse_override(name, text, positive=False, signed=False):
     """Launch-argument override: None or blank -> None, else a finite float.
 
-    Negative values are rejected; with `positive=True` zero is too.
+    Negative values are rejected unless `signed` (a payload can unload the
+    trunk); with `positive=True` zero is too.
     """
     if text is None:
         return None
@@ -169,7 +170,7 @@ def parse_override(name, text, positive=False):
         raise ValueError(f'"{name}" must be a finite number')
     if not math.isfinite(value):
         raise ValueError(f'"{name}" must be a finite number')
-    if value < 0.0 or (positive and value == 0.0):
+    if (value < 0.0 and not signed) or (positive and value == 0.0):
         raise ValueError(f'"{name}" must be positive' if positive else f'"{name}" must not be negative')
     return value
 

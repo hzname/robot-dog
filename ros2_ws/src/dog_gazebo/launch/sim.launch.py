@@ -73,7 +73,7 @@ def _setup(context):
     if kind != 'flat':
         fd, world = tempfile.mkstemp(prefix=f'dog_{kind}_', suffix='.sdf')
         with os.fdopen(fd, 'w') as f:
-            f.write(terrain.world(kind, level, int(cfg('seed'))))
+            f.write(terrain.world(kind, level, int(cfg('seed')), float(cfg('friction'))))
         spawn_z, spawn_pitch = terrain.spawn_pose(kind, level, spawn_z)
 
     geometry, description = load_config(robot_yaml)
@@ -81,6 +81,9 @@ def _setup(context):
     speed = parse_override('servo_speed', cfg('servo_speed'), positive=True)
     if speed is not None:
         description['servo_velocity'] = speed  # physical servo speed in the URDF (D-13)
+    payload = parse_override('payload_mass', cfg('payload_mass'), signed=True)
+    if payload is not None:
+        description['payload_mass'] = payload  # a load on the trunk, kg (02-01)
     with open(robot_yaml) as f:
         stand_h = yaml.safe_load(f)['/**']['ros__parameters']['stance']['stand_height']
     # Joint controllers hold a standing pose from the first step, like a robot
@@ -171,6 +174,8 @@ def generate_launch_description():
                               description='flat | slope (level = deg) | waves | rough | steps | wall (level = mm)'),
         DeclareLaunchArgument('level', default_value='0', description='slope angle or obstacle height'),
         DeclareLaunchArgument('seed', default_value='0', description='random layout for rough'),
+        DeclareLaunchArgument('friction', default_value='1.0',
+                              description='contact friction of the terrain, mu (1.0 = shipped floor)'),
         DeclareLaunchArgument('slope_compensation', default_value='true',
                               description='IMU-based slope compensation in the gait'),
         DeclareLaunchArgument('heading_hold', default_value='true',
@@ -183,6 +188,9 @@ def generate_launch_description():
                               description='ideal | real (backlash, delay, friction, bus voltage)'),
         DeclareLaunchArgument('servo_speed', default_value='',
                               description='override description.servo_velocity [rad/s] (robot.yaml by default)'),
+        DeclareLaunchArgument('payload_mass', default_value='',
+                              description='load on the trunk [kg], +0.296 is +20 % of the total mass '
+                                          '(0 = shipped robot)'),
         DeclareLaunchArgument('servo_delay_ms', default_value='',
                               description='override the command delay [ms], real only (robot.yaml by default)'),
         DeclareLaunchArgument('perception', default_value='false',

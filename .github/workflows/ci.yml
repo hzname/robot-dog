@@ -33,6 +33,18 @@ on:
         description: Keep a walk_check trace per acceptance repeat (01-18)
         type: boolean
         default: false
+      friction:
+        description: Contact friction of the terrain, mu (1.0 = shipped floor, 0.6 = 02-CONTEXT D-03)
+        type: string
+        default: '1.0'
+      payload:
+        description: Load on the trunk in kg (0 = shipped robot, 0.296 = +20 % of total mass)
+        type: string
+        default: '0.0'
+      slope_levels:
+        description: Slope angles for the terrain job, space separated (e.g. "7 10")
+        type: string
+        default: '10'
 
 jobs:
   build-test:
@@ -138,6 +150,9 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: osrf/ros:jazzy-simulation
+    env:
+      FRICTION: ${{ inputs.friction || '1.0' }}
+      SLOPE_LEVELS: ${{ inputs.slope_levels || '10' }}
     defaults:
       run:
         shell: bash
@@ -152,21 +167,30 @@ jobs:
         timeout-minutes: 8
         run: |
           source install/setup.bash
-          ros2 run dog_gazebo terrain_sweep --terrain slope --levels 10 --out slope.json
+          ros2 run dog_gazebo terrain_sweep --terrain slope --levels $SLOPE_LEVELS --friction "$FRICTION" --out slope.json
       - name: Waves 10 mm
         timeout-minutes: 8
         run: |
           source install/setup.bash
           # backward on uneven ground is the weak manoeuvre (TERRAIN.md: 0-36 %
           # of the command, run to run): checked for no fall / tilt / sagging only
-          ros2 run dog_gazebo terrain_sweep --terrain waves --levels 10 --min-ratio 0.15 --backward-ratio 0 --domain 61 --out waves.json
+          ros2 run dog_gazebo terrain_sweep --terrain waves --levels 10 --min-ratio 0.15 --backward-ratio 0 --domain 61 --friction "$FRICTION" --out waves.json
       - name: Stones 10 mm
         timeout-minutes: 8
         run: |
           source install/setup.bash
           # backward on uneven ground is the weak manoeuvre (TERRAIN.md: 0-36 %
           # of the command, run to run): checked for no fall / tilt / sagging only
-          ros2 run dog_gazebo terrain_sweep --terrain rough --levels 10 --min-ratio 0.25 --backward-ratio 0 --domain 62 --out rough.json
+          ros2 run dog_gazebo terrain_sweep --terrain rough --levels 10 --min-ratio 0.25 --backward-ratio 0 --domain 62 --friction "$FRICTION" --out rough.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        # the sweep numbers are the data of a wave, not just a pass/fail
+        with:
+          name: terrain-json
+          path: |
+            ros2_ws/slope*.json
+            ros2_ws/waves*.json
+            ros2_ws/rough*.json
       - name: Perception (X lidars, GS2, ToF) - flat, no false alarms, guard never stops
         timeout-minutes: 8
         run: |
@@ -284,6 +308,8 @@ jobs:
       CELLS: ${{ inputs.cells }}
       STRICT: ${{ inputs.strict }}
       TRACE: ${{ inputs.trace }}
+      FRICTION: ${{ inputs.friction || '1.0' }}
+      PAYLOAD: ${{ inputs.payload || '0.0' }}
     defaults:
       run:
         shell: bash
@@ -333,6 +359,8 @@ jobs:
           set -- --repeats "$REPEATS" --cells "$CELLS" --servo-model "$SERVO_MODEL" --distro "$DISTRO" --domain 80
           if [ "$STRICT" = true ]; then set -- "$@" --strict; fi
           if [ "$TRACE" = true ]; then set -- "$@" --trace; fi
+          if [ "$FRICTION" != 1.0 ]; then set -- "$@" --friction "$FRICTION"; fi
+          if [ "$PAYLOAD" != 0.0 ]; then set -- "$@" --payload-mass "$PAYLOAD"; fi
           ros2 run dog_gazebo acceptance "$@"
       - name: Job summary
         if: always()
