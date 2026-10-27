@@ -140,7 +140,7 @@
 | CAL-17 | Phase 1 | Pending |
 | GAIT-03 | Phase 2 | Complete (2026-10-27) |
 | GAIT-04 | Phase 2 | Complete (2026-10-27) |
-| GAIT-05 | Phase 2 | Blocked: light body fails the 40 % gate on Jazzy |
+| GAIT-05 | Phase 2 | Blocked: a constant gait holds one end of +-20 % payload, not both (02-LIGHT-BODY.md) |
 | SAF-01 | Phase 3 | Pending |
 | SAF-02 | Phase 3 | Pending |
 | SAF-03 | Phase 3 | Pending |
