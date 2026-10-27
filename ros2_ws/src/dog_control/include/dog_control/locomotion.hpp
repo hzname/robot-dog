@@ -80,6 +80,8 @@ struct LocomotionParams
   double heading_crawl_kp{1.0};
   double heading_crawl_ki{0.2};
   double heading_crawl_max_rate{0.08};
+  /// 5 Hz trace of the heading loop into the log; off by default (01-18).
+  bool heading_debug{false};
 
   BodyVelocity max_velocity{0.15, 0.08, 0.6};
   BodyVelocity max_accel{0.5, 0.3, 2.0};
@@ -124,6 +126,11 @@ public:
   void clearYawRate() {yaw_rate_valid_ = false; yaw_turned_ = 0.0; yaw_turned_dt_ = 0.0;}
   /// Integrated heading error [rad] (commanded minus measured).
   double headingError() const {return heading_error_;}
+  /// The integral term and the correction the loop applied this cycle [rad/s];
+  /// read by the 5 Hz heading_debug line (01-18).
+  double headingIntegral() const {return heading_integral_;}
+  double headingCorrection() const {return heading_correction_;}
+  double yawRateMeasured() const {return yaw_rate_;}
   /// Hazard guard from perception: forward speed limit [m/s] (inf = none)
   /// and swing height per leg (LF, RF, LR, RR) [m] (NaN = gait.step_height):
   /// only the legs whose path crosses the obstacle lift higher. clearGuard()
@@ -219,6 +226,8 @@ private:
   double yaw_turned_{0.0}, yaw_turned_dt_{0.0};  // gyro integrated since the last update
   double heading_error_{0.0};
   double heading_integral_{0.0};
+  /// The correction applied by the heading loop in the last cycle [rad/s].
+  double heading_correction_{0.0};
   BodyVelocity gait_vel_;
   double guard_vx_{std::numeric_limits<double>::infinity()};
   std::array<double, kNumLegs> guard_step_{};  // NaN = configured step height

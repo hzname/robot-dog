@@ -448,10 +448,14 @@ bool LocomotionController::update(double dt)
         } else {
           heading_integral_ = 0.0;
         }
-        gait_vel_.wz += std::clamp(kp * heading_error_ + ki * heading_integral_, -max_rate, max_rate);
+        const double correction =
+          std::clamp(kp * heading_error_ + ki * heading_integral_, -max_rate, max_rate);
+        gait_vel_.wz += correction;
+        heading_correction_ = correction;
       } else {
         heading_error_ = 0.0;
         heading_integral_ = 0.0;
+        heading_correction_ = 0.0;
       }
       yaw_turned_ = 0.0;
       yaw_turned_dt_ = 0.0;

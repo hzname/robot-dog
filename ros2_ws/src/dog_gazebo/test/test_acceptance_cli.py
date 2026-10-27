@@ -420,3 +420,42 @@ def test_module_entry_point(tmp_path):
     assert result.returncode == 0
     assert result.stdout.count('DRY-RUN ') == 1
     assert not list(tmp_path.iterdir())
+
+
+# ---------- trace capture (01-18)
+
+def test_traced_walk_check_args_names_the_file_after_the_log():
+    base = acceptance.cell_walk_check_args('flat_A_bwd10')
+    assert acceptance.traced_walk_check_args(base, 'acc_flat_A_bwd10_r03.sim.log')[-3:] == [
+        '--trace', 'acc_flat_A_bwd10_r03.trace.json', '--record']
+    # a relaunch keeps its own file instead of overwriting the first one
+    assert acceptance.traced_walk_check_args(base, 'acc_x.retry.sim.log')[-2] == \
+        'acc_x.retry.trace.json'
+    # the base tail is not mutated
+    assert base == acceptance.cell_walk_check_args('flat_A_bwd10')
+
+
+def test_parse_trace_flag():
+    assert acceptance.parse_args(['--distro', 'jazzy']).trace is False
+    assert acceptance.parse_args(['--distro', 'jazzy', '--trace']).trace is True
+
+
+def test_runner_gets_trace_pairs_only_with_the_flag(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    base = acceptance.cell_walk_check_args('flat_A_bwd10')
+
+    quiet = _Runner([_walk(0.6) for _ in range(5)])
+    assert acceptance.main(['--cells', 'flat_A_bwd10', '--repeats', '5', '--distro', 'jazzy',
+                            '--servo-model', 'real', '--out', 'quiet.json'],
+                           runner=quiet, clock=_clock(),
+                           environ={'GITHUB_ACTIONS': 'true'}) == 0
+    assert all(call['extra'] == base for call in quiet.calls)
+
+    traced = _Runner([_walk(0.6) for _ in range(5)])
+    assert acceptance.main(['--cells', 'flat_A_bwd10', '--repeats', '5', '--distro', 'jazzy',
+                            '--servo-model', 'real', '--out', 'traced.json', '--trace'],
+                           runner=traced, clock=_clock(),
+                           environ={'GITHUB_ACTIONS': 'true'}) == 0
+    for call in traced.calls:
+        stem = call['sim_log'][:-len('.sim.log')]
+        assert call['extra'] == base + ['--trace', stem + '.trace.json', '--record']

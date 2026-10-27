@@ -29,6 +29,10 @@ on:
         description: Fail the job unless the acceptance verdict passes
         type: boolean
         default: false
+      trace:
+        description: Keep a walk_check trace per acceptance repeat (01-18)
+        type: boolean
+        default: false
 
 jobs:
   build-test:
@@ -276,6 +280,7 @@ jobs:
       REPEATS: ${{ inputs.repeats }}
       CELLS: ${{ inputs.cells }}
       STRICT: ${{ inputs.strict }}
+      TRACE: ${{ inputs.trace }}
     defaults:
       run:
         shell: bash
@@ -324,6 +329,7 @@ jobs:
           source install/setup.bash
           set -- --repeats "$REPEATS" --cells "$CELLS" --servo-model "$SERVO_MODEL" --distro "$DISTRO" --domain 80
           if [ "$STRICT" = true ]; then set -- "$@" --strict; fi
+          if [ "$TRACE" = true ]; then set -- "$@" --trace; fi
           ros2 run dog_gazebo acceptance "$@"
       - name: Job summary
         if: always()
@@ -342,6 +348,7 @@ jobs:
             ros2_ws/acceptance_*.json
             ros2_ws/acceptance_*_summary.md
             ros2_ws/*.sim.log
+            ros2_ws/*.trace.json
 
   servo-speed:
     name: servo speed analysis (tools/servo_speed)

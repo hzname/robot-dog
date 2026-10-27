@@ -86,6 +86,7 @@ public:
     gait_auto_ = p.auto_period;
     gait_min_period_ = p.min_period;
     servo_ = p.servo;
+    heading_debug_ = p.heading_debug;
     if (gait_auto_) {
       RCLCPP_INFO(get_logger(),
         "gait period %.4f s computed from servo.max_speed %.2f, margin %.2f, knee_ratio %.3f",
@@ -318,6 +319,7 @@ private:
     p.heading_crawl_kp = declare_parameter("heading.crawl_kp", p.heading_crawl_kp);
     p.heading_crawl_ki = declare_parameter("heading.crawl_ki", p.heading_crawl_ki);
     p.heading_crawl_max_rate = declare_parameter("heading.crawl_max_rate", p.heading_crawl_max_rate);
+    p.heading_debug = declare_parameter("heading.debug", p.heading_debug);
 
     p.max_velocity.vx = declare_parameter("limits.max_vx", p.max_velocity.vx);
     p.max_velocity.vy = declare_parameter("limits.max_vy", p.max_velocity.vy);
@@ -431,6 +433,13 @@ private:
       controller_->clearYawRate();  // IMU silent: no heading hold on stale data
     }
     const bool out = controller_->update(dt);
+    if (heading_debug_ && (++heading_debug_tick_ % 10) == 0) {
+      // 5 Hz at the 50 Hz loop: err, integral, the applied correction and the
+      // gyro rate, so the acceptance trace can tell a steady drift from a step.
+      RCLCPP_INFO(get_logger(), "heading_debug err=%.3f int=%.3f corr=%.3f wz_meas=%.3f",
+        controller_->headingError(), controller_->headingIntegral(),
+        controller_->headingCorrection(), controller_->yawRateMeasured());
+    }
     if (odom_publish_) {publishOdom(t, dt);}
     if (controller_->mode() != last_mode_ || controller_->estopActive() != last_estop_) {
       publishState();
@@ -505,6 +514,8 @@ private:
   bool last_estop_{false};
   bool imu_seen_{false};
   bool odom_publish_{false};
+  bool heading_debug_{false};
+  int heading_debug_tick_{0};
   bool odom_gyro_{false};
   double odom_gyro_bias_{0.0}, odom_scale_{1.0};
   double gyro_yaw_{0.0}, gyro_bias_est_{0.0}, still_time_{0.0}, prev_stamp_{0.0}, prev_yaw_{0.0};

@@ -123,6 +123,7 @@
       crawl_kp: 1.0         # the crawl: its cycle is long (~9 s) and every turn of it
       crawl_ki: 0.2         #   swings the feet sideways (0.08 rad/s -> +-3 cm per step);
       crawl_max_rate: 0.08  #   the gyro jerks of a slipping foot are caught up slowly
+      debug: false          # [bool] 5 Hz heading trace into the log (acceptance --trace, 01-18)
 
     # Perception sensors (docs/HEAD.md). Used by the URDF (frames, Gazebo
     # sensors) and by dog_perception. Angles: pitch = down from horizontal,

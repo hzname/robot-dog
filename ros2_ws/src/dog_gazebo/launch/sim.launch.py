@@ -99,6 +99,8 @@ def _setup(context):
                           'odom.gyro_bias_dps': float(cfg('gyro_bias')), 'odom.scale': float(cfg('odom_scale'))})
     if cfg('step_height'):
         overrides['gait.step_height'] = float(cfg('step_height'))
+    if on('heading_debug'):
+        overrides['heading.debug'] = True
 
     gz_args = f"-r {'-s --headless-rendering ' if on('headless') else ''}-v 2 {world}"
     actions = [
@@ -173,6 +175,8 @@ def generate_launch_description():
                               description='IMU-based slope compensation in the gait'),
         DeclareLaunchArgument('heading_hold', default_value='true',
                               description='hold the heading with the IMU gyro'),
+        DeclareLaunchArgument('heading_debug', default_value='false',
+                              description='5 Hz heading trace into the log (01-18), off by default'),
         DeclareLaunchArgument('step_height', default_value='',
                               description='override gait.step_height [m] (robot.yaml by default)'),
         DeclareLaunchArgument('servo_model', default_value='ideal',
