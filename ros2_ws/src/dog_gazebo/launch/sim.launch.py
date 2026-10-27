@@ -102,6 +102,10 @@ def _setup(context):
                           'odom.gyro_bias_dps': float(cfg('gyro_bias')), 'odom.scale': float(cfg('odom_scale'))})
     if cfg('step_height'):
         overrides['gait.step_height'] = float(cfg('step_height'))
+    if cfg('gait_period'):
+        overrides['gait.period'] = float(cfg('gait_period'))
+    if cfg('gait_duty'):
+        overrides['gait.duty'] = float(cfg('gait_duty'))
     if on('heading_debug'):
         overrides['heading.debug'] = True
 
@@ -184,6 +188,10 @@ def generate_launch_description():
                               description='5 Hz heading trace into the log (01-18), off by default'),
         DeclareLaunchArgument('step_height', default_value='',
                               description='override gait.step_height [m] (robot.yaml by default)'),
+        DeclareLaunchArgument('gait_period', default_value='',
+                              description='override gait.period [s] (robot.yaml by default)'),
+        DeclareLaunchArgument('gait_duty', default_value='',
+                              description='override gait.duty, stance share (robot.yaml by default)'),
         DeclareLaunchArgument('servo_model', default_value='ideal',
                               description='ideal | real (backlash, delay, friction, bus voltage)'),
         DeclareLaunchArgument('servo_speed', default_value='',

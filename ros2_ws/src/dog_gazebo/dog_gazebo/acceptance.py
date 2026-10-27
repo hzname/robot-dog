@@ -191,6 +191,12 @@ def build_parser(environ=None):
     ap.add_argument('--servo-speed', type=_positive_number, default=None, metavar='RAD_S',
                     help='servo speed [rad/s]: 3.5 is the pessimistic bottom of 02-CONTEXT.md '
                          '(default: description.servo_velocity, 6.0)')
+    ap.add_argument('--gait-period', type=_positive_number, default=None, metavar='S',
+                    help='trot cycle [s] (default: gait.period, 0.55)')
+    ap.add_argument('--gait-duty', type=_positive_number, default=None, metavar='SHARE',
+                    help='stance share of the cycle, 0.5 = pure trot (default: gait.duty, 0.65)')
+    ap.add_argument('--step-height', type=_non_negative_number, default=None, metavar='M',
+                    help='swing apex [m] (default: gait.step_height, 0.02)')
     ap.add_argument('--servo-delay-ms', type=_non_negative_number, default=None, metavar='MS',
                     help='command delay [ms]: 50 is the top of the 30-50 range of 02-CONTEXT.md '
                          '(default: servo_sim delay_ms, 40)')
@@ -258,6 +264,12 @@ def execute(args, runner=run_level, clock=time.monotonic):
             launch_args = list(launch_args) + ['friction:={:g}'.format(args.friction)]
         if args.payload_mass is not None and args.payload_mass != 0.0:
             launch_args = list(launch_args) + ['payload_mass:={:g}'.format(args.payload_mass)]
+        if args.gait_period is not None:
+            launch_args = list(launch_args) + ['gait_period:={:g}'.format(args.gait_period)]
+        if args.gait_duty is not None:
+            launch_args = list(launch_args) + ['gait_duty:={:g}'.format(args.gait_duty)]
+        if args.step_height is not None:
+            launch_args = list(launch_args) + ['step_height:={:g}'.format(args.step_height)]
         if args.servo_speed is not None:
             launch_args = list(launch_args) + ['servo_speed:={:g}'.format(args.servo_speed)]
         if args.servo_delay_ms is not None:

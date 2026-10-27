@@ -526,3 +526,26 @@ def test_servo_inputs_reach_the_launch_only_when_asked(tmp_path, monkeypatch):
                            environ={'GITHUB_ACTIONS': 'true'}) == 0
     for call in slow.calls:
         assert call['launch_args'] == base + ['servo_speed:=3.5', 'servo_delay_ms:=50']
+
+
+def test_gait_inputs_reach_the_launch_only_when_asked(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    base = acceptance.cell_launch_args('flat_A_bwd10', 'real')
+    common = ['--cells', 'flat_A_bwd10', '--repeats', '5', '--distro', 'jazzy',
+              '--servo-model', 'real']
+
+    asked = _Runner([_walk(0.6) for _ in range(5)])
+    assert acceptance.main(common + ['--out', 'gait.json', '--gait-period', '0.65',
+                                     '--gait-duty', '0.75', '--step-height', '0.015'],
+                           runner=asked, clock=_clock(),
+                           environ={'GITHUB_ACTIONS': 'true'}) == 0
+    for call in asked.calls:
+        assert call['launch_args'] == base + ['gait_period:=0.65', 'gait_duty:=0.75',
+                                              'step_height:=0.015']
+
+
+def test_gait_inputs_are_validated():
+    with pytest.raises(SystemExit):
+        acceptance.parse_args(['--distro', 'jazzy', '--gait-duty', '0'])
+    with pytest.raises(SystemExit):
+        acceptance.parse_args(['--distro', 'jazzy', '--step-height', '-0.01'])

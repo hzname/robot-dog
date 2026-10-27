@@ -53,6 +53,18 @@ on:
         description: Command delay for the acceptance [ms], empty keeps servo_sim's 40 (e.g. 50)
         type: string
         default: ''
+      gait_period:
+        description: Trot cycle for the acceptance [s], empty keeps gait.period (e.g. 0.65)
+        type: string
+        default: ''
+      gait_duty:
+        description: Stance share for the acceptance, empty keeps gait.duty (e.g. 0.75)
+        type: string
+        default: ''
+      step_height:
+        description: Swing apex for the acceptance [m], empty keeps gait.step_height (e.g. 0.015)
+        type: string
+        default: ''
 
 jobs:
   build-test:
@@ -321,6 +333,9 @@ jobs:
       PAYLOAD: ${{ inputs.payload || '0.0' }}
       SERVO_SPEED: ${{ inputs.servo_speed }}
       SERVO_DELAY: ${{ inputs.servo_delay }}
+      GAIT_PERIOD: ${{ inputs.gait_period }}
+      GAIT_DUTY: ${{ inputs.gait_duty }}
+      STEP_HEIGHT: ${{ inputs.step_height }}
     defaults:
       run:
         shell: bash
@@ -374,6 +389,9 @@ jobs:
           if [ "$PAYLOAD" != 0.0 ]; then set -- "$@" --payload-mass "$PAYLOAD"; fi
           if [ -n "$SERVO_SPEED" ]; then set -- "$@" --servo-speed "$SERVO_SPEED"; fi
           if [ -n "$SERVO_DELAY" ]; then set -- "$@" --servo-delay-ms "$SERVO_DELAY"; fi
+          if [ -n "$GAIT_PERIOD" ]; then set -- "$@" --gait-period "$GAIT_PERIOD"; fi
+          if [ -n "$GAIT_DUTY" ]; then set -- "$@" --gait-duty "$GAIT_DUTY"; fi
+          if [ -n "$STEP_HEIGHT" ]; then set -- "$@" --step-height "$STEP_HEIGHT"; fi
           ros2 run dog_gazebo acceptance "$@"
       - name: Job summary
         if: always()
