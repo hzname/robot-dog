@@ -71,7 +71,7 @@ struct LocomotionParams
   // Heading hold from the gyro: the heading error (commanded minus measured
   // yaw, integrated while walking) is fed back (PI) into the yaw rate of the gait.
   bool heading_hold{true};
-  double heading_kp{2.5};         // [1/s] yaw-rate correction per radian of error
+  double heading_kp{5.0};         // [1/s] yaw-rate correction per radian of error
   double heading_ki{1.0};         // [1/s^2] integral part: removes the steady drift offset
   double heading_max_rate{0.3};   // [rad/s] correction limit
   double heading_max_error{0.5};  // [rad] error clamp (anti-windup: robot blocked)
