@@ -42,7 +42,7 @@ on:
         type: string
         default: '0.0'
       slope_levels:
-        description: Slope angles for the terrain job, space separated (e.g. "7 10")
+        description: Slope angles for the terrain job, comma separated (e.g. "7,10")
         type: string
         default: '10'
 
@@ -167,7 +167,7 @@ jobs:
         timeout-minutes: 8
         run: |
           source install/setup.bash
-          ros2 run dog_gazebo terrain_sweep --terrain slope --levels $SLOPE_LEVELS --friction "$FRICTION" --out slope.json
+          ros2 run dog_gazebo terrain_sweep --terrain slope --levels ${SLOPE_LEVELS//,/ } --friction "$FRICTION" --out slope.json
       - name: Waves 10 mm
         timeout-minutes: 8
         run: |
