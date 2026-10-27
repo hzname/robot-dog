@@ -81,9 +81,9 @@ jobs:
         shell: bash
         working-directory: ros2_ws
     steps:
+      - uses: actions/checkout@v4
       - name: Extra ROS packages
         run: apt-get update -qq && apt-get install -y -qq ros-${{ matrix.distro }}-std-srvs
-      - uses: actions/checkout@v4
       - name: Build
         run: |
           source /opt/ros/${{ matrix.distro }}/setup.bash
@@ -141,9 +141,9 @@ jobs:
         shell: bash
         working-directory: ros2_ws
     steps:
+      - uses: actions/checkout@v4
       - name: Extra ROS packages
         run: apt-get update -qq && apt-get install -y -qq ros-${{ matrix.distro }}-std-srvs
-      - uses: actions/checkout@v4
       - name: Build
         run: |
           source /opt/ros/${{ matrix.distro }}/setup.bash
@@ -182,9 +182,9 @@ jobs:
         shell: bash
         working-directory: ros2_ws
     steps:
+      - uses: actions/checkout@v4
       - name: Extra ROS packages
         run: apt-get update -qq && apt-get install -y -qq ros-jazzy-std-srvs
-      - uses: actions/checkout@v4
       - name: Build
         run: |
           source /opt/ros/jazzy/setup.bash
@@ -347,9 +347,9 @@ jobs:
         shell: bash
         working-directory: ros2_ws
     steps:
+      - uses: actions/checkout@v4
       - name: Extra ROS packages
         run: apt-get update -qq && apt-get install -y -qq ros-${{ matrix.distro }}-std-srvs
-      - uses: actions/checkout@v4
       - name: Pure modules (pytest)
         run: |
           if ! python3 -c 'import pytest' 2>/dev/null; then
