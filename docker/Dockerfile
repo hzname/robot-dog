@@ -3,11 +3,14 @@
 #   docker build -f docker/Dockerfile -t robot-dog:2.0 .
 #   docker build -f docker/Dockerfile --build-arg ROS_DISTRO=lyrical -t robot-dog:2.0-lyrical .
 #
-# ros-base plus std_srvs (the driver's release_fault service type). diagnostic_msgs
-# is already in ros-base: installing it again upgrades it alone and leaves its
-# neighbours behind, which is how lyrical broke with "symbol lookup error" in
-# libdiagnostic_msgs__rosidl_typesupport_fastrtps_c.so. Nothing else outside
-# ros-base
+# ros-base plus std_srvs (the driver's release_fault service type) and service_msgs.
+#
+# The second one is not used directly: it is named so that apt upgrades it in the
+# same transaction. Installing an interface package alone pulls a newer build whose
+# typesupport calls symbols the image's older service_msgs does not have, and the
+# node dies at startup with "symbol lookup error" (exit 127). diagnostic_msgs is
+# already in ros-base and must not be reinstalled for the same reason. Nothing else
+# outside ros-base
 # outside it (no xacro, no joy, no ros2_control), which keeps the image small on
 # the Pi.
 ARG ROS_DISTRO=jazzy
@@ -18,7 +21,9 @@ ARG BUILD_JOBS=2
 
 SHELL ["/bin/bash", "-c"]
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ros-${ROS_DISTRO}-std-srvs \
+ && apt-get install -y --no-install-recommends \
+      ros-${ROS_DISTRO}-std-srvs \
+      ros-${ROS_DISTRO}-service-msgs \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /ws
 COPY ros2_ws/src ./src
