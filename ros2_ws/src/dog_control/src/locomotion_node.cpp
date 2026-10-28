@@ -605,6 +605,15 @@ private:
   /// ignores the joint commands the stand-up is about to publish.
   void requestDriverRelease()
   {
+    recover_attempts_ = 0;
+    releaseAndArm();
+  }
+
+  /// One pass of "drop the latch, then arm". A fallen robot stops sending commands,
+  /// so the driver's own timeout can latch a fault in the same moment the operator
+  /// asks to recover; a single retry covers that race.
+  void releaseAndArm()
+  {
     if (!release_client_->service_is_ready()) {
       RCLCPP_WARN(get_logger(), "recover: servo driver release_fault is not reachable");
       return;
@@ -631,6 +640,10 @@ private:
         if (res->success) {
           controller_->request("stand");
           RCLCPP_WARN(get_logger(), "recover: driver %s, standing up", res->message.c_str());
+        } else if (++recover_attempts_ < 2) {
+          RCLCPP_WARN(get_logger(), "recover: driver refused to arm (%s) - retrying the release",
+            res->message.c_str());
+          releaseAndArm();
         } else {
           RCLCPP_ERROR(get_logger(), "recover: driver refused to arm: %s", res->message.c_str());
         }
@@ -732,6 +745,7 @@ private:
   std::unique_ptr<dog_diagnostics::Reporter> diag_;
   rclcpp::TimerBase::SharedPtr diag_timer_;
   bool fall_announced_{false};
+  int recover_attempts_{0};
   std::string risk_profile_{"bench"};
   rclcpp::TimerBase::SharedPtr timer_;
 };

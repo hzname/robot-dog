@@ -210,6 +210,11 @@ public:
             return;
           }
           driver_->arm();
+          // Arming restarts the clock. Without this a robot that was lying for
+          // longer than the timeout (a fall, the thermal pause) latched "no joint
+          // commands" a millisecond after it was armed, before the first frame could
+          // arrive - the operator saw a fault the instant they pressed "stand".
+          if (driver_->armed()) {last_cmd_ = steadySeconds(); timed_out_ = false;}
           res->success = driver_->armed();
           res->message = res->success ? "armed: the servos follow joint_commands" :
             "not armed";
@@ -234,6 +239,7 @@ public:
           RCLCPP_WARN(get_logger(), "E-STOP %s", msg->data ? "ENGAGED - servos off" : "released");
         }
         driver_->setEstop(msg->data);
+        if (!msg->data) {last_cmd_ = steadySeconds();}
       });
     param_cb_ = add_on_set_parameters_callback(
       [this](const std::vector<rclcpp::Parameter> & params) {return onParams(params);});
