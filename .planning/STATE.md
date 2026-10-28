@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 04
-current_phase_name: Защита корпуса и диагностика
+current_phase: 05
+current_phase_name: Профиль первого выхода и защита пультов
 status: phase_complete
-stopped_at: Phase 04 complete - fall guard, required IMU, thermal timeout, diagnostics from four nodes and the alarm banner; CI 40688012766 green on both distros and both simulators
-last_updated: "2026-10-29T12:30:00.000Z"
+stopped_at: Phase 05 complete - profile:=floor is one argument, the page cannot release an e-stop, WebSocket has Origin/cap/idle limits, live calibration cannot snap a servo, and the calibration lives outside git; CI 40751490766 green
+last_updated: "2026-10-29T16:20:00.000Z"
 last_activity: 2026-10-29
-last_activity_desc: Phase 04 closed in code and CI - six real defects fell out of the jobs (filter lag behind the fall, the accelerometer too noisy for the soft threshold, gravity's sign, a landing read as a fall, the driver's command clock surviving an arm, and an apt interface skew that killed the lyrical simulator)
-state_head: 76c3dc8
+last_activity_desc: Phase 05 closed - the floor profile, a view-only page, Origin/client/idle limits on the WebSocket, a 10-degree guard on live calibration, servos.local.yaml outside git, and a calibration check that found a 26-degree split between the front thighs
+state_head: ebdc33f
 progress:
   total_phases: 8
-  completed_phases: 2
-  total_plans: 31
-  completed_plans: 31
-  percent: 25
+  completed_phases: 3
+  total_plans: 36
+  completed_plans: 36
+  percent: 38
 ---
 
 # Project State
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-29)
 
 **Core value:** Робот надёжно и безопасно ходит по полу с геймпада, не падая и не убивая свои сервы.
-**Current focus:** Phase 05 — Профиль первого выхода и защита пультов
+**Current focus:** Phase 06 — Питание, выключатель и запуск на Pi
 
 ## Current Position
 
-Phase: 04 (Защита корпуса и диагностика) — COMPLETE
-Plan: все четыре плана закрыты (SAF-05, SAF-06, SAF-08, DIA-01, DIA-02); сводки — в каталоге фазы
-Status: код в `76c3dc8`, CI `40688012766` — `build + test` и `gazebo walk check` на jazzy и lyrical, `terrain limits` зелёные
-Last activity: 2026-10-29 - фаза 04: страж падения читает акселерометр (фильтр опаздывал на секунду), мягкий порог — фильтр, жёсткий — сырой угол; `~/recover` поднимает робота одним действием; диагностика четырёх узлов и баннер с той же формулировкой, что в логе
+Phase: 05 (Профиль первого выхода и защита пультов) — COMPLETE
+Plan: все пять планов закрыты (CAL-04, CAL-05, CAL-06, CAL-07, TEL-02, TEL-03, TEL-04, TEL-06, TEL-11)
+Status: код в `ebdc33f`, CI `40751490766` — `build + test` и `gazebo walk check` на обоих дистрибутивах, инструментальные джобы зелёные
+Last activity: 2026-10-29 - фаза 05: один аргумент `profile:=floor` делает робота консервативным, страница стала только просмотром и не снимает аварию, сокет получил Origin/лимит/простой, живая калибровка не может дёрнуть серву больше 10°, калибровка живёт в servos.local.yaml вне git
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -313,7 +313,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-29T12:30:00.000Z
-Stopped at: Phase 04 closed in code and CI (SAF-05, SAF-06, SAF-08, DIA-01, DIA-02). Что осталось до приёмки: ячейка наклона в Gazebo (пункт 5 плана 04-04) и проверки на живом роботе из критерия 5 ROADMAP — они уходят в фазу 7 вместе с остальным железом
-Next: фаза 05 (профиль первого выхода и защита пультов) по ROADMAP
-Resume file: .planning/phases/04-zashchita-korpusa-i-diagnostika/04-04-SUMMARY.md
+Last session: 2026-10-29T16:20:00.000Z
+Stopped at: Phase 05 closed in code and CI. Осталось до приёмки фазы: проверки на живом роботе (TEL-05 — залипшие оси и переподключение геймпада) уходят в фазу 6/7 вместе с остальным железом
+Next: фаза 06 (питание, выключатель и запуск на Pi) по ROADMAP
+Resume file: .planning/phases/05-profil-pervogo-vyhoda-i-zashchita-pultov/05-05-SUMMARY.md
