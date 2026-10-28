@@ -513,9 +513,13 @@ std::string LocomotionController::recover()
   if (mode_ != Mode::FALLEN) {return "not fallen";}
   if (imu_seen_ && imu_age_ > p_.safety_imu_timeout_s) {return "imu is still silent";}
   if (p_.safety_require_imu && !imu_calibrated_) {return "imu not calibrated";}
-  if (imu_seen_ && tilt_deg_ > p_.safety_soft_deg - p_.safety_hysteresis_deg) {
+  // "Is the robot level right now" is an instantaneous question, so it is answered by
+  // the accelerometer: after the operator lifts the robot the attitude filter still
+  // remembers the fall for a second and would refuse a robot that is already straight.
+  const double tilt_now = tilt_raw_valid_ ? tilt_raw_deg_ : tilt_deg_;
+  if (imu_seen_ && tilt_now > p_.safety_soft_deg - p_.safety_hysteresis_deg) {
     char buf[128];
-    std::snprintf(buf, sizeof(buf), "tilt %.0f deg: put the robot level first", tilt_deg_);
+    std::snprintf(buf, sizeof(buf), "tilt %.0f deg: put the robot level first", tilt_now);
     return buf;
   }
   mode_ = Mode::LYING;

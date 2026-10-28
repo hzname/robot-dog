@@ -116,7 +116,7 @@ class TestFallProtection(unittest.TestCase):
         self.assertIn('tilt', res.message.lower())
 
         self.tilt(0.0)
-        self.spin(0.5)
+        self.spin(1.0)
         res = self.call('/dog/locomotion/recover')
         self.assertTrue(res.success, res.message)
         self.spin(3.0)

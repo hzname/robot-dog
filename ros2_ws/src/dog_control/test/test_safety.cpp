@@ -314,3 +314,19 @@ TEST(SafetyTilt, TheHardThresholdTrustsTheAccelerometer)
   EXPECT_TRUE(c.fallen()) << "the accelerometer sees the fall while the filter is still catching up";
   EXPECT_NE(std::string::npos, c.fallReason().find("40")) << c.fallReason();
 }
+
+TEST(SafetyFallen, RecoverTrustsTheAccelerometerWhileTheFilterStillRemembers)
+{
+  LocomotionController c(benchParams());
+  stand(c);
+  run(c, 0.3, 33.0);
+  ASSERT_TRUE(c.fallen());
+
+  // The operator lifted the robot: the accelerometer says level at once, while the
+  // attitude filter still carries the tilt it saw a moment ago.
+  c.setImuAttitude(33.0 * kDeg, 0.0, 0.01);
+  c.setFallTilt(0.0, 0.0);
+  c.update(0.01);
+  EXPECT_EQ(c.recover(), std::string())
+    << "a robot that is already straight must not be refused because of the filter's lag";
+}
