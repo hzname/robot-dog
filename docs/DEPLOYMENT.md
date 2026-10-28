@@ -751,6 +751,10 @@ journalctl -u servo-guard -f
 - Если контейнером управляет systemd (а не просто `docker compose`), добавьте в его юнит
   `ExecStopPost=/usr/local/bin/servo-guard.sh off` — тогда обычная остановка гасит выходы сразу, не
   дожидаясь опроса.
+- Юнит ищет проект в `/home/robot-dog`. Если на плате он лежит в другом месте, положите drop-in
+  `/etc/systemd/system/servo-guard.service.d/path.conf` с `Environment=SERVO_GUARD_COMPOSE_DIR=<путь>`
+  и сделайте `daemon-reload` + `restart`: без него сторож честно пишет `watching` и не замечает
+  контейнер вовсе.
 - В `docker-compose.yml` уже стоит `stop_signal: SIGINT` и `stop_grace_period: 10s`: штатная остановка
   доходит до `relax_on_exit`, а сторож вмешивается только при аварии.
 
