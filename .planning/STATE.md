@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 03
 current_phase_name: Защита драйвера серв
-status: executing
-stopped_at: Wave 03-03 closed — a dead command stream relaxes and latches, calibration keeps it alive (SAF-04)
-last_updated: "2026-10-29T06:30:00.000Z"
+status: phase_complete
+stopped_at: Phase 03 complete — SAF-01..04, SAF-12, SAF-16, DIA-03 met; the driver never powers itself
+last_updated: "2026-10-29T08:45:00.000Z"
 last_activity: 2026-10-27
-last_activity_desc: Wave 03-03 closed — command_relax_timeout relaxes and latches on 2.5 s of silence, the web bridge repeats the last calibration pose at 5 Hz while the robot is passive
-state_head: 90f961e
+last_activity_desc: Phase 03 complete — the driver starts disarmed, drops inherited pulses when it opens the chip, and a host guard drops the outputs if the container dies
+state_head: 6fe1793
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 22
-  completed_plans: 25
-  percent: 20
+  completed_plans: 26
+  percent: 21
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 02 (Устойчивость хода в симуляции) — EXECUTING
-Plan: фаза 3, волны 03-01…03-04. 03-01…03-03 закрыты, дальше 03-04 (разоружённый старт и сторож выходов)
+Plan: фаза 3 закрыта (26/26 планов). Дальше — фаза 4 по ROADMAP (защита корпуса и диагностика)
 Status: решения фазы приняты владельцем 2026-10-27 (мягкий порог 15°/20°, зачёт по каждому параметру плюс комбинация, `mu = 0.6`, груз на корпусе ±20 %); волна 1 — входы возмущений и базовая линия
 Last activity: 2026-10-28 - волна 02-04: GAIT-03 закрыт (склон 7/10, 0.70 и 0.61), матрица 6 углов — 5 проходят, облегчённый корпус на Jazzy 39.8 % и 25.9 % (ворота 40 %), причина по трассе — проскальзывание стоп при раскачке корпуса 14° против 9°
 
@@ -199,9 +199,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-29T06:30:00.000Z
-Stopped at: Wave 03-03 closed (SAF-04); next is 03-04 - disarmed start, outputs dropped on open, host guard
-Resume file: .planning/phases/03-zashchita-drayvera-serv/03-03-SUMMARY.md
+Last session: 2026-10-29T08:45:00.000Z
+Stopped at: Phase 03 complete; next is phase 4 (chassis protection and diagnostics)
+Resume file: .planning/phases/03-zashchita-drayvera-serv/03-04-SUMMARY.md
 
 - [Phase 02]: Plan 02-02: `terrain` job на замере красный по замыслу — выше 15° доля команды ниже ворот 40 %, это работа губернатора; логи `tilt_guard` теперь в артефакте `terrain-json`
 
