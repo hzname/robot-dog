@@ -21,9 +21,14 @@ class FakePublisher:
         self.sent.append(msg)
 
 
+class FakeRclpyTime:
+    def to_msg(self):
+        return Time()
+
+
 class FakeClock:
     def now(self):
-        return Time()
+        return FakeRclpyTime()
 
 
 class FakeNode:
