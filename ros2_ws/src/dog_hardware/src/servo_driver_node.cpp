@@ -104,6 +104,10 @@ public:
     DriverParams dp;
     dp.max_joint_speed = declare_parameter("max_joint_speed", dp.max_joint_speed);
     dp.enable_stagger = declare_parameter("enable_stagger", dp.enable_stagger);
+    // CAL-04: how far a live calibration change may move an enabled servo. Wide
+    // enough for a real correction (the offset usually lands within 30 degrees),
+    // narrow enough that a typo cannot snap the leg.
+    max_live_step_deg_ = declare_parameter("calibration.max_live_step_deg", max_live_step_deg_);
 
     names_ = declare_parameter("joint_names", kDefaultJoints);
     std::vector<ServoCalibration> cals;
@@ -470,7 +474,7 @@ private:
   double relax_timeout_{2.0};
   bool relax_on_exit_{true};
   double last_cmd_{0.0};
-  double max_live_step_deg_{10.0};  // CAL-04: a live change may not snap a servo further
+  double max_live_step_deg_{30.0};  // CAL-04: a live change may not snap a servo further
   bool timed_out_{false};
   int timeouts_{0};
   std::array<int, kPwmChannels> logged_faults_{};

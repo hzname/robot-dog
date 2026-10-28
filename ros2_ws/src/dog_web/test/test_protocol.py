@@ -68,22 +68,21 @@ def test_guard_message():
     assert m == {'type': 'guard', 'state': 'clear', 'd': None}
 
 
-# --- TEL-02: a random browser can stop the robot but not un-stop it ------------
+# --- TEL-02: the page is the operator's panel, in both directions --------------
 
-def test_estop_can_always_be_engaged_from_the_page():
+def test_estop_can_be_engaged_from_the_page():
     allowed, publish, reason = protocol.estop_decision(current=False, requested=True)
     assert (allowed, publish, reason) == (True, True, '')
 
 
-def test_estop_cannot_be_released_from_the_page():
+def test_estop_can_be_released_from_the_page():
     allowed, publish, reason = protocol.estop_decision(current=True, requested=False)
-    assert allowed is False and publish is False
-    assert 'gamepad' in reason
+    assert (allowed, publish, reason) == (True, True, '')
 
 
-def test_releasing_an_estop_that_is_not_engaged_does_nothing():
-    allowed, publish, _ = protocol.estop_decision(current=False, requested=False)
-    assert allowed is True and publish is False
+def test_a_repeated_estop_does_not_touch_the_topic():
+    assert protocol.estop_decision(current=True, requested=True)[1] is False
+    assert protocol.estop_decision(current=False, requested=False)[1] is False
 
 
 def test_view_only_keeps_the_estop_and_drops_every_other_control():
@@ -97,6 +96,10 @@ def test_view_only_keeps_the_estop_and_drops_every_other_control():
     estop = protocol.handle_message('{"type":"estop","active":true}', LIM)
     estop, errors = protocol.gate_actions(estop, drive_enabled=False, estop_engaged=False)
     assert estop.estop is True and errors == []
+    # Releasing is a safety action too: view-only keeps it.
+    release = protocol.handle_message('{"type":"estop","active":false}', LIM)
+    release, errors = protocol.gate_actions(release, drive_enabled=False, estop_engaged=True)
+    assert release.estop is False and errors == []
 
 
 def test_the_full_profile_passes_actions_through():

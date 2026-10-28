@@ -742,10 +742,13 @@ TEST(LiveCalibrationTest, AnEnabledChannelReportsHowFarItWouldJump)
   nudge.offset_deg += 1.0;
   EXPECT_NEAR(driver.liveCalibrationStepDeg(0, nudge), 1.0, 0.2);
 
+  ServoCalibration wide = c;
+  wide.offset_deg += 25.0;             // inside the 30 degree limit: allowed
+  EXPECT_NEAR(driver.liveCalibrationStepDeg(0, wide), 25.0, 0.5);
+
   ServoCalibration jump = c;
-  jump.offset_deg += 21.0;
-  EXPECT_GT(driver.liveCalibrationStepDeg(0, jump), 10.0)
-    << "the node refuses a live step above its limit";
+  jump.offset_deg += 45.0;             // beyond it: the node refuses
+  EXPECT_GT(driver.liveCalibrationStepDeg(0, jump), 30.0);
 }
 
 TEST(LiveCalibrationTest, ADisabledChannelCannotJump)

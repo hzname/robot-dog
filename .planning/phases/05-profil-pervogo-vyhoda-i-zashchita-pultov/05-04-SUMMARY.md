@@ -6,7 +6,7 @@
 
 1. **`ServoDriver::liveCalibrationStepDeg(index, cal)`** — насколько сдвинется пульс включённого канала
    для своей текущей цели, если применить новую калибровку. Нода отказывает в изменении сверх
-   `calibration.max_live_step_deg` (10°) с причиной в `cal_set_result` (D-17). Отключённый канал
+   `calibration.max_live_step_deg` (30°) с причиной в `cal_set_result` (D-17). Отключённый канал
    принимает любое значение: его ничего не держит, прыгать нечему.
 2. **`servos.local.yaml`** — надстройка калибровки: в `.gitignore`, передаётся драйверу вторым файлом
    параметров (перекрывает `servos.yaml`), список файлов печатается в лог запуска (CAL-05).
@@ -25,5 +25,5 @@
 
 | Требование | Где | Чем проверено |
 |---|---|---|
-| CAL-04 | `servo_driver.cpp` (`liveCalibrationStepDeg`), `servo_driver_node.cpp` | gtest `LiveCalibrationTest` (2): включённый канал сообщает 1° и >10°, отключённый — ноль |
+| CAL-04 | `servo_driver.cpp` (`liveCalibrationStepDeg`), `servo_driver_node.cpp` | gtest `LiveCalibrationTest` (2): включённый канал сообщает 1°, 25° в пределах и >30° за пределом, отключённый — ноль |
 | CAL-05 | `robot.launch.py`, `.gitignore`, `docs/DEPLOYMENT.md` | pytest `git check-ignore`, запуск печатает файлы калибровки |

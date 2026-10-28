@@ -97,23 +97,22 @@ def handle_message(text: str, limits: Limits) -> Actions:
 def estop_decision(current: bool, requested: bool):
     """(allowed, publish, reason) for an E-STOP request from the web page.
 
-    Engaging is always allowed - stopping the robot is a safe action from anywhere.
-    Releasing is not: the page cannot know who is holding the robot, and a random
-    tab must not be able to clear the latch. The gamepad's Start button is the way
-    out (TEL-02).
+    Both directions are the operator's: the page is the robot's own control panel,
+    not a stranger's tab, and after an emergency the person in front of it must be
+    able to release without walking to the gamepad (owner, 2026-10-29). What keeps a
+    stranger out is the origin check, the private ROS domain and the network - not a
+    missing button. `publish` is false when the request changes nothing, so a page
+    that repeats itself does not spray the topic.
     """
-    if requested:
-        return True, True, ''
-    if not current:
-        return True, False, ''      # already released, nothing to publish
-    return False, False, 'the E-STOP is released from the gamepad, not the web page'
+    return True, bool(requested) != bool(current), ''
 
 
 def gate_actions(actions, *, drive_enabled: bool, estop_engaged: bool):
     """Drop what this page may not do; returns (actions, errors).
 
-    In view-only mode (profile:=floor) the page shows state and may still hit the
-    E-STOP, but it cannot drive, command a pose or ask for a gait.
+    In view-only mode (profile:=floor) the page shows state and keeps the full
+    E-STOP in both directions - releasing the latch is a safety action - but it
+    cannot drive, command a pose or ask for a gait.
     """
     errors = []
     if actions.estop is not None:
