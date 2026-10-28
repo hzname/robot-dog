@@ -140,6 +140,11 @@ class WebTeleop(Node):
             while True:
                 text = await ws.recv()
                 if _is_calibration(text):
+                    # Only a client that actually calibrates holds the keep-alive:
+                    # a teleop tab must never feed stale poses while the robot walks.
+                    if self.cal and not getattr(ws, 'cal_active', False):
+                        ws.cal_active = True
+                        self.cal.open_session()
                     reply = await self._calibration(text)
                     if reply.get('type') == 'cal_info' and cal_task is None:
                         cal_task = asyncio.ensure_future(self._stream_status(ws))
@@ -162,6 +167,8 @@ class WebTeleop(Node):
             stop_task.cancel()
             if cal_task:
                 cal_task.cancel()
+            if self.cal and getattr(ws, 'cal_active', False):
+                self.cal.close_session()
             self.web_clients.discard(ws)
             if watchdog.moving:
                 self.send_actions(protocol.Actions(twist=(0.0, 0.0, 0.0)))

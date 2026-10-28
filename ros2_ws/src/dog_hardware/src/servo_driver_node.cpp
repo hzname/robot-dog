@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstdio>
 #include <cmath>
 #include <memory>
 #include <stdexcept>
@@ -83,6 +84,14 @@ public:
     const auto osc_hz = declare_parameter("pwm.oscillator_hz", 25e6);
     const auto rate = declare_parameter("update_rate", 100.0);
     cmd_timeout_ = declare_parameter("command_timeout", 0.5);
+    // Silence longer than the hold plus this grace relaxes the outputs and
+    // latches: a robot whose controller died must not stand there with hot
+    // servos until the battery dies (SAF-04).
+    relax_timeout_ = declare_parameter("command_relax_timeout", 2.0);
+    if (!(relax_timeout_ > 0.0)) {
+      throw std::runtime_error(
+        "command_relax_timeout must be > 0 s, got " + std::to_string(relax_timeout_));
+    }
     relax_on_exit_ = declare_parameter("relax_on_exit", true);
     // Test hook: the mock backend starts failing every write after this many
     // seconds, so a launch test can drive the whole fault path (SAF-01/03).
@@ -233,6 +242,7 @@ private:
       RCLCPP_WARN(get_logger(), "no joint commands for %.2fs - holding position", cmd_timeout_);
     }
     armMockFault(now);
+    relaxIfCommandStreamDied(now);
     driver_->update(now);
     logBusFaults();
     announceFault();
@@ -322,6 +332,19 @@ private:
     }
   }
 
+  /// The hold keeps the pose for `command_timeout`; past `command_relax_timeout`
+  /// more, the pose is not worth holding any more and the driver latches.
+  void relaxIfCommandStreamDied(double now)
+  {
+    if (driver_->fault() || driver_->estop() || !driver_->anyEnabled()) {return;}
+    if (now - last_cmd_ <= cmd_timeout_ + relax_timeout_) {return;}
+    char reason[128];
+    std::snprintf(reason, sizeof(reason),
+      "no joint commands for %.1f s (hold %.1f s + relax %.1f s)",
+      now - last_cmd_, cmd_timeout_, relax_timeout_);
+    driver_->latchFault(reason);
+  }
+
   void publishEstop(bool active)
   {
     std_msgs::msg::Bool msg;
@@ -366,6 +389,7 @@ private:
   std::shared_ptr<ServoBus> bus_;
   std::unique_ptr<ServoDriver> driver_;
   double cmd_timeout_{0.5};
+  double relax_timeout_{2.0};
   bool relax_on_exit_{true};
   double last_cmd_{0.0};
   bool timed_out_{false};
