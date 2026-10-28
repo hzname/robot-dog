@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 03
-current_phase_name: Защита драйвера серв
+current_phase: 04
+current_phase_name: Защита корпуса и диагностика
 status: phase_complete
-stopped_at: Phase 03 complete and verified on the robot — disarm on start, confirmed relax, command timeout and the host guard all seen working on hardware
-last_updated: "2026-10-29T10:05:00.000Z"
-last_activity: 2026-10-27
-last_activity_desc: Phase 03 complete and bench-verified on the Orange Pi — FULL_OFF at start, the lie pose holds 12 channels, killing locomotion latched at 2.5 s, docker kill made the guard drop the outputs
-state_head: 6fe1793
+stopped_at: Phase 04 complete - fall guard, required IMU, thermal timeout, diagnostics from four nodes and the alarm banner; CI 40688012766 green on both distros and both simulators
+last_updated: "2026-10-29T12:30:00.000Z"
+last_activity: 2026-10-29
+last_activity_desc: Phase 04 closed in code and CI - six real defects fell out of the jobs (filter lag behind the fall, the accelerometer too noisy for the soft threshold, gravity's sign, a landing read as a fall, the driver's command clock surviving an arm, and an apt interface skew that killed the lyrical simulator)
+state_head: 76c3dc8
 progress:
   total_phases: 8
-  completed_phases: 1
-  total_plans: 22
-  completed_plans: 26
-  percent: 21
+  completed_phases: 2
+  total_plans: 31
+  completed_plans: 31
+  percent: 25
 ---
 
 # Project State
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-29)
 
 **Core value:** Робот надёжно и безопасно ходит по полу с геймпада, не падая и не убивая свои сервы.
-**Current focus:** Phase 01 — Замеры на столе и ход назад в симуляции
+**Current focus:** Phase 05 — Профиль первого выхода и защита пультов
 
 ## Current Position
 
-Phase: 02 (Устойчивость хода в симуляции) — EXECUTING
-Plan: фаза 3 закрыта (26/26 планов). Дальше — фаза 4 по ROADMAP (защита корпуса и диагностика)
-Status: решения фазы приняты владельцем 2026-10-27 (мягкий порог 15°/20°, зачёт по каждому параметру плюс комбинация, `mu = 0.6`, груз на корпусе ±20 %); волна 1 — входы возмущений и базовая линия
-Last activity: 2026-10-28 - волна 02-04: GAIT-03 закрыт (склон 7/10, 0.70 и 0.61), матрица 6 углов — 5 проходят, облегчённый корпус на Jazzy 39.8 % и 25.9 % (ворота 40 %), причина по трассе — проскальзывание стоп при раскачке корпуса 14° против 9°
+Phase: 04 (Защита корпуса и диагностика) — COMPLETE
+Plan: все четыре плана закрыты (SAF-05, SAF-06, SAF-08, DIA-01, DIA-02); сводки — в каталоге фазы
+Status: код в `76c3dc8`, CI `40688012766` — `build + test` и `gazebo walk check` на jazzy и lyrical, `terrain limits` зелёные
+Last activity: 2026-10-29 - фаза 04: страж падения читает акселерометр (фильтр опаздывал на секунду), мягкий порог — фильтр, жёсткий — сырой угол; `~/recover` поднимает робота одним действием; диагностика четырёх узлов и баннер с той же формулировкой, что в логе
 
 Progress: [░░░░░░░░░░] 0%
 
