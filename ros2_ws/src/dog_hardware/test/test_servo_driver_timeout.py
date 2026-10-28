@@ -55,14 +55,35 @@ class TestServoDriverTimeout(unittest.TestCase):
             msg.position = [0.3 * math.sin(2.0 * math.pi * 0.5 * (time.time() - start))]
             self.cmd.publish(msg)
 
-    def arm(self):
-        client = self.node.create_client(Trigger, '/dog/servo_driver/arm')
-        self.spin(1.0, publish=False)   # the graph must know the client
-        self.assertTrue(client.wait_for_service(timeout_sec=5.0), 'arm service is missing')
+    def _call_driver(self, suffix):
+        """Calls /dog/servo_driver/<suffix> once it shows up in the graph.
+
+        Discovery of a fresh node takes a variable second or two, and a client
+        created before the graph knows it cannot be resolved at all, so the name is
+        taken from the graph instead of guessed.
+        """
+        deadline = time.time() + 15.0
+        name = None
+        while time.time() < deadline and name is None:
+            self.spin(0.2, publish=False)
+            found = [n for n, _ in self.node.get_service_names_and_types()
+                     if n.endswith('/servo_driver/' + suffix)]
+            name = found[0] if found else None
+        self.assertIsNotNone(name, 'no %s service: %s' % (
+            suffix, sorted(n for n, _ in self.node.get_service_names_and_types())))
+        client = self.node.create_client(Trigger, name)
+        while time.time() < deadline:
+            if client.wait_for_service(timeout_sec=0.2):
+                break
+        self.assertTrue(client.service_is_ready(), '%s is not reachable' % name)
         future = client.call_async(Trigger.Request())
         rclpy.spin_until_future_complete(self.node, future, timeout_sec=5.0)
-        self.assertIsNotNone(future.result(), 'arm did not answer')
-        self.assertTrue(future.result().success, future.result().message)
+        self.assertIsNotNone(future.result(), '%s did not answer' % suffix)
+        return future.result()
+
+    def arm(self):
+        res = self._call_driver('arm')
+        self.assertTrue(res.success, res.message)
 
     def test_silence_relaxes_and_latches(self):
         # The driver comes up disarmed; arm it, then command the joint for a second.
