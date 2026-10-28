@@ -9,7 +9,9 @@
 //            drawn by the servos, as BatteryState specifies), filtered
 //   estop    std_msgs/Bool             true on sustained overcurrent (stall)
 //   command  std_msgs/String           "lie" on sustained undervoltage
+#include "dog_diagnostics/reporter.hpp"
 #include <chrono>
+#include <cstdio>
 #include <cmath>
 #include <memory>
 #include <string>
@@ -93,6 +95,8 @@ public:
     }
 
     power_pub_ = create_publisher<sensor_msgs::msg::BatteryState>("power", 10);
+    diag_ = std::make_unique<dog_diagnostics::Reporter>(this, "power_monitor");
+    diag_timer_ = create_wall_timer(std::chrono::seconds(1), [this]() {report();});
     estop_pub_ = create_publisher<std_msgs::msg::Bool>("estop", rclcpp::QoS(10).reliable());
     command_pub_ = create_publisher<std_msgs::msg::String>("command", 10);
     timer_ = create_wall_timer(std::chrono::duration<double>(1.0 / rate), [this]() {tick();});
@@ -118,6 +122,30 @@ private:
     }
   }
 
+  /// The rail, in numbers, with the guard's verdict in words.
+  void report()
+  {
+    using dog_diagnostics::Level;
+    if (!active()) {
+      diag_->publish(Level::ERROR, "no current sensor found on the bus",
+        {{"present", "false"}});
+      return;
+    }
+    Level level = Level::OK;
+    std::string reason = "rail healthy";
+    if (last_event_ == PowerGuard::Event::OVERCURRENT) {
+      level = Level::WARN;
+      reason = "servo current high (a leg may be stalled)";
+    } else if (last_event_ == PowerGuard::Event::UNDERVOLTAGE) {
+      level = Level::ERROR;
+      reason = "servo rail low (supply sagging or battery empty)";
+    }
+    char v[32], i[32];
+    std::snprintf(v, sizeof(v), "%.2f", last_voltage_);
+    std::snprintf(i, sizeof(i), "%.2f", guard_->filteredCurrent());
+    diag_->publish(level, reason, {{"voltage_v", v}, {"current_a", i}, {"present", "true"}});
+  }
+
   void tick()
   {
     PowerReading r;
@@ -126,6 +154,7 @@ private:
       return;
     }
     const auto ev = guard_->update(r, steadySeconds());
+    last_event_ = ev;
     if (ev == PowerGuard::Event::OVERCURRENT) {
       RCLCPP_ERROR(get_logger(), "servo current %.2f A held too long (stalled leg?) -> %s",
         guard_->filteredCurrent(), overcurrent_action_.c_str());
@@ -135,6 +164,7 @@ private:
         r.voltage, undervoltage_action_.c_str());
       act(undervoltage_action_);
     }
+    last_voltage_ = r.voltage;
     sensor_msgs::msg::BatteryState msg;
     msg.header.stamp = now();
     msg.voltage = static_cast<float>(r.voltage);
@@ -155,6 +185,10 @@ private:
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr estop_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr command_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
+  std::unique_ptr<dog_diagnostics::Reporter> diag_;
+  rclcpp::TimerBase::SharedPtr diag_timer_;
+  double last_voltage_{0.0};
+  PowerGuard::Event last_event_{PowerGuard::Event::NONE};
 };
 
 }  // namespace dog_hardware

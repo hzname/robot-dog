@@ -13,6 +13,7 @@ find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
+find_package(dog_diagnostics REQUIRED)
 
 add_library(dog_hardware_core
   src/servo_bus.cpp
@@ -26,16 +27,19 @@ set_target_properties(dog_hardware_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_executable(servo_driver_node src/servo_driver_node.cpp)
 target_link_libraries(servo_driver_node
-  dog_hardware_core rclcpp::rclcpp ${sensor_msgs_TARGETS} ${std_msgs_TARGETS}
+  dog_hardware_core dog_diagnostics::dog_diagnostics rclcpp::rclcpp
+  ${sensor_msgs_TARGETS} ${std_msgs_TARGETS}
   ${std_srvs_TARGETS})
 
 add_executable(power_monitor_node src/power_monitor_node.cpp)
 target_link_libraries(power_monitor_node
-  dog_hardware_core rclcpp::rclcpp ${sensor_msgs_TARGETS} ${std_msgs_TARGETS})
+  dog_hardware_core dog_diagnostics::dog_diagnostics rclcpp::rclcpp
+  ${sensor_msgs_TARGETS} ${std_msgs_TARGETS})
 
 add_executable(imu_node src/imu_node.cpp)
 target_link_libraries(imu_node
-  dog_hardware_core rclcpp::rclcpp ${sensor_msgs_TARGETS})
+  dog_hardware_core dog_diagnostics::dog_diagnostics rclcpp::rclcpp
+  ${sensor_msgs_TARGETS} ${std_msgs_TARGETS})
 
 add_executable(pca9685_probe src/pca9685_probe.cpp)
 target_link_libraries(pca9685_probe dog_hardware_core)

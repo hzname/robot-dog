@@ -121,6 +121,18 @@
       soft_deg: 15.0        # [deg] full speed up to here
       stop_deg: 20.0        # [deg] no command from here
 
+    # Fall protection (phase 4). The raw body attitude from the IMU, not the slope
+    # estimate: a robot tipping over is not standing on a slope. Provisional (D-11):
+    # refine from recorded tilt when the floor runs exist.
+    safety:
+      profile: bench        # floor: an absent or silent IMU stops the robot; bench: it may be missing
+      soft_deg: 22.0        # [deg] lie down above this, the robot is still worth saving
+      hard_deg: 32.0        # [deg] past this for debounce_s the robot is fallen
+      debounce_s: 0.2       # [s] a spike shorter than this is not a fall
+      hysteresis_deg: 3.0   # [deg] come back below soft - hysteresis: no dithering on the edge
+      imu_timeout_s: 0.2    # [s] silence that counts as a lost IMU
+      idle_lie_s: 90.0      # [s] holding a pose without commands: lie down and let go (0 = off)
+
     # Heading hold from the IMU gyro (only while walking, only with imu/data):
     # commanded minus measured yaw is integrated and fed back (PI) into the turn rate.
     heading:

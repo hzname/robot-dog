@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstdio>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -38,6 +39,7 @@
 #include <vector>
 
 #include "dog_control/locomotion.hpp"
+#include "dog_diagnostics/reporter.hpp"
 #include "dog_control/odometry.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "geometry_msgs/msg/twist.hpp"
@@ -48,6 +50,7 @@
 #include "std_msgs/msg/bool.hpp"
 #include "std_msgs/msg/float32_multi_array.hpp"
 #include "std_msgs/msg/float64_multi_array.hpp"
+#include "std_srvs/srv/trigger.hpp"
 #include "std_msgs/msg/string.hpp"
 
 namespace dog_control
@@ -129,8 +132,9 @@ public:
         if (controller_->request(msg->data)) {
           RCLCPP_INFO(get_logger(), "command '%s' accepted", msg->data.c_str());
         } else {
-          RCLCPP_WARN(get_logger(), "command '%s' rejected (mode %s%s)", msg->data.c_str(),
-            modeName(controller_->mode()), controller_->estopActive() ? ", e-stop active" : "");
+          RCLCPP_WARN(get_logger(), "command '%s' rejected (mode %s%s): %s", msg->data.c_str(),
+            modeName(controller_->mode()), controller_->estopActive() ? ", e-stop active" : "",
+            controller_->lastRefusal().c_str());
         }
       });
     pose_sub_ = create_subscription<geometry_msgs::msg::Vector3>(
@@ -147,6 +151,41 @@ public:
         }
         controller_->setEstop(msg->data);
       });
+
+    // imu_node tells the world that its gyro bias is known; latched, so a node
+    // that starts later still learns it (SAF-06).
+    const auto latched_bool = rclcpp::QoS(1).transient_local().reliable();
+    imu_calibrated_sub_ = create_subscription<std_msgs::msg::Bool>(
+      "imu/calibrated", latched_bool, [this](std_msgs::msg::Bool::ConstSharedPtr msg) {
+        if (msg->data != controller_->imuCalibrated()) {
+          RCLCPP_INFO(get_logger(), "imu calibrated: %s", msg->data ? "yes" : "no");
+        }
+        controller_->setImuCalibrated(msg->data);
+      });
+
+    estop_pub_ = create_publisher<std_msgs::msg::Bool>("estop", rclcpp::QoS(10).reliable());
+    diag_ = std::make_unique<dog_diagnostics::Reporter>(this, "locomotion");
+    diag_timer_ = create_wall_timer(std::chrono::seconds(1), [this]() {report();});
+    release_client_ = create_client<std_srvs::srv::Trigger>("servo_driver/release_fault");
+    arm_client_ = create_client<std_srvs::srv::Trigger>("servo_driver/arm");
+    recover_srv_ = create_service<std_srvs::srv::Trigger>("~/recover",
+        [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+        std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
+          // One operator gesture (D-12): check the robot is level, clear the fall,
+          // clear the driver's latch and e-stop, arm it, then stand up.
+          const std::string why = controller_->recover();
+          if (!why.empty()) {
+            res->success = false;
+            res->message = why;
+            RCLCPP_WARN(get_logger(), "recover refused: %s", why.c_str());
+            return;
+          }
+          publishEstop(false);
+          requestDriverRelease();
+          res->success = true;
+          res->message = "recovering: standing up";
+          RCLCPP_WARN(get_logger(), "recover: %s", res->message.c_str());
+        });
 
     imu_sub_ = create_subscription<sensor_msgs::msg::Imu>(
       "imu/data", rclcpp::SensorDataQoS(), [this](sensor_msgs::msg::Imu::ConstSharedPtr msg) {
@@ -322,6 +361,21 @@ private:
     p.heading_debug = declare_parameter("heading.debug", p.heading_debug);
     p.tilt_soft_deg = declare_parameter("tilt.soft_deg", p.tilt_soft_deg);
     p.tilt_stop_deg = declare_parameter("tilt.stop_deg", p.tilt_stop_deg);
+    // Fall protection (phase 4). The profile says whether the robot works on the
+    // floor, where a missing IMU must stop it, or on the bench, where the IMU may
+    // be absent altogether (SAF-06).
+    p.safety_soft_deg = declare_parameter("safety.soft_deg", p.safety_soft_deg);
+    p.safety_hard_deg = declare_parameter("safety.hard_deg", p.safety_hard_deg);
+    p.safety_debounce_s = declare_parameter("safety.debounce_s", p.safety_debounce_s);
+    p.safety_hysteresis_deg = declare_parameter("safety.hysteresis_deg", p.safety_hysteresis_deg);
+    p.safety_imu_timeout_s = declare_parameter("safety.imu_timeout_s", p.safety_imu_timeout_s);
+    p.safety_idle_lie_s = declare_parameter("safety.idle_lie_s", p.safety_idle_lie_s);
+    const auto profile = declare_parameter("safety.profile", std::string("bench"));
+    if (profile != "floor" && profile != "bench") {
+      throw std::invalid_argument("safety.profile must be 'floor' or 'bench', got '" + profile + "'");
+    }
+    p.safety_require_imu = profile == "floor";
+    risk_profile_ = profile;
 
     p.max_velocity.vx = declare_parameter("limits.max_vx", p.max_velocity.vx);
     p.max_velocity.vy = declare_parameter("limits.max_vy", p.max_velocity.vy);
@@ -458,6 +512,18 @@ private:
         controller_->tiltScale(), controller_->slopePitch() * 180.0 / M_PI,
         controller_->slopeRoll() * 180.0 / M_PI);
     }
+    if (controller_->fallen() && !fall_announced_) {
+      fall_announced_ = true;
+      RCLCPP_ERROR(get_logger(), "FALLEN: %s - call ~/recover to raise the robot",
+        controller_->fallReason().c_str());
+    }
+    if (controller_->takeRelaxRequest()) {
+      // A fall or the thermal timeout: the operator must not have to know the
+      // driver's protocol to make the servos let go.
+      publishEstop(true);
+      RCLCPP_WARN(get_logger(), "outputs released: %s",
+        controller_->fallen() ? controller_->fallReason().c_str() : "thermal timeout, robot is lying");
+    }
     if (odom_publish_) {publishOdom(t, dt);}
     if (controller_->mode() != last_mode_ || controller_->estopActive() != last_estop_) {
       publishState();
@@ -473,6 +539,73 @@ private:
     const auto & q = controller_->joints();
     std::copy(q.begin(), q.end(), joint_msg_.position.begin());
     joint_pub_->publish(joint_msg_);
+  }
+
+  /// Mode, tilt and the reason the robot stopped - the page reads the same words.
+  void report()
+  {
+    using dog_diagnostics::Level;
+    Level level = Level::OK;
+    std::string reason = modeName(controller_->mode());
+    if (controller_->fallen()) {
+      level = Level::ERROR;
+      reason = "fallen: " + controller_->fallReason();
+    } else if (controller_->estopActive()) {
+      level = Level::WARN;
+      reason = "e-stop engaged";
+    } else if (controller_->tiltScale() < 1.0) {
+      level = Level::WARN;
+      reason = "tilt " + std::to_string(static_cast<int>(controller_->slopePitch() * 180.0 / M_PI)) +
+        " deg: the walk slows down";
+    }
+    char tilt[32];
+    std::snprintf(tilt, sizeof(tilt), "%.1f", controller_->tiltDeg());
+    diag_->publish(level, reason, {
+      {"mode", modeName(controller_->mode())},
+      {"tilt_deg", tilt},
+      {"profile", risk_profile_},
+      {"imu_calibrated", controller_->imuCalibrated() ? "true" : "false"}});
+  }
+
+  void publishEstop(bool active)
+  {
+    estop_pub_->publish(std_msgs::msg::Bool().set__data(active));
+  }
+
+  /// Ask the driver to drop its latch, then to arm: without the arm the driver
+  /// ignores the joint commands the stand-up is about to publish.
+  void requestDriverRelease()
+  {
+    if (!release_client_->service_is_ready()) {
+      RCLCPP_WARN(get_logger(), "recover: servo driver release_fault is not reachable");
+      return;
+    }
+    auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
+    release_client_->async_send_request(request,
+      [this](rclcpp::Client<std_srvs::srv::Trigger>::SharedFuture future) {
+        const auto res = future.get();
+        RCLCPP_WARN(get_logger(), "recover: release_fault -> %s", res->message.c_str());
+        requestDriverArm();
+      });
+  }
+
+  void requestDriverArm()
+  {
+    if (!arm_client_->service_is_ready()) {
+      RCLCPP_WARN(get_logger(), "recover: servo driver arm is not reachable");
+      return;
+    }
+    auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
+    arm_client_->async_send_request(request,
+      [this](rclcpp::Client<std_srvs::srv::Trigger>::SharedFuture future) {
+        const auto res = future.get();
+        if (res->success) {
+          controller_->request("stand");
+          RCLCPP_WARN(get_logger(), "recover: driver %s, standing up", res->message.c_str());
+        } else {
+          RCLCPP_ERROR(get_logger(), "recover: driver refused to arm: %s", res->message.c_str());
+        }
+      });
   }
 
   void publishOdom(const rclcpp::Time & t, double dt)

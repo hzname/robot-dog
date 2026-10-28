@@ -25,7 +25,9 @@
 namespace dog_control
 {
 
-enum class Mode { PASSIVE, STANDING_UP, STAND, WALK, LYING_DOWN, LYING, GREETING, SURVEY };
+// FALLEN: the robot is down (hard tilt or a lost IMU). Nothing is driven, the
+// outputs are released, and only the operator's ~/recover raises it (D-12).
+enum class Mode { PASSIVE, STANDING_UP, STAND, WALK, LYING_DOWN, LYING, GREETING, SURVEY, FALLEN };
 
 /// TROT: the normal gait. CRAWL: three feet down at any time, slow, follows
 /// the terrain profile (steps, stairs, high bars) - see crawl.hpp.
@@ -77,6 +79,18 @@ struct LocomotionParams
   double tilt_soft_deg{15.0};    // [deg] full speed up to here
   double tilt_stop_deg{20.0};    // [deg] no command from here
 
+  // Fall protection (phase 4, SAF-05/06/08). The thresholds are provisional (D-11):
+  // soft lies the robot down, hard latches FALLEN after a debounce. They read the
+  // raw body attitude, not the ground-slope estimate: a robot that is tipping over
+  // is not standing on a slope.
+  double safety_soft_deg{22.0};      // [deg] lie down above this
+  double safety_hard_deg{32.0};      // [deg] fall above this for safety_debounce_s
+  double safety_debounce_s{0.2};     // [s]
+  double safety_hysteresis_deg{3.0}; // [deg] come back below soft - hysteresis
+  double safety_imu_timeout_s{0.2};  // [s] silence that counts as a lost IMU
+  double safety_idle_lie_s{90.0};    // [s] holding a pose without commands: lie down
+  bool safety_require_imu{false};    // floor profile: no calibrated IMU, no walking
+
   // Heading hold from the gyro: the heading error (commanded minus measured
   // yaw, integrated while walking) is fed back (PI) into the yaw rate of the gait.
   bool heading_hold{true};
@@ -122,6 +136,10 @@ public:
   /// Body attitude from the IMU [rad] (REP-103 roll / pitch vs. gravity).
   /// Without calls the controller behaves as on flat ground.
   void setImuAttitude(double roll, double pitch, double dt);
+  /// The IMU says its gyro bias is known. In the floor profile a robot without
+  /// this flag refuses to stand: the fall guard would be blind (SAF-06).
+  void setImuCalibrated(bool calibrated) {imu_calibrated_ = calibrated;}
+  bool imuCalibrated() const {return imu_calibrated_;}
   double slopePitch() const {return slope_pitch_;}
   double slopeRoll() const {return slope_roll_;}
   /// Speed factor from the tilt governor: 1 below tilt.soft_deg, 0 at
@@ -173,6 +191,19 @@ public:
   bool update(double dt);
 
   Mode mode() const {return mode_;}
+  /// Raw body tilt from the IMU [deg]: how far the robot is from level.
+  double tiltDeg() const {return tilt_deg_;}
+  bool fallen() const {return mode_ == Mode::FALLEN;}
+  /// Why the robot fell, in words the operator sees on the page and in the log.
+  const std::string & fallReason() const {return fall_reason_;}
+  /// Why the last request() was refused (empty when it was accepted).
+  const std::string & lastRefusal() const {return refusal_;}
+  /// The operator fixed the robot: clear FALLEN and get ready to stand (D-12).
+  /// Returns an empty string on success, otherwise the reason it cannot.
+  std::string recover();
+  /// True once after the controller wants the outputs released (a fall or the
+  /// thermal timeout): the node publishes estop, the driver lets the servos go.
+  bool takeRelaxRequest();
   const std::array<double, kNumJoints> & joints() const {return joints_;}
   const BodyVelocity & velocity() const {return vel_;}
   const TrotGait & gait() const {return gait_;}
@@ -217,6 +248,22 @@ private:
   TerrainProfile terrain_;
   Mode mode_{Mode::PASSIVE};
   bool estop_{false};
+  // --- fall and thermal protection (phase 4)
+  void evaluateSafety(double dt);
+  void enterFallen(const std::string & reason);
+  double imu_roll_{0.0};
+  double imu_pitch_{0.0};
+  double tilt_deg_{0.0};
+  double imu_age_{1e9};        // [s] since the last IMU sample
+  bool imu_seen_{false};
+  bool imu_calibrated_{false};
+  double hard_t_{0.0};         // [s] tilt above the hard threshold
+  bool soft_active_{false};
+  double idle_t_{0.0};         // [s] holding a pose without commands
+  bool idle_lie_pending_{false};  // lying down for the thermal timeout: relax after
+  bool relax_requested_{false};
+  std::string fall_reason_;
+  std::string refusal_;
   bool pending_lie_{false};
 
   BodyVelocity vel_target_;

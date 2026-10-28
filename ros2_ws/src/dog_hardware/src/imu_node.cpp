@@ -11,6 +11,7 @@
 //
 // The gyro bias is measured during the first `bias_time` seconds: keep the
 // robot still while the stack starts (it is lying or on its stand anyway).
+#include "dog_diagnostics/reporter.hpp"
 #include <chrono>
 #include <cmath>
 #include <memory>
@@ -82,6 +83,15 @@ public:
       throw std::runtime_error("unknown backend '" + backend + "' (auto, mock or off)");
     }
     pub_ = create_publisher<sensor_msgs::msg::Imu>("imu/data", rclcpp::SensorDataQoS());
+    // Whether the gyro bias is known. Latched: a controller that starts after the
+    // IMU still learns it, and the floor profile refuses to stand without it.
+    cal_pub_ = create_publisher<std_msgs::msg::Bool>(
+      "imu/calibrated", rclcpp::QoS(1).transient_local().reliable());
+    // Test hook: after this many seconds the node goes quiet, exactly like a dead
+    // sensor. Without it the "IMU lost" path cannot be reproduced in CI (SAF-06).
+    silence_after_ = declare_parameter("mock.silence_after", 0.0);
+    diag_ = std::make_unique<dog_diagnostics::Reporter>(this, "imu");
+    diag_timer_ = create_wall_timer(std::chrono::seconds(1), [this]() {report();});
     timer_ = create_wall_timer(std::chrono::duration<double>(1.0 / rate), [this]() {tick();});
     RCLCPP_INFO(get_logger(), "IMU: %s; measuring gyro bias, keep the robot still",
       sensor_->describe().c_str());
@@ -90,10 +100,40 @@ public:
   bool active() const {return sensor_ != nullptr;}
 
 private:
+  /// Calibrated or not, and whether the numbers are still coming.
+  void report()
+  {
+    using dog_diagnostics::Level;
+    Level level = calibrated_ ? Level::OK : Level::WARN;
+    std::string reason = calibrated_ ? "calibrated" : "calibrating the gyro";
+    if (quiet_announced_) {
+      level = Level::ERROR;
+      reason = "imu silent (test hook)";
+    } else if (read_failures_ > 0) {
+      level = level == Level::OK ? Level::WARN : level;
+      reason = "read failures: " + std::to_string(read_failures_);
+    }
+    diag_->publish(level, reason, {
+      {"calibrated", calibrated_ ? "true" : "false"},
+      {"read_failures", std::to_string(read_failures_)}});
+  }
+
   void tick()
   {
+    if (silence_after_ > 0.0) {
+      const double t = now().seconds();
+      if (quiet_since_ == 0.0) {quiet_since_ = t;}
+      if (t - quiet_since_ > silence_after_) {
+        if (!quiet_announced_) {
+          quiet_announced_ = true;
+          RCLCPP_WARN(get_logger(), "imu silent on purpose after %.1f s (test hook)", silence_after_);
+        }
+        return;
+      }
+    }
     ImuReading raw;
     if (!sensor_->read(raw)) {
+      ++read_failures_;
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "IMU read failed");
       return;
     }
@@ -103,6 +143,8 @@ private:
       if (bias_.add(b.gyro)) {
         const auto g = bias_.bias();
         RCLCPP_INFO(get_logger(), "gyro bias %.4f %.4f %.4f rad/s", g[0], g[1], g[2]);
+        calibrated_ = true;
+        cal_pub_->publish(std_msgs::msg::Bool().set__data(true));
       }
       filter_.update(b, 0.0);
       last_ = t;
@@ -143,6 +185,14 @@ private:
   std::chrono::steady_clock::time_point last_;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr pub_;
   rclcpp::TimerBase::SharedPtr timer_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr cal_pub_;
+  bool calibrated_{false};
+  double silence_after_{0.0};   // [s] test hook: go quiet after this
+  double quiet_since_{0.0};
+  bool quiet_announced_{false};
+  int read_failures_{0};
+  std::unique_ptr<dog_diagnostics::Reporter> diag_;
+  rclcpp::TimerBase::SharedPtr diag_timer_;
 };
 
 }  // namespace dog_hardware

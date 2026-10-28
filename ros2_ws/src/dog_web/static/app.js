@@ -32,6 +32,15 @@ function connect() {
       el.textContent = text[msg.state] || '';
       el.className = 'pill ' + (msg.state === 'stop' ? 'estop' : '');
     }
+    else if (msg.type === 'alarm') {
+      // One banner for the whole robot: the worst node speaks for it (DIA-02).
+      const el = $('alarm');
+      el.hidden = msg.level === 'ok';
+      el.className = 'alarm ' + msg.level;
+      $('alarm-level').textContent = msg.level === 'error' ? 'АВАРИЯ' : 'внимание';
+      $('alarm-reason').textContent = msg.reason;
+      $('alarm-source').textContent = msg.source ? `· ${msg.source}` : '';
+    }
     else if (msg.type === 'power') {
       const el = $('power');
       el.hidden = false;

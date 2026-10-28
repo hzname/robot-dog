@@ -135,3 +135,27 @@ def guard(raw: str) -> str:
 def power(voltage: float, current: float) -> str:
     return json.dumps({'type': 'power', 'voltage': round(float(voltage), 2),
                        'current': round(float(current), 2)})
+
+
+LEVELS = ('ok', 'warn', 'error')
+
+
+def worst_status(items):
+    """[(level, source, message), ...] -> the worst one (level, source, message).
+
+    The page shows one banner, so one fault has to win: an ERROR outranks a WARN,
+    and among equals the first one wins (the order is the diagnostic array's). An
+    empty list is 'all clear'.
+    """
+    best = ('ok', '', '')
+    for level, source, message in items:
+        if level not in LEVELS:
+            continue
+        if LEVELS.index(level) > LEVELS.index(best[0]):
+            best = (level, source, message)
+    return best
+
+
+def alarm(level: str, source: str, reason: str, since: float) -> str:
+    return json.dumps({'type': 'alarm', 'level': level, 'source': source,
+                       'reason': reason, 'since': round(float(since), 1)})

@@ -1,5 +1,7 @@
 #include "dog_control/locomotion.hpp"
 
+#include <cstdio>
+
 #include <algorithm>
 #include <cmath>
 #include <sstream>
@@ -78,6 +80,7 @@ const char * modeName(Mode m)
     case Mode::LYING: return "lying";
     case Mode::GREETING: return "greeting";
     case Mode::SURVEY: return "survey";
+    case Mode::FALLEN: return "fallen";
   }
   return "unknown";
 }
@@ -94,6 +97,24 @@ LocomotionController::LocomotionController(const LocomotionParams & params)
     std::ostringstream msg;
     msg << "tilt.soft_deg " << p_.tilt_soft_deg << " and tilt.stop_deg " << p_.tilt_stop_deg
         << " must satisfy 0 < soft < stop <= 45";
+    throw std::invalid_argument(msg.str());
+  }
+  // Fall protection (phase 4): the levels must nest, and the thermal deadline,
+  // when it is on, sits inside the range the servos tolerate.
+  if (!(p_.safety_soft_deg > 0.0) || !(p_.safety_hard_deg > p_.safety_soft_deg) ||
+    p_.safety_hard_deg > 60.0 || !(p_.safety_debounce_s > 0.0) ||
+    !(p_.safety_hysteresis_deg >= 0.0) || !(p_.safety_imu_timeout_s >= 0.0))
+  {
+    std::ostringstream msg;
+    msg << "safety.soft_deg " << p_.safety_soft_deg << " and safety.hard_deg " << p_.safety_hard_deg
+        << " must satisfy 0 < soft < hard <= 60, debounce " << p_.safety_debounce_s
+        << " > 0, hysteresis >= 0, imu timeout >= 0";
+    throw std::invalid_argument(msg.str());
+  }
+  if (p_.safety_idle_lie_s != 0.0 && (p_.safety_idle_lie_s < 60.0 || p_.safety_idle_lie_s > 120.0)) {
+    std::ostringstream msg;
+    msg << "safety.idle_lie_s " << p_.safety_idle_lie_s
+        << " must be 0 (off) or within 60-120 s: shorter protects nothing, longer cooks the servos";
     throw std::invalid_argument(msg.str());
   }
   height_ = p_.lie_height;
@@ -165,9 +186,22 @@ void LocomotionController::startTransition(Mode next, double from_height, double
 
 bool LocomotionController::request(const std::string & cmd)
 {
-  if (estop_) {
+  refusal_.clear();
+  if (mode_ == Mode::FALLEN) {
+    // Only ~/recover raises a fallen robot: a stray command from a gamepad or a
+    // stale web page must not put it back on its feet (SAF-05, D-12).
+    refusal_ = "fallen (" + fall_reason_ + "): call ~/recover";
     return false;
   }
+  if (estop_) {
+    refusal_ = "e-stop engaged";
+    return false;
+  }
+  if (cmd == "stand" && p_.safety_require_imu && !imu_calibrated_) {
+    refusal_ = "imu not calibrated: the fall guard would be blind";
+    return false;
+  }
+  idle_t_ = 0.0;  // the operator is here: the thermal timer starts over
   if (cmd == "stand") {
     pending_lie_ = false;
     switch (mode_) {
@@ -227,7 +261,7 @@ void LocomotionController::setEstop(bool active)
 {
   estop_ = active;
   if (active) {
-    mode_ = Mode::PASSIVE;
+    if (mode_ != Mode::FALLEN) {mode_ = Mode::PASSIVE;}  // a fall outranks an e-stop banner
     pending_lie_ = false;
     vel_ = BodyVelocity{};
     vel_target_ = BodyVelocity{};
@@ -241,6 +275,9 @@ void LocomotionController::setEstop(bool active)
 
 void LocomotionController::setVelocity(const BodyVelocity & v)
 {
+  if (std::abs(v.vx) > 1e-6 || std::abs(v.vy) > 1e-6 || std::abs(v.wz) > 1e-6) {
+    idle_t_ = 0.0;
+  }
   const auto & m = p_.max_velocity;
   vel_target_.vx = std::clamp(v.vx, -m.vx, m.vx);
   vel_target_.vy = std::clamp(v.vy, -m.vy, m.vy);
@@ -291,6 +328,11 @@ void LocomotionController::clearGuard()
 
 void LocomotionController::setBodyPose(const BodyPose & pose)
 {
+  if (std::abs(pose.roll) > 1e-6 || std::abs(pose.pitch) > 1e-6 ||
+    std::abs(pose.height) > 1e-6)
+  {
+    idle_t_ = 0.0;
+  }
   pose_target_.roll = std::clamp(pose.roll, -p_.max_roll, p_.max_roll);
   pose_target_.pitch = std::clamp(pose.pitch, -p_.max_pitch, p_.max_pitch);
   pose_target_.height = std::clamp(
@@ -299,6 +341,15 @@ void LocomotionController::setBodyPose(const BodyPose & pose)
 
 void LocomotionController::setImuAttitude(double roll, double pitch, double dt)
 {
+  // The fall guard reads the raw attitude in every mode: the slope estimate below
+  // only exists while standing, and a robot tipping over is not on a slope.
+  if (std::isfinite(roll) && std::isfinite(pitch)) {
+    imu_roll_ = roll;
+    imu_pitch_ = pitch;
+    tilt_deg_ = std::max(std::abs(roll), std::abs(pitch)) * 180.0 / M_PI;
+    imu_seen_ = true;
+    imu_age_ = 0.0;
+  }
   if (!p_.slope_compensation || dt <= 0.0) {return;}
   const bool upright = mode_ == Mode::STAND || mode_ == Mode::WALK;
   if (!upright) {  // the hold starts from the heading at the next walk
@@ -368,11 +419,123 @@ void LocomotionController::addYawRate(double wz, double dt)
   }
 }
 
+void LocomotionController::evaluateSafety(double dt)
+{
+  if (imu_seen_) {imu_age_ += dt;}
+
+  // The lie-down asked for by the thermal timeout was carried out: now the servos
+  // may let go (doing it while the robot is still walking would drop it).
+  if (idle_lie_pending_ && mode_ == Mode::LYING) {
+    idle_lie_pending_ = false;
+    relax_requested_ = true;
+  }
+  if (mode_ == Mode::FALLEN) {return;}
+
+  // 1. Hard tilt: the robot is going over. Count time, not frames: the IMU rate
+  //    may differ from the control loop's.
+  const bool too_far = imu_seen_ && tilt_deg_ > p_.safety_hard_deg;
+  hard_t_ = too_far ? hard_t_ + dt : 0.0;
+  if (too_far && hard_t_ >= p_.safety_debounce_s) {
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), "tilt %.0f deg above %.0f deg for %.2f s",
+      tilt_deg_, p_.safety_hard_deg, hard_t_);
+    enterFallen(buf);
+    return;
+  }
+
+  // 2. A silent IMU: the fall guard is blind, so the robot must not keep walking.
+  if (imu_seen_ && p_.safety_imu_timeout_s > 0.0 && imu_age_ > p_.safety_imu_timeout_s) {
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), "imu silent for %.2f s (timeout %.2f s)",
+      imu_age_, p_.safety_imu_timeout_s);
+    enterFallen(buf);
+    return;
+  }
+
+  // 3. Soft tilt: still recoverable - lie down instead of waiting for the fall.
+  if (imu_seen_) {
+    if (tilt_deg_ > p_.safety_soft_deg) {
+      soft_active_ = true;
+    } else if (tilt_deg_ < p_.safety_soft_deg - p_.safety_hysteresis_deg) {
+      soft_active_ = false;  // hysteresis: no dithering on the threshold
+    }
+  }
+  const bool upright = mode_ == Mode::STAND || mode_ == Mode::WALK ||
+    mode_ == Mode::GREETING || mode_ == Mode::SURVEY || mode_ == Mode::STANDING_UP;
+  if (soft_active_ && upright) {
+    request("lie");
+    return;
+  }
+
+  // 4. Thermal protection: the servos have no temperature feedback, so holding a
+  //    pose for minutes is the only thing that heats them up (SAF-08).
+  const bool holding = mode_ == Mode::STAND || mode_ == Mode::WALK ||
+    mode_ == Mode::STANDING_UP || mode_ == Mode::LYING_DOWN;
+  if (!holding) {
+    idle_t_ = 0.0;
+    return;
+  }
+  idle_t_ += dt;
+  if (p_.safety_idle_lie_s > 0.0 && idle_t_ > p_.safety_idle_lie_s) {
+    idle_t_ = 0.0;
+    if (request("lie")) {idle_lie_pending_ = true;}
+  }
+}
+
+void LocomotionController::enterFallen(const std::string & reason)
+{
+  mode_ = Mode::FALLEN;
+  fall_reason_ = reason;
+  pending_lie_ = false;
+  vel_ = BodyVelocity{};
+  vel_target_ = BodyVelocity{};
+  pose_ = BodyPose{};
+  pose_target_ = BodyPose{};
+  gait_.reset();
+  hard_t_ = 0.0;
+  relax_requested_ = true;
+}
+
+std::string LocomotionController::recover()
+{
+  if (mode_ != Mode::FALLEN) {return "not fallen";}
+  if (imu_seen_ && imu_age_ > p_.safety_imu_timeout_s) {return "imu is still silent";}
+  if (p_.safety_require_imu && !imu_calibrated_) {return "imu not calibrated";}
+  if (imu_seen_ && tilt_deg_ > p_.safety_soft_deg - p_.safety_hysteresis_deg) {
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), "tilt %.0f deg: put the robot level first", tilt_deg_);
+    return buf;
+  }
+  mode_ = Mode::LYING;
+  height_ = p_.lie_height;
+  gait_.reset();
+  hard_t_ = 0.0;
+  soft_active_ = false;
+  idle_t_ = 0.0;
+  idle_lie_pending_ = false;
+  relax_requested_ = false;
+  estop_ = false;  // the operator's gesture also clears the e-stop we raised
+  fall_reason_.clear();
+  refusal_.clear();
+  return std::string();
+}
+
+bool LocomotionController::takeRelaxRequest()
+{
+  const bool requested = relax_requested_;
+  relax_requested_ = false;
+  return requested;
+}
+
 bool LocomotionController::update(double dt)
 {
   unreachable_ = 0;
   if (dt <= 0.0) {
     return mode_ != Mode::PASSIVE;
+  }
+  evaluateSafety(dt);
+  if (mode_ == Mode::FALLEN) {
+    return false;  // the outputs are released, nothing is solved
   }
   const bool upright = mode_ == Mode::STAND || mode_ == Mode::WALK;
 
@@ -456,6 +619,7 @@ bool LocomotionController::update(double dt)
 
   switch (mode_) {
     case Mode::PASSIVE:
+    case Mode::FALLEN:   // unreachable: update() returns early, but the switch is total
       return false;
 
     case Mode::STANDING_UP:

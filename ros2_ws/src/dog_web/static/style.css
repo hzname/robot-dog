@@ -72,3 +72,19 @@ kbd { display: inline-block; min-width: 1.6em; padding: 0 4px; margin-right: 2px
   .pad { width: 42vw; }
   .sliders { grid-template-columns: 1fr; }
 }
+
+/* The alarm banner: one line, the worst node's own words (DIA-02). */
+.alarm {
+  display: flex;
+  gap: .5rem;
+  align-items: baseline;
+  padding: .5rem .75rem;
+  font-size: .95rem;
+  color: #fff;
+  background: #8a6d00;
+}
+.alarm[hidden] {display: none;}
+.alarm.error {background: #b3261e;}
+.alarm.warn {background: #8a6d00;}
+.alarm strong {letter-spacing: .05em;}
+.alarm small {opacity: .75;}

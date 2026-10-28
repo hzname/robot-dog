@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "dog_hardware/servo_bus.hpp"
+#include "dog_diagnostics/reporter.hpp"
 #include "dog_hardware/servo_driver.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
@@ -171,21 +172,30 @@ public:
     release_srv_ = create_service<std_srvs::srv::Trigger>("~/release_fault",
         [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
         std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
-          if (!driver_->fault()) {
-            res->success = true;
-            res->message = "no fault latched";
-            return;
-          }
+          // The operator's one gesture: drop whatever keeps the servos off. An
+          // e-stop without a fault used to leave the driver latched in e-stop, and
+          // then ~/arm refused to arm it - the robot could not be brought back
+          // without a restart (found on the bench, phase 4).
+          const bool had_fault = driver_->fault();
+          const bool had_estop = driver_->estop();
           driver_->clearFault();
           driver_->setEstop(false);
           announced_ = false;
           publishEstop(false);
           res->success = true;
-          res->message = driver_->outputsConfirmedOff() ?
-            "fault released, outputs confirmed off - stand to move" :
-            "fault released, outputs NOT confirmed off - check the bus";
-          RCLCPP_WARN(get_logger(), "fault released: %s", res->message.c_str());
+          if (had_fault) {
+            res->message = driver_->outputsConfirmedOff() ?
+              "fault released, outputs confirmed off - stand to move" :
+              "fault released, outputs NOT confirmed off - check the bus";
+          } else if (had_estop) {
+            res->message = "e-stop released, outputs confirmed off - stand to move";
+          } else {
+            res->message = "no fault latched";
+          }
+          RCLCPP_WARN(get_logger(), "release_fault: %s", res->message.c_str());
         });
+    diag_ = std::make_unique<dog_diagnostics::Reporter>(this, "servo_driver");
+    diag_timer_ = create_wall_timer(std::chrono::seconds(1), [this]() {report();});
     arm_srv_ = create_service<std_srvs::srv::Trigger>("~/arm",
         [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
         std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
@@ -372,6 +382,29 @@ private:
     driver_->latchFault(reason);
   }
 
+  /// What the driver is doing, in the words the page shows and the log carries.
+  void report()
+  {
+    using dog_diagnostics::Level;
+    Level level = Level::OK;
+    std::string reason = driver_->armed() ? "armed, following joint commands" : "relaxed";
+    if (driver_->fault()) {
+      level = Level::ERROR;
+      reason = driver_->faultReason();
+    } else if (driver_->estop()) {
+      level = Level::WARN;
+      reason = "e-stop engaged, outputs released";
+    }
+    const double age = last_cmd_ > 0.0 ? steadySeconds() - last_cmd_ : -1.0;
+    char age_text[32];
+    std::snprintf(age_text, sizeof(age_text), "%.2f", age);
+    diag_->publish(level, reason, {
+      {"armed", driver_->armed() ? "true" : "false"},
+      {"bus_faults", std::to_string(driver_->busFaults())},
+      {"clamped_joints", std::to_string(driver_->clampedCount())},
+      {"command_age_s", age_text}});
+  }
+
   void publishEstop(bool active)
   {
     std_msgs::msg::Bool msg;
@@ -434,6 +467,8 @@ private:
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr estop_pub_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr release_srv_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr arm_srv_;
+  std::unique_ptr<dog_diagnostics::Reporter> diag_;
+  rclcpp::TimerBase::SharedPtr diag_timer_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr cmd_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr estop_sub_;
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_;

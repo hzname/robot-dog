@@ -20,6 +20,7 @@ from geometry_msgs.msg import Twist, Vector3
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import BatteryState
+from diagnostic_msgs.msg import DiagnosticArray
 from std_msgs.msg import Bool, String
 from std_srvs.srv import Trigger
 
@@ -71,6 +72,10 @@ class WebTeleop(Node):
         # The driver comes up disarmed (SAF-12). Pressing "stand" is the operator's
         # explicit gesture, so the page arms first and then asks for the pose.
         self.arm_client = self.create_client(Trigger, 'servo_driver/arm')
+        self.release_client = self.create_client(Trigger, 'servo_driver/release_fault')
+        self._diag = {}
+        # One banner for the whole robot: the worst node wins (DIA-02).
+        self.create_subscription(DiagnosticArray, 'diagnostics', self._on_diagnostics, 10)
 
     # ------------------------------------------------------------ ROS side
     def _on_state(self, msg: String):
@@ -123,7 +128,19 @@ class WebTeleop(Node):
             self.pose_pub.publish(v)
 
     def _arm_driver(self):
-        """Ask the servo driver to power its outputs; a disarm means stand does nothing."""
+        """Power the servos: drop the latch first, then arm.
+
+        After a fall or the thermal timeout the driver sits in e-stop or with a
+        latched fault, and ~/arm alone is refused. Pressing "stand" is the
+        operator's one gesture, so the page does both steps (D-12).
+        """
+        if not self.release_client.service_is_ready():
+            self.get_logger().warning('web: servo driver release_fault is not ready yet')
+            return
+        release = self.release_client.call_async(Trigger.Request())
+        release.add_done_callback(lambda _f: self._arm_after_release())
+
+    def _arm_after_release(self):
         if not self.arm_client.service_is_ready():
             self.get_logger().warning('web: servo driver is not ready to arm yet')
             return
@@ -141,6 +158,26 @@ class WebTeleop(Node):
         future.add_done_callback(done)
 
     # ------------------------------------------------------------ web side
+    # ------------------------------------------------------------ diagnostics
+    def _on_diagnostics(self, msg: DiagnosticArray):
+        """Keep the worst status per node and push one banner to the page (DIA-02)."""
+        changed = False
+        for status in msg.status:
+            level = {0: 'ok', 1: 'warn', 2: 'error'}.get(status.level, 'ok')
+            prev = self._diag.get(status.name)
+            if prev is None or prev[0] != level or prev[1] != status.message:
+                since = prev[2] if prev else time.time()
+                self._diag[status.name] = (level, status.message, since)
+                changed = True
+        if changed:
+            level, source, reason = protocol.worst_status(
+                [(lvl, name, text) for name, (lvl, text, _) in self._diag.items()])
+            since = self._diag.get(source, ('ok', '', time.time()))[2]
+            text = protocol.alarm(level, source, reason, since)
+            if self._aio_loop:
+                self._aio_loop.call_soon_threadsafe(
+                    lambda: asyncio.ensure_future(self._broadcast(text)))
+
     def _state_json(self):
         return protocol.state(self.mode, self.mode == 'estop', len(self.web_clients))
 
