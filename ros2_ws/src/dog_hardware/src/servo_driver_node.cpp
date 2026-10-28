@@ -168,7 +168,7 @@ public:
     // The driver's own emergency release must reach whoever drives the robot:
     // it publishes on the same `estop` topic it listens to (SAF-03).
     estop_pub_ = create_publisher<std_msgs::msg::Bool>("estop", rclcpp::QoS(10).reliable());
-    release_srv_ = create_service<std_srvs::srv::Trigger>("release_fault",
+    release_srv_ = create_service<std_srvs::srv::Trigger>("~/release_fault",
         [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
         std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
           if (!driver_->fault()) {
@@ -186,7 +186,7 @@ public:
             "fault released, outputs NOT confirmed off - check the bus";
           RCLCPP_WARN(get_logger(), "fault released: %s", res->message.c_str());
         });
-    arm_srv_ = create_service<std_srvs::srv::Trigger>("arm",
+    arm_srv_ = create_service<std_srvs::srv::Trigger>("~/arm",
         [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
         std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
           if (driver_->fault()) {
