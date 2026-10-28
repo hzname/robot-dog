@@ -24,7 +24,7 @@ def generate_test_description():
     return launch.LaunchDescription([
         launch_ros.actions.Node(
             package='dog_hardware', executable='servo_driver_node', namespace='dog',
-            parameters=[{'backend': 'mock', 'mock.fail_after': 5.0, 'update_rate': 100.0}]),
+            parameters=[{'backend': 'mock', 'mock.fail_after': 2.5, 'update_rate': 100.0}]),
         launch_testing.actions.ReadyToTest(),
     ])
 
@@ -88,7 +88,8 @@ class TestServoDriverFault(unittest.TestCase):
         self.assertTrue(res.success, res.message)
 
     def test_a_dead_bus_latches_and_only_the_service_releases(self):
-        # The driver starts disarmed: an operator arms it, then the bus dies.
+        # The driver starts disarmed: an operator arms it, then the bus dies
+        # (mock.fail_after = 2.5 s from the node's first tick).
         self.arm()
         self.spin(4.0)
         self.assertIn(True, self.estops,
