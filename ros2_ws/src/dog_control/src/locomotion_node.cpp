@@ -236,7 +236,16 @@ public:
         // The fall guard reads the accelerometer's own direction: the filter's tau
         // is a second, and a robot tipping over reaches 30 degrees in a fraction of
         // one. The plausibility window keeps an impact out of the estimate.
-        const auto & a = msg->linear_acceleration;
+        // The sign of gravity is not the same everywhere: our MPU driver and the mock
+        // report +g on z at rest, the Gazebo plugin reports -g, and the first version
+        // read that as upside down and latched a fall at spawn. Point the vector "up"
+        // before reading the angle out of it.
+        auto a = msg->linear_acceleration;
+        if (a.z < 0.0) {
+          a.x = -a.x;
+          a.y = -a.y;
+          a.z = -a.z;
+        }
         const double norm = std::sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
         if (norm > 0.5 * 9.80665 && norm < 1.5 * 9.80665) {
           const double roll_acc = std::atan2(a.y, a.z);

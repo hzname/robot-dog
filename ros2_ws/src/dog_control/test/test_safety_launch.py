@@ -104,6 +104,7 @@ class TestFallProtection(unittest.TestCase):
         self.spin(1.0)
         self.assertEqual(self.last_state(), 'fallen', 'a 40 deg tilt must latch FALLEN')
         self.assertIn(True, self.estops, 'the fall must be announced as estop=true')
+        self.spin(1.5)  # diagnostics are published at 1 Hz
         fall = [msg for name, level, msg in self.diags if name == 'locomotion' and level == 2]
         self.assertTrue(fall, 'the fall must be an ERROR in diagnostics')
         self.assertIn('tilt', fall[-1].lower())
