@@ -53,3 +53,23 @@
 `docker kill` контейнера на Pi: CI не имеет доступа к железу. Скрипт проверен синтаксически, режим
 `off` идемпотентен, инструкция в `docs/DEPLOYMENT.md` («Сторож выходов»). Проверка на стенде —
 первое, что стоит сделать руками при следующем включении робота.
+
+## Проверено на живом роботе (2026-10-28, Orange Pi, робот на подставке)
+
+Образ пересобран на плате из этой ветки (`robot-dog:2.0`), стек поднят, дальше — факты из журнала
+контейнера и чтения регистров PCA9685 с шины.
+
+| Что проверялось | Факт |
+|---|---|
+| D-06, гашение при открытии чипа | `driver disarmed`, все 16 каналов `FULL_OFF` — импульсы прошлой сессии не подхвачены |
+| Имена сервисов | `/dog/servo_driver/arm` и `/dog/servo_driver/release_fault` (приватные, как в документации) |
+| SAF-16, сторож | `docker kill robot_dog` (exit 137) → через ~1 с `container 'robot' is gone` → `outputs dropped` |
+| SAF-12, разоружённый старт | `~/arm` → `armed: the servos follow joint_commands`, при этом 12/12 каналов всё ещё `FULL_OFF`: без цели импульсов нет |
+| Первая поза | `lie` → состояние `lying`, 12 каналов с импульсами 214–383 тика (≈1045–1869 мкс), 4 свободных выключены |
+| SAF-04, таймаут команд | убит `locomotion_node`: через 0.5 с `holding position`, через 2.5 с `bus fault latched: no joint commands for 2.5 s (hold 0.5 s + relax 2.0 s); 0 bus fault(s), 0 clamped, 1 command timeout(s)` (DIA-03 — счётчики в строке) |
+| SAF-02/SAF-03, снятие аварии | `release_fault` → `fault released, outputs confirmed off - stand to move`, все 16 каналов `FULL_OFF` |
+| Отказов и клампов на живой шине | не было: `0 bus fault(s), 0 clamped` |
+
+Грабли платы: код в `/home/sg/robot-dog-v2` (git там нет — копия tar'ом), сборка на 8×A53 идёт
+17–40 минут, а `| tail` прячет прогресс до самого конца; `servo-guard.service` ищет проект в
+`/home/robot-dog` и без drop-in с `SERVO_GUARD_COMPOSE_DIR` молча не замечает контейнер.

@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 current_phase: 03
 current_phase_name: Защита драйвера серв
 status: phase_complete
-stopped_at: Phase 03 complete — SAF-01..04, SAF-12, SAF-16, DIA-03 met; the driver never powers itself
-last_updated: "2026-10-29T08:45:00.000Z"
+stopped_at: Phase 03 complete and verified on the robot — disarm on start, confirmed relax, command timeout and the host guard all seen working on hardware
+last_updated: "2026-10-29T10:05:00.000Z"
 last_activity: 2026-10-27
-last_activity_desc: Phase 03 complete — the driver starts disarmed, drops inherited pulses when it opens the chip, and a host guard drops the outputs if the container dies
+last_activity_desc: Phase 03 complete and bench-verified on the Orange Pi — FULL_OFF at start, the lie pose holds 12 channels, killing locomotion latched at 2.5 s, docker kill made the guard drop the outputs
 state_head: 6fe1793
 progress:
   total_phases: 8
