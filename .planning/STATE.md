@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 03
 current_phase_name: Защита драйвера серв
 status: executing
-stopped_at: Wave 03-02 closed — E-STOP is confirmed and the driver announces its own fault (SAF-02, SAF-03)
-last_updated: "2026-10-28T21:30:00.000Z"
+stopped_at: Wave 03-03 closed — a dead command stream relaxes and latches, calibration keeps it alive (SAF-04)
+last_updated: "2026-10-29T06:30:00.000Z"
 last_activity: 2026-10-27
-last_activity_desc: Wave 03-02 closed — relax() confirms the bus (retry + per-channel fallback), a latched fault publishes estop=true and only the release_fault service clears it; a launch test proves the chain on the mock backend
-state_head: 7a47534
+last_activity_desc: Wave 03-03 closed — command_relax_timeout relaxes and latches on 2.5 s of silence, the web bridge repeats the last calibration pose at 5 Hz while the robot is passive
+state_head: 90f961e
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 22
-  completed_plans: 24
-  percent: 19
+  completed_plans: 25
+  percent: 20
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 ## Current Position
 
 Phase: 02 (Устойчивость хода в симуляции) — EXECUTING
-Plan: фаза 3, волны 03-01…03-04. 03-01 и 03-02 закрыты, дальше 03-03 (таймаут команд и keep-alive калибровки)
+Plan: фаза 3, волны 03-01…03-04. 03-01…03-03 закрыты, дальше 03-04 (разоружённый старт и сторож выходов)
 Status: решения фазы приняты владельцем 2026-10-27 (мягкий порог 15°/20°, зачёт по каждому параметру плюс комбинация, `mu = 0.6`, груз на корпусе ±20 %); волна 1 — входы возмущений и базовая линия
 Last activity: 2026-10-28 - волна 02-04: GAIT-03 закрыт (склон 7/10, 0.70 и 0.61), матрица 6 углов — 5 проходят, облегчённый корпус на Jazzy 39.8 % и 25.9 % (ворота 40 %), причина по трассе — проскальзывание стоп при раскачке корпуса 14° против 9°
 
@@ -160,6 +160,7 @@ Recent decisions affecting current work:
 - [Phase 02]: Plan 02-03: на ячейках приёмки губернатор наклона не включается ни разу (0 % отсчётов из ~2500 на элемент, худший p95 входа 2.5° на волнах) — числа плоскостных и неровных ячеек остаются сравнимыми с фазой 1; наклон корпуса к поверхности максимум 11.1° при воротах 20°
 - [Phase 02]: Plan 02-03: три ячейки вышли за ±5 п.п. против фазы 1 (`flat_A` Lyrical −11.8/−17.9, `waves10` Lyrical real −23.3, Jazzy ideal +17.4) — это разброс пяти повторов, губернатор там не включался; в фазах 3–4 по этим ячейкам сравнивать только парные прогоны на одном SHA
 - [Phase 02]: Plan 02-03: пороги 15/20 предложено оставить; если в фазе 4 появится ячейка круче 10°, падение доли команды — работа губернатора, а не регресс, и это надо оговорить в критериях заранее
+- [Phase 03]: Plan 03-03: `command_relax_timeout` (2 с сверх удержания 0.5 с) отпускает выходы и защёлкивает; keep-alive калибровки 5 Гц живёт в `CalibrationBridge` и публикует только в `passive` (иначе устаревшая поза дёргает ноги при ходьбе). Край: закрыл вкладку калибровки без «Встать» — через 2.5 с защёлка, перед stand нужен release_fault (D-09)
 - [Phase 03]: Plan 03-02: `relax()` подтверждает отпускание (повтор + поканальное отключение), `estopDone()` ложен без подтверждения; защёлка публикует `estop=true` и снимается только сервисом `release_fault`; `std_srvs` нет в ros-base — его надо ставить в Dockerfile и в четыре CI-джобы ПОСЛЕ checkout, а в CMakeLists нужен `find_package(std_srvs)`, иначе заголовков не видно
 - [Phase 03]: Plan 03-01: `write()` проверяет результат шины, канал с неудачной записью переписывается на следующем такте (грязный флаг), три подряд неудачных кадра защёлкивают аварию; `MockBus` получил внесение отказов, нода пишет `write failed ch=N` раз в секунду и итог счётчиков при защёлке; локальный `run.sh` принимает `dog_hardware` и пропускает файлы со своим `main()` (иначе `pca9685_probe` подменял тестовый бинарник)
 - [Phase 02]: Plan 02-05: ни одна постоянная настройка шага не держит оба конца полосы ±20 % — подъём стопы 15 мм чинит лёгкий корпус (39.8→45.7) и ломает тяжёлый (59.2→33.1), доля опоры 0.70 на штатном периоде выводит суставы за паспорт (6.04 против 5.5 рад/с), пара 0.70/0.65 с проходит паспорт но даёт увод 10.8° на тяжёлом конце
@@ -198,9 +199,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-28T21:30:00.000Z
-Stopped at: Wave 03-02 closed (SAF-02, SAF-03); next is 03-03 - command timeout and the calibration keep-alive
-Resume file: .planning/phases/03-zashchita-drayvera-serv/03-02-SUMMARY.md
+Last session: 2026-10-29T06:30:00.000Z
+Stopped at: Wave 03-03 closed (SAF-04); next is 03-04 - disarmed start, outputs dropped on open, host guard
+Resume file: .planning/phases/03-zashchita-drayvera-serv/03-03-SUMMARY.md
 
 - [Phase 02]: Plan 02-02: `terrain` job на замере красный по замыслу — выше 15° доля команды ниже ворот 40 %, это работа губернатора; логи `tilt_guard` теперь в артефакте `terrain-json`
 
