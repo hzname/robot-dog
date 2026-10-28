@@ -44,6 +44,14 @@ bool MockBus::disable(int channel)
   return true;
 }
 
+void MockBus::clearFailures()
+{
+  fail_next_ = 0;
+  fail_disable_all_ = 0;
+  fail_channel_.fill(0);
+  fail_disable_.fill(0);
+}
+
 bool MockBus::disableAll()
 {
   if (fail_disable_all_ > 0) {--fail_disable_all_; return false;}
@@ -122,6 +130,14 @@ bool Pca9685Bus::open(const std::string & device, int address, double pwm_hz,
   if (already_running) {
     if (!writeReg(kMode1, (mode1 & ~kMode1Restart) | kMode1AutoInc | kMode1AllCall)) {
       error = "PCA9685 MODE1 write failed: " + std::string(std::strerror(errno));
+      close();
+      return false;
+    }
+    // The chip kept whatever pulses the previous process left. The robot never
+    // stands on its own at start or restart, so those pulses are dropped rather
+    // than inherited: an operator is holding it anyway (D-06, SAF-12).
+    if (!disableAll()) {
+      error = "PCA9685 disableAll on start failed: " + std::string(std::strerror(errno));
       close();
       return false;
     }

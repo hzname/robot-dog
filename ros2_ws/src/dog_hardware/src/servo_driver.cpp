@@ -174,6 +174,8 @@ ServoDriver::ServoDriver(std::shared_ptr<ServoBus> bus, std::vector<std::string>
   state_.assign(names_.size(), State::OFF);
   enable_at_.assign(names_.size(), 0.0);
   dirty_.assign(names_.size(), false);
+  target_set_.assign(names_.size(), false);
+  armed_ = params_.armed_on_start;
   params_.joints_per_group = std::max(params_.joints_per_group, 1);
   for (size_t i = 0; i < cals_.size(); ++i) {
     if (cals_[i].coupled_to == static_cast<int>(i) || cals_[i].coupled_to >= static_cast<int>(cals_.size())) {
@@ -195,7 +197,9 @@ int ServoDriver::setTargets(const std::vector<std::string> & names,
     if (it == names_.end() || !std::isfinite(positions[k])) {continue;}
     const size_t i = static_cast<size_t>(it - names_.begin());
     target_[i] = positions[k];
+    target_set_[i] = true;
     ++matched;
+    if (!armed_) {continue;}  // the pose is remembered, nothing is powered yet
     if (state_[i] == State::OFF) {
       // Position is unknown while unpowered: jump straight to the target, one
       // leg at a time to limit the inrush current.
@@ -222,7 +226,7 @@ void ServoDriver::update(double now)
 {
   const double dt = last_update_ < 0.0 ? 0.0 : std::clamp(now - last_update_, 0.0, 0.1);
   last_update_ = now;
-  if (estop_ || fault_) {return;}
+  if (estop_ || fault_ || !armed_) {return;}
   clamped_ = 0;
   frame_failed_ = false;
   frame_written_ = false;
@@ -288,9 +292,35 @@ bool ServoDriver::write(size_t i)
   return true;
 }
 
+void ServoDriver::arm()
+{
+  if (estop_ || fault_) {return;}
+  armed_ = true;
+  const double now = last_update_ < 0.0 ? 0.0 : last_update_;
+  int rank = 0;
+  int last_group = -1;
+  for (size_t i = 0; i < names_.size(); ++i) {
+    if (!target_set_[i] || state_[i] != State::OFF) {continue;}
+    const int group = static_cast<int>(i) / params_.joints_per_group;
+    if (group != last_group) {
+      if (last_group >= 0) {++rank;}
+      last_group = group;
+    }
+    state_[i] = State::PENDING;
+    enable_at_[i] = now + rank * params_.enable_stagger;
+  }
+}
+
+void ServoDriver::disarm()
+{
+  armed_ = false;
+  relax();
+}
+
 void ServoDriver::latchFault(const std::string & reason)
 {
   if (fault_) {return;}
+  armed_ = false;  // an emergency release always leaves the driver disarmed
   fault_ = true;
   fault_reason_ = reason;
   estop_ = false;  // the fault is its own latch; the estop flag stays the operator's

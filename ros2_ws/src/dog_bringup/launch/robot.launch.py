@@ -34,6 +34,9 @@ def _setup(context):
     power_backend = cfg('power') or ('auto' if cfg('backend') == 'pca9685' else 'off')
     imu_yaml = os.path.join(share, 'config', 'imu.yaml')
     imu_backend = cfg('imu') or ('auto' if cfg('backend') == 'pca9685' else 'off')
+    # On hardware the driver waits for ~/arm: the robot is always started by hand
+    # (D-06). A simulation has nobody to press it, so the mock backend arms itself.
+    armed = (on('armed_on_start') if cfg('armed_on_start') else cfg('backend') == 'mock')
     teleop_yaml = os.path.join(share, 'config', 'teleop.yaml')
     teleop_files = [teleop_yaml]
     if cfg('gamepad_profile') == 'ps':
@@ -50,7 +53,8 @@ def _setup(context):
         Node(package='dog_control', executable='locomotion_node', name='locomotion',
              namespace=NS, parameters=[robot_yaml, {'odom.publish': True}], output='screen'),
         Node(package='dog_hardware', executable='servo_driver_node', name='servo_driver',
-             namespace=NS, parameters=[servos_yaml, {'backend': cfg('backend')}],
+             namespace=NS, parameters=[servos_yaml, {'backend': cfg('backend'),
+                                                     'armed_on_start': armed}],
              output='screen'),
     ]
     if power_backend != 'off':
@@ -114,6 +118,9 @@ def generate_launch_description():
         DeclareLaunchArgument('imu', default_value='',
                               description='IMU (MPU6050): auto (probe I2C), mock or off; '
                                           'default auto on the robot, off with backend:=mock'),
+        DeclareLaunchArgument('armed_on_start', default_value='',
+                              description='power the servos at start: default false on hardware '
+                                          '(call ~/arm), true with backend:=mock'),
         DeclareLaunchArgument('perception', default_value='false',
                               description='terrain perception + hazard guard (needs the sensor drivers)'),
         DeclareLaunchArgument('robot_config', default_value='',

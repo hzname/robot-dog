@@ -21,6 +21,7 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import BatteryState
 from std_msgs.msg import Bool, String
+from std_srvs.srv import Trigger
 
 from dog_web import protocol
 from dog_web.calibration import ALLOWED_MODES, CalibrationBridge
@@ -67,6 +68,9 @@ class WebTeleop(Node):
         self._aio_loop = None
         self.allow_calibration = bool(self.declare_parameter('allow_calibration', True).value)
         self.cal = CalibrationBridge(self) if self.allow_calibration else None
+        # The driver comes up disarmed (SAF-12). Pressing "stand" is the operator's
+        # explicit gesture, so the page arms first and then asks for the pose.
+        self.arm_client = self.create_client(Trigger, 'servo_driver/arm')
 
     # ------------------------------------------------------------ ROS side
     def _on_state(self, msg: String):
@@ -105,6 +109,8 @@ class WebTeleop(Node):
             self.estop_pub.publish(Bool(data=actions.estop))
             self.get_logger().warning('web: E-STOP %s' % ('ENGAGED' if actions.estop else 'released'))
         if actions.command:
+            if actions.command == 'stand':
+                self._arm_driver()
             self.command_pub.publish(String(data=actions.command))
             self.get_logger().info('web: %s' % actions.command)
         if actions.twist is not None:
@@ -115,6 +121,24 @@ class WebTeleop(Node):
             v = Vector3()
             v.y, v.z = actions.pose
             self.pose_pub.publish(v)
+
+    def _arm_driver(self):
+        """Ask the servo driver to power its outputs; a disarm means stand does nothing."""
+        if not self.arm_client.service_is_ready():
+            self.get_logger().warning('web: servo driver is not ready to arm yet')
+            return
+        future = self.arm_client.call_async(Trigger.Request())
+
+        def done(fut):
+            try:
+                res = fut.result()
+            except Exception as exc:  # noqa: BLE001 - arming is best effort here
+                self.get_logger().error('web: arm failed: %r' % exc)
+                return
+            if not res.success:
+                self.get_logger().warning('web: arm refused: %s' % res.message)
+
+        future.add_done_callback(done)
 
     # ------------------------------------------------------------ web side
     def _state_json(self):

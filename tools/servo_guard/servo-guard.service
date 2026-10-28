@@ -1,0 +1,27 @@
+[Unit]
+Description=Drop the servo outputs when the driver container is gone (SAF-16)
+Documentation=https://github.com/hzname/robot-dog
+# Only the docker daemon is needed; the guard calls `docker compose run` itself.
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+Environment=SERVO_GUARD_COMPOSE_DIR=/home/robot-dog
+Environment=SERVO_GUARD_SERVICE=robot
+ExecStart=/usr/local/bin/servo-guard.sh watch
+# The guard is the last line of defence: keep it alive even if the script exits.
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+
+# Install on the robot:
+#   sudo install -m 755 tools/servo_guard/servo-guard.sh /usr/local/bin/
+#   sudo install -m 644 tools/servo_guard/servo-guard.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now servo-guard
+#
+# With a systemd-managed container unit (instead of plain docker compose), add to
+# that unit so a normal stop is handled without waiting for the poll:
+#   ExecStopPost=/usr/local/bin/servo-guard.sh off

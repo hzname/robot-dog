@@ -16,6 +16,7 @@ import pytest
 import rclpy
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool
+from std_srvs.srv import Trigger
 
 
 @pytest.mark.launch_test
@@ -54,8 +55,18 @@ class TestServoDriverTimeout(unittest.TestCase):
             msg.position = [0.3 * math.sin(2.0 * math.pi * 0.5 * (time.time() - start))]
             self.cmd.publish(msg)
 
+    def arm(self):
+        client = self.node.create_client(Trigger, '/dog/servo_driver/arm')
+        self.spin(1.0, publish=False)   # the graph must know the client
+        self.assertTrue(client.wait_for_service(timeout_sec=5.0), 'arm service is missing')
+        future = client.call_async(Trigger.Request())
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=5.0)
+        self.assertIsNotNone(future.result(), 'arm did not answer')
+        self.assertTrue(future.result().success, future.result().message)
+
     def test_silence_relaxes_and_latches(self):
-        # Commands for a second: the joint is powered and has something to hold.
+        # The driver comes up disarmed; arm it, then command the joint for a second.
+        self.arm()
         self.spin(1.0)
         self.assertNotIn(True, self.estops, 'the driver must not latch while commands flow')
 

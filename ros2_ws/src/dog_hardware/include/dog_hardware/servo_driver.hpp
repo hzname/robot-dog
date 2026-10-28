@@ -85,6 +85,9 @@ struct DriverParams
   double max_joint_speed{6.0};  // [rad/s] slew limit (MG996R no-load ~6 rad/s)
   double enable_stagger{0.15};  // [s] delay between legs when powering servos on
   int joints_per_group{3};      // servos enabled together (one leg)
+  /// The robot only ever starts with a hand on it, so the node starts disarmed
+  /// and arms on an explicit request; the core default keeps bare tests working.
+  bool armed_on_start{true};
 };
 
 class ServoDriver
@@ -101,6 +104,13 @@ public:
   void update(double now);
   /// true: all outputs off immediately, commands ignored until released.
   void setEstop(bool active);
+  /// Power the joints that already have a target. Until then `setTargets`
+  /// only remembers the pose and nothing is written to the bus (SAF-12).
+  void arm();
+  /// Forget the arm state and drop every output; commands are remembered again.
+  void disarm();
+  bool armed() const {return armed_;}
+
   /// Turn every output off (servos go limp) without latching a fault.
   /// Returns true when the bus confirmed it: `disableAll`, one retry, then a
   /// per-channel fallback. A false means the servos may still be driven (SAF-02).
@@ -154,6 +164,7 @@ private:
   std::vector<State> state_;
   std::vector<double> enable_at_;
   std::vector<bool> dirty_;   // last write failed: retry even if the target holds
+  std::vector<bool> target_set_;
   std::array<int, kPwmChannels> channel_faults_{};
   std::string fault_reason_;
   double last_update_{-1.0};
@@ -161,6 +172,7 @@ private:
   int failed_frames_{0};
   bool frame_failed_{false};
   bool frame_written_{false};
+  bool armed_{true};
   bool estop_{false};
   bool fault_{false};
   bool outputs_confirmed_off_{true};  // nothing written yet: outputs are off

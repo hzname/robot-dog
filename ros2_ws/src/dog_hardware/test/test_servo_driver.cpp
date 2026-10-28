@@ -548,11 +548,18 @@ TEST_F(FaultTest, LatchedDriverIgnoresCommandsAndStopsWriting)
   driver->update(2.0);
   EXPECT_EQ(bus->attempts(0), attempts) << "a latched driver must not touch the bus";
 
-  driver->clearFault();  // no outputs yet: clearing only re-arms the driver
+  bus->clearFailures();  // the wire is fixed before anyone asks to move again
+  driver->clearFault();  // clearing the latch does not arm the driver
   EXPECT_FALSE(driver->fault());
+  EXPECT_FALSE(driver->armed()) << "a released fault must leave the driver disarmed";
   EXPECT_EQ(driver->setTargets({"a0"}, {0.5}, 2.1), 1);
   driver->update(2.1);
+  EXPECT_FALSE(driver->enabled(0)) << "a disarmed driver must not power the joint";
+
+  driver->arm();
+  driver->update(2.2);
   EXPECT_TRUE(driver->enabled(0));
+  EXPECT_NEAR(bus->pulse(0), jointToPulseUs(driver->calibrations()[0], 0.5), 1e-9);
 }
 
 // ------------------------------------------------------------ e-stop proof
@@ -626,4 +633,92 @@ TEST_F(RelaxTest, EstopIsDoneOnlyWhenOutputsAreConfirmed)
   driver->setEstop(true);  // the operator asks again, the bus answers this time
   EXPECT_TRUE(driver->estopDone());
   EXPECT_TRUE(driver->outputsConfirmedOff());
+}
+
+// ------------------------------------------------------------- arming
+//
+// The robot only starts with a hand on it: a disarmed driver remembers the pose
+// but leaves the bus alone, and arming is a separate, explicit step (SAF-12).
+
+class ArmTest : public ::testing::Test
+{
+protected:
+  void SetUp() override
+  {
+    bus = std::make_shared<MockBus>();
+    names = {"a0", "a1"};
+    std::vector<ServoCalibration> cals;
+    for (int i = 0; i < 2; ++i) {
+      ServoCalibration c;
+      c.channel = i;
+      cals.push_back(c);
+    }
+    DriverParams p;
+    p.max_joint_speed = 1.0;
+    p.enable_stagger = 0.1;
+    p.armed_on_start = false;
+    driver = std::make_unique<ServoDriver>(bus, names, cals, p);
+  }
+
+  std::shared_ptr<MockBus> bus;
+  std::vector<std::string> names;
+  std::unique_ptr<ServoDriver> driver;
+};
+
+TEST_F(ArmTest, ADisarmedDriverNeverTouchesTheBus)
+{
+  EXPECT_FALSE(driver->armed());
+  EXPECT_EQ(driver->setTargets({"a0", "a1"}, {0.2, 0.3}, 1.0), 2);
+  for (int i = 0; i < 10; ++i) {driver->update(1.0 + 0.1 * i);}
+  EXPECT_EQ(bus->writes(), 0) << "nothing may be written before the driver is armed";
+  EXPECT_FALSE(driver->anyEnabled());
+  EXPECT_EQ(driver->positions()[0], 0.0);  // the pose is remembered, not applied
+}
+
+TEST_F(ArmTest, ArmingAppliesTheRememberedPose)
+{
+  driver->setTargets({"a0"}, {0.2}, 1.0);
+  driver->arm();
+  driver->update(1.0);
+  EXPECT_TRUE(driver->enabled(0));
+  EXPECT_NEAR(bus->pulse(0), jointToPulseUs(driver->calibrations()[0], 0.2), 1e-9);
+}
+
+TEST_F(ArmTest, ArmingWithoutATargetPowersNothing)
+{
+  driver->arm();
+  driver->update(1.0);
+  EXPECT_TRUE(driver->armed());
+  EXPECT_EQ(bus->writes(), 0);
+  EXPECT_FALSE(driver->anyEnabled());
+}
+
+TEST_F(ArmTest, DisarmingDropsTheOutputsAndTheOrderOfPowerOn)
+{
+  driver->arm();
+  driver->setTargets({"a0"}, {0.2}, 1.0);
+  driver->update(1.0);
+  ASSERT_TRUE(driver->enabled(0));
+
+  driver->disarm();
+  EXPECT_FALSE(driver->armed());
+  EXPECT_FALSE(driver->anyEnabled());
+  EXPECT_DOUBLE_EQ(bus->pulse(0), 0.0);
+
+  driver->setTargets({"a0"}, {0.3}, 2.0);
+  driver->update(2.0);
+  EXPECT_FALSE(driver->enabled(0)) << "a command while disarmed must not power anything";
+}
+
+TEST_F(ArmTest, TheFirstMoveAfterArmingIsSlewLimited)
+{
+  driver->setTargets({"a0"}, {0.0}, 0.0);
+  driver->arm();
+  driver->update(0.0);
+  ASSERT_TRUE(driver->enabled(0));
+
+  driver->setTargets({"a0"}, {0.5}, 0.0);
+  driver->update(0.01);  // 1 rad/s * 0.01 s = 0.01 rad, not the whole 0.5
+  EXPECT_NEAR(driver->positions()[0], 0.01, 1e-9);
+  EXPECT_NEAR(bus->pulse(0), jointToPulseUs(driver->calibrations()[0], 0.01), 1e-9);
 }

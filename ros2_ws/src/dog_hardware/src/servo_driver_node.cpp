@@ -87,6 +87,9 @@ public:
     // Silence longer than the hold plus this grace relaxes the outputs and
     // latches: a robot whose controller died must not stand there with hot
     // servos until the battery dies (SAF-04).
+    // The robot only starts with a hand on it, so the driver comes up disarmed
+    // and waits for ~/arm (SAF-12). Mock and tests can ask for the old behaviour.
+    const bool armed_on_start = declare_parameter("armed_on_start", false);
     relax_timeout_ = declare_parameter("command_relax_timeout", 2.0);
     if (!(relax_timeout_ > 0.0)) {
       throw std::runtime_error(
@@ -153,7 +156,12 @@ public:
       throw std::runtime_error("unknown backend '" + backend + "' (use pca9685 or mock)");
     }
     bus_ = bus;
+    dp.armed_on_start = true;  // decided once below, after the driver exists
     driver_ = std::make_unique<ServoDriver>(bus, names_, cals, dp);
+    if (!armed_on_start) {
+      driver_->disarm();
+      RCLCPP_INFO(get_logger(), "driver disarmed: release_fault then ~/arm or stand to move");
+    }
 
     state_pub_ = create_publisher<sensor_msgs::msg::JointState>("joint_states", 10);
     pulse_pub_ = create_publisher<sensor_msgs::msg::JointState>("servo_pulses", 10);
@@ -177,6 +185,25 @@ public:
             "fault released, outputs confirmed off - stand to move" :
             "fault released, outputs NOT confirmed off - check the bus";
           RCLCPP_WARN(get_logger(), "fault released: %s", res->message.c_str());
+        });
+    arm_srv_ = create_service<std_srvs::srv::Trigger>("arm",
+        [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+        std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
+          if (driver_->fault()) {
+            res->success = false;
+            res->message = "fault latched: fix the cause and call ~/release_fault first";
+            return;
+          }
+          if (driver_->estop()) {
+            res->success = false;
+            res->message = "e-stop engaged: release it before arming";
+            return;
+          }
+          driver_->arm();
+          res->success = driver_->armed();
+          res->message = res->success ? "armed: the servos follow joint_commands" :
+            "not armed";
+          RCLCPP_WARN(get_logger(), "%s", res->message.c_str());
         });
     cmd_sub_ = create_subscription<sensor_msgs::msg::JointState>(
       "joint_commands", 10, [this](sensor_msgs::msg::JointState::ConstSharedPtr msg) {
@@ -406,6 +433,7 @@ private:
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr pulse_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr estop_pub_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr release_srv_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr arm_srv_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr cmd_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr estop_sub_;
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_;

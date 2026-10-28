@@ -24,7 +24,7 @@ def generate_test_description():
     return launch.LaunchDescription([
         launch_ros.actions.Node(
             package='dog_hardware', executable='servo_driver_node', namespace='dog',
-            parameters=[{'backend': 'mock', 'mock.fail_after': 1.0, 'update_rate': 100.0}]),
+            parameters=[{'backend': 'mock', 'mock.fail_after': 3.0, 'update_rate': 100.0}]),
         launch_testing.actions.ReadyToTest(),
     ])
 
@@ -57,8 +57,18 @@ class TestServoDriverFault(unittest.TestCase):
             msg.position = [0.3 * math.sin(2.0 * math.pi * 0.5 * (time.time() - start))]
             self.cmd.publish(msg)
 
+    def arm(self):
+        client = self.node.create_client(Trigger, '/dog/servo_driver/arm')
+        self.spin(1.0, publish=False)   # the graph must know the client
+        self.assertTrue(client.wait_for_service(timeout_sec=5.0), 'arm service is missing')
+        future = client.call_async(Trigger.Request())
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=5.0)
+        self.assertIsNotNone(future.result(), 'arm did not answer')
+        self.assertTrue(future.result().success, future.result().message)
+
     def test_a_dead_bus_latches_and_only_the_service_releases(self):
-        # Commands flow for a second, then every write starts failing.
+        # The driver starts disarmed: an operator arms it, then the bus dies.
+        self.arm()
         self.spin(4.0)
         self.assertIn(True, self.estops,
                       'a driver that latched a bus fault must publish estop=true')

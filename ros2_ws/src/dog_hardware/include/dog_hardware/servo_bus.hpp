@@ -47,6 +47,8 @@ public:
   void failDisable(int channel, int n) {fail_disable_.at(channel) += n;}
   /// Single-channel disable calls that reached the bus.
   int disableAttempts(int channel) const {return disable_attempts_.at(channel);}
+  /// The wire is fixed: every pending injected failure is dropped.
+  void clearFailures();
 
 private:
   std::array<double, kPwmChannels> pulses_{};
@@ -68,10 +70,10 @@ public:
   Pca9685Bus(const Pca9685Bus &) = delete;
   Pca9685Bus & operator=(const Pca9685Bus &) = delete;
 
-  /// Opens the bus and configures the PWM frequency. If the chip is already
-  /// awake at the right prescaler the outputs are left untouched (a restart
-  /// of the driver does not make the servos twitch). Returns false and fills
-  /// `error` on failure.
+  /// Opens the bus, configures the PWM frequency and turns every output off:
+  /// the robot is always started by hand, so a pulse inherited from a previous
+  /// process is more dangerous than a limp leg (D-06, SAF-12). Returns false and
+  /// fills `error` on failure, including an unconfirmed `disableAll`.
   bool open(const std::string & device, int address, double pwm_hz, double oscillator_hz,
     std::string & error);
   void close();
