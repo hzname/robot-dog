@@ -42,7 +42,7 @@ class FakeNode:
     def create_subscription(self, *args, **kwargs):
         return None
 
-    def create_client(self, name):
+    def create_client(self, srv_type, name):  # noqa: ARG002 - the type is unused
         return type('Client', (), {'srv_name': name})()
 
     def get_clock(self):
