@@ -341,15 +341,9 @@ void LocomotionController::setBodyPose(const BodyPose & pose)
 
 void LocomotionController::setImuAttitude(double roll, double pitch, double dt)
 {
-  // The fall guard reads the raw attitude in every mode: the slope estimate below
-  // only exists while standing, and a robot tipping over is not on a slope.
-  if (std::isfinite(roll) && std::isfinite(pitch)) {
-    imu_roll_ = roll;
-    imu_pitch_ = pitch;
-    tilt_deg_ = std::max(std::abs(roll), std::abs(pitch)) * 180.0 / M_PI;
-    imu_seen_ = true;
-    imu_age_ = 0.0;
-  }
+  // Default heartbeat: the filtered attitude. The node overrides it right after
+  // with the accelerometer's own direction, which sees a fall while it happens.
+  setFallTilt(roll, pitch);
   if (!p_.slope_compensation || dt <= 0.0) {return;}
   const bool upright = mode_ == Mode::STAND || mode_ == Mode::WALK;
   if (!upright) {  // the hold starts from the heading at the next walk
@@ -399,6 +393,16 @@ void LocomotionController::setImuAttitude(double roll, double pitch, double dt)
   slope_pitch_ = slope_sum_p_ / slope_sum_dt_;
   slope_roll_ = slope_sum_r_ / slope_sum_dt_;
   slope_valid_ = true;
+}
+
+void LocomotionController::setFallTilt(double roll, double pitch)
+{
+  if (!std::isfinite(roll) || !std::isfinite(pitch)) {return;}
+  imu_roll_ = roll;
+  imu_pitch_ = pitch;
+  tilt_deg_ = std::max(std::abs(roll), std::abs(pitch)) * 180.0 / M_PI;
+  imu_seen_ = true;
+  imu_age_ = 0.0;
 }
 
 void LocomotionController::setYawRate(double wz)

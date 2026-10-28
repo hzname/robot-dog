@@ -136,6 +136,11 @@ public:
   /// Body attitude from the IMU [rad] (REP-103 roll / pitch vs. gravity).
   /// Without calls the controller behaves as on flat ground.
   void setImuAttitude(double roll, double pitch, double dt);
+  /// The immediate body tilt for the fall guard [rad], computed from the
+  /// accelerometer's own direction. The attitude filter has a whole second of lag:
+  /// by the time it agrees the robot is on the floor, so the guard reads this.
+  /// Also counts as the IMU heartbeat (age and "seen").
+  void setFallTilt(double roll, double pitch);
   /// The IMU says its gyro bias is known. In the floor profile a robot without
   /// this flag refuses to stand: the fall guard would be blind (SAF-06).
   void setImuCalibrated(bool calibrated) {imu_calibrated_ = calibrated;}

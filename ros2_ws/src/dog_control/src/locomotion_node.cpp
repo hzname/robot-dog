@@ -233,6 +233,18 @@ public:
         imu_seen_ = true;
         last_imu_ = t;
         controller_->setImuAttitude(roll, pitch, dt);
+        // The fall guard reads the accelerometer's own direction: the filter's tau
+        // is a second, and a robot tipping over reaches 30 degrees in a fraction of
+        // one. The plausibility window keeps an impact out of the estimate.
+        const auto & a = msg->linear_acceleration;
+        const double norm = std::sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
+        if (norm > 0.5 * 9.80665 && norm < 1.5 * 9.80665) {
+          const double roll_acc = std::atan2(a.y, a.z);
+          const double pitch_acc = std::atan2(-a.x, std::sqrt(a.y * a.y + a.z * a.z));
+          controller_->setFallTilt(
+            std::max(std::abs(roll_acc), std::abs(roll)) * (roll_acc < 0 ? -1.0 : 1.0) ,
+            std::max(std::abs(pitch_acc), std::abs(pitch)) * (pitch_acc < 0 ? -1.0 : 1.0));
+        }
       });
 
     guard_sub_ = create_subscription<std_msgs::msg::Float64MultiArray>(
