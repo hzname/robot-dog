@@ -313,6 +313,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-27T22:35:00.000Z
-Stopped at: Wave 02-03 closed; wave 02-04 (the acceptance: backward descent and the perturbation matrix) is next
-Resume file: .planning/phases/02-ustoychivost-hoda-v-simulyatsii/02-03-SUMMARY.md
+Last session: 2026-10-29T12:30:00.000Z
+Stopped at: Phase 04 closed in code and CI (SAF-05, SAF-06, SAF-08, DIA-01, DIA-02). Что осталось до приёмки: ячейка наклона в Gazebo (пункт 5 плана 04-04) и проверки на живом роботе из критерия 5 ROADMAP — они уходят в фазу 7 вместе с остальным железом
+Next: фаза 05 (профиль первого выхода и защита пультов) по ROADMAP
+Resume file: .planning/phases/04-zashchita-korpusa-i-diagnostika/04-04-SUMMARY.md
