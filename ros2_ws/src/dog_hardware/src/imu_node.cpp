@@ -21,6 +21,7 @@
 #include "dog_hardware/imu_sensor.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/imu.hpp"
+#include "std_msgs/msg/bool.hpp"
 
 namespace dog_hardware
 {
