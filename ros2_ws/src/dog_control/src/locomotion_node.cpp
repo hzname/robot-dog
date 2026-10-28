@@ -655,7 +655,8 @@ private:
     last_mode_ = controller_->mode();
     last_estop_ = controller_->estopActive();
     std_msgs::msg::String msg;
-    msg.data = last_estop_ ? "estop" : modeName(last_mode_);
+    // A fall outranks the e-stop banner it raised: "estop" would hide the reason.
+    msg.data = (last_estop_ && last_mode_ != Mode::FALLEN) ? "estop" : modeName(last_mode_);
     state_pub_->publish(msg);
     RCLCPP_INFO(get_logger(), "mode -> %s", msg.data.c_str());
   }

@@ -196,8 +196,10 @@ public:
   bool update(double dt);
 
   Mode mode() const {return mode_;}
-  /// Raw body tilt from the IMU [deg]: how far the robot is from level.
+  /// Body tilt used by the soft threshold, from the filtered attitude [deg].
   double tiltDeg() const {return tilt_deg_;}
+  /// Immediate tilt from the accelerometer [deg]: what the fall guard latches on.
+  double rawTiltDeg() const {return tilt_raw_deg_;}
   bool fallen() const {return mode_ == Mode::FALLEN;}
   /// Why the robot fell, in words the operator sees on the page and in the log.
   const std::string & fallReason() const {return fall_reason_;}
@@ -258,7 +260,9 @@ private:
   void enterFallen(const std::string & reason);
   double imu_roll_{0.0};
   double imu_pitch_{0.0};
-  double tilt_deg_{0.0};
+  double tilt_deg_{0.0};       // filtered attitude: the soft threshold's input
+  double tilt_raw_deg_{0.0};   // accelerometer's own direction: the hard one's
+  bool tilt_raw_valid_{false}; // has the accelerometer path spoken yet
   double imu_age_{1e9};        // [s] since the last IMU sample
   bool imu_seen_{false};
   bool imu_calibrated_{false};

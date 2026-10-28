@@ -341,9 +341,15 @@ void LocomotionController::setBodyPose(const BodyPose & pose)
 
 void LocomotionController::setImuAttitude(double roll, double pitch, double dt)
 {
-  // Default heartbeat: the filtered attitude. The node overrides it right after
-  // with the accelerometer's own direction, which sees a fall while it happens.
-  setFallTilt(roll, pitch);
+  // The soft threshold reads the filtered attitude: it must not fire on the gait's
+  // own accelerations. The hard one reads the accelerometer (setFallTilt), which
+  // sees a fall while it happens.
+  if (std::isfinite(roll) && std::isfinite(pitch)) {
+    tilt_deg_ = std::max(std::abs(roll), std::abs(pitch)) * 180.0 / M_PI;
+    // A message arrived: that is the heartbeat, whatever the source of the angle.
+    imu_seen_ = true;
+    imu_age_ = 0.0;
+  }
   if (!p_.slope_compensation || dt <= 0.0) {return;}
   const bool upright = mode_ == Mode::STAND || mode_ == Mode::WALK;
   if (!upright) {  // the hold starts from the heading at the next walk
@@ -400,7 +406,8 @@ void LocomotionController::setFallTilt(double roll, double pitch)
   if (!std::isfinite(roll) || !std::isfinite(pitch)) {return;}
   imu_roll_ = roll;
   imu_pitch_ = pitch;
-  tilt_deg_ = std::max(std::abs(roll), std::abs(pitch)) * 180.0 / M_PI;
+  tilt_raw_deg_ = std::max(std::abs(roll), std::abs(pitch)) * 180.0 / M_PI;
+  tilt_raw_valid_ = true;
   imu_seen_ = true;
   imu_age_ = 0.0;
 }
@@ -437,12 +444,13 @@ void LocomotionController::evaluateSafety(double dt)
 
   // 1. Hard tilt: the robot is going over. Count time, not frames: the IMU rate
   //    may differ from the control loop's.
-  const bool too_far = imu_seen_ && tilt_deg_ > p_.safety_hard_deg;
+  const double worst_tilt = tilt_raw_valid_ ? std::max(tilt_deg_, tilt_raw_deg_) : tilt_deg_;
+  const bool too_far = imu_seen_ && worst_tilt > p_.safety_hard_deg;
   hard_t_ = too_far ? hard_t_ + dt : 0.0;
   if (too_far && hard_t_ >= p_.safety_debounce_s) {
     char buf[128];
     std::snprintf(buf, sizeof(buf), "tilt %.0f deg above %.0f deg for %.2f s",
-      tilt_deg_, p_.safety_hard_deg, hard_t_);
+      worst_tilt, p_.safety_hard_deg, hard_t_);
     enterFallen(buf);
     return;
   }

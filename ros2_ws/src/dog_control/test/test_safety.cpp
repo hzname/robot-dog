@@ -283,3 +283,34 @@ TEST(SafetyIdle, TheDeadlineIsValidated)
   p.safety_idle_lie_s = 0.0;    // off
   EXPECT_NO_THROW(LocomotionController{p});
 }
+
+// The two angles have different jobs: the soft threshold must not react to the
+// gait's own accelerations, and the hard one must not wait for the filter.
+
+TEST(SafetyTilt, TheSoftThresholdIgnoresAccelerometerSpikes)
+{
+  LocomotionController c(benchParams());
+  stand(c);
+
+  for (int i = 0; i < 50; ++i) {          // half a second of a walking-like spike
+    c.setImuAttitude(6.0 * kDeg, 0.0, 0.01);  // the filter says the body is level
+    c.setFallTilt(28.0 * kDeg, 0.0);          // the accelerometer shouts during a step
+    c.update(0.01);
+  }
+  EXPECT_EQ(c.mode(), Mode::STAND) << "a step's own acceleration must not lie the robot down";
+  EXPECT_FALSE(c.fallen());
+}
+
+TEST(SafetyTilt, TheHardThresholdTrustsTheAccelerometer)
+{
+  LocomotionController c(benchParams());
+  stand(c);
+
+  for (int i = 0; i < 30; ++i) {          // the filter has a second of lag, the fall does not
+    c.setImuAttitude(10.0 * kDeg, 0.0, 0.01);
+    c.setFallTilt(40.0 * kDeg, 0.0);
+    c.update(0.01);
+  }
+  EXPECT_TRUE(c.fallen()) << "the accelerometer sees the fall while the filter is still catching up";
+  EXPECT_NE(std::string::npos, c.fallReason().find("40")) << c.fallReason();
+}
