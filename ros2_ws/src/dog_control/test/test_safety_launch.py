@@ -57,7 +57,9 @@ class TestFallProtection(unittest.TestCase):
 
     def on_diagnostics(self, msg):
         for status in msg.status:
-            self.diags.append((status.name, status.level, status.message))
+            # rclpy hands a uint8 field back as one byte, not as an int.
+            level = status.level[0] if isinstance(status.level, bytes) else status.level
+            self.diags.append((status.name, level, status.message))
 
     def tearDown(self):
         self.node.destroy_node()
