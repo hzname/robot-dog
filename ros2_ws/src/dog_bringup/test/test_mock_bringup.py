@@ -33,7 +33,10 @@ def generate_test_description():
             PythonLaunchDescriptionSource(launch_file),
             launch_arguments={'backend': 'mock', 'gamepad': 'false', 'web': 'true',
                               'web_port': str(WEB_PORT), 'power': 'mock',
-                              'imu': 'mock'}.items()),
+                              'imu': 'mock',
+                              # The page's calibration channel is closed by default
+                              # (TEL-02); this test is the calibration session.
+                              'calibrate': 'true'}.items()),
         launch_testing.actions.ReadyToTest(),
     ])
 
