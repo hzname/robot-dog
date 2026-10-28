@@ -233,7 +233,12 @@ class TestMockBringup(unittest.TestCase):
             # Commands are rejected while the e-stop is engaged.
             self.cmd_pub.publish(String(data='stand'))
             self.assertFalse(self.spin_until(lambda: self.state != 'estop', 1.0))
+            # The page cannot release what it engaged: only the gamepad can (TEL-02).
             ws.send({'type': 'estop', 'active': False})
+            msg = ws.recv_until(lambda m: m['type'] == 'error')
+            self.assertIn('gamepad', msg['message'])
+            self.assertFalse(self.spin_until(lambda: self.state != 'estop', 1.0))
+            self.estop_pub.publish(Bool(data=False))   # what joy_teleop's Start does
             self.assertTrue(self.spin_until(lambda: self.state == 'passive', 3.0))
             ws.send({'type': 'command', 'name': 'stand'})
             self.assertTrue(self.spin_until(lambda: self.state == 'stand', 8.0))
