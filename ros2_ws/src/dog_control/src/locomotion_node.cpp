@@ -694,6 +694,15 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr pose_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr estop_sub_;
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr imu_calibrated_sub_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr estop_pub_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr recover_srv_;
+  rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr release_client_;
+  rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr arm_client_;
+  std::unique_ptr<dog_diagnostics::Reporter> diag_;
+  rclcpp::TimerBase::SharedPtr diag_timer_;
+  bool fall_announced_{false};
+  std::string risk_profile_{"bench"};
   rclcpp::TimerBase::SharedPtr timer_;
 };
 
