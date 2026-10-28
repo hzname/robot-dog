@@ -3,14 +3,8 @@
 #   docker build -f docker/Dockerfile -t robot-dog:2.0 .
 #   docker build -f docker/Dockerfile --build-arg ROS_DISTRO=lyrical -t robot-dog:2.0-lyrical .
 #
-# ros-base plus std_srvs (the driver's release_fault service type) and service_msgs.
-#
-# The second one is not used directly: it is named so that apt upgrades it in the
-# same transaction. Installing an interface package alone pulls a newer build whose
-# typesupport calls symbols the image's older service_msgs does not have, and the
-# node dies at startup with "symbol lookup error" (exit 127). diagnostic_msgs is
-# already in ros-base and must not be reinstalled for the same reason. Nothing else
-# outside ros-base
+# ros-base plus std_srvs (the driver's release_fault service type). diagnostic_msgs
+# comes with ros-base; nothing else is added
 # outside it (no xacro, no joy, no ros2_control), which keeps the image small on
 # the Pi.
 ARG ROS_DISTRO=jazzy
@@ -20,10 +14,14 @@ ARG ROS_DISTRO
 ARG BUILD_JOBS=2
 
 SHELL ["/bin/bash", "-c"]
+# std_srvs is not in ros-base, and installing it alone is a trap: apt takes the
+# current build of it while the image keeps its older interface neighbours, and the
+# typesupport of the new package then calls symbols they do not have - the node dies
+# at startup with "symbol lookup error" (exit 127). Upgrading the whole installed set
+# in the same layer keeps the interface stack consistent.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-      ros-${ROS_DISTRO}-std-srvs \
-      ros-${ROS_DISTRO}-service-msgs \
+ && apt-get install -y --no-install-recommends ros-${ROS_DISTRO}-std-srvs \
+ && apt-get upgrade -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /ws
 COPY ros2_ws/src ./src
