@@ -18,3 +18,6 @@ __pycache__/
 
 # robot_setup backups
 ros2_ws/src/dog_bringup/config/*.bak
+
+# Measured servo calibration: lives on the robot, never in git (CAL-05).
+**/servos.local.yaml

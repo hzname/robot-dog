@@ -1,5 +1,6 @@
 import math
 import os
+import re
 import shutil
 import sys
 
@@ -255,3 +256,51 @@ def test_editing_calf_max_keeps_the_coupling_and_the_window(cfg):
             assert new[key] == old[key], (leg, key)
     robot = yaml.safe_load(open(os.path.join(cfg, 'robot.yaml')))['/**']['ros__parameters']
     assert robot['description']['calf_limits_deg'] == [-140.0, -45.0]
+
+
+# --- CAL-06: the calibration checks -------------------------------------------
+
+def _set_offset(cfg, joint, offset, direction=None):
+    path = os.path.join(cfg, 'servos.yaml')
+    text = open(path).read()
+    pattern = re.compile(r'(%s:\s*\{[^}]*?offset_deg:\s*)([-+0-9.]+)' % joint)
+    assert pattern.search(text), joint
+    text = pattern.sub(lambda m: m.group(1) + str(offset), text, count=1)
+    if direction is not None:
+        text = re.sub(r'(%s:\s*\{[^}]*?direction:\s*)([-+0-9]+)' % joint,
+                      lambda m: m.group(1) + str(direction), text, count=1)
+    open(path, 'w').write(text)
+
+
+def test_servo_check_reports_the_pairs_that_drifted(cfg):
+    v = rs.load(cfg)
+    msgs = rs.check_servos(cfg, v)
+    texts = ' | '.join(t for _, t in msgs)
+    assert 'разброс смещений' in texts
+    # The shipped file already carries a real asymmetry, so the check must see it.
+    assert any(lv == 'warn' and 'разошлись' in t for lv, t in msgs), msgs
+
+
+def test_servo_check_accepts_a_symmetric_calibration(cfg):
+    for joint, offset in (('lf_thigh_joint', 30.0), ('rf_thigh_joint', -30.0),
+                          ('lr_thigh_joint', 30.0), ('rr_thigh_joint', -30.0)):
+        _set_offset(cfg, joint, offset)
+    for joint, direction in (('lf_thigh_joint', 1), ('rf_thigh_joint', -1)):
+        _set_offset(cfg, joint, 30.0 if joint.startswith('lf') else -30.0, direction)
+    msgs = rs.check_servos(cfg, rs.load(cfg))
+    thigh = [t for lv, t in msgs if t.startswith('thigh')]
+    assert not [t for t in thigh if 'разошлись' in t], thigh
+
+
+def test_servo_check_flags_one_direction_on_mirrored_servos(cfg):
+    _set_offset(cfg, 'rf_thigh_joint', -56.0, direction=1)   # same sign as lf now
+    msgs = rs.check_servos(cfg, rs.load(cfg))
+    assert any('одинаковое направление' in t for _, t in msgs), msgs
+
+
+def test_servo_check_flags_a_servo_at_the_edge_in_the_stand_pose(cfg):
+    # The stand pulse is 1370 us at offset 0 and moves ~9.4 us per degree, so an
+    # offset of 85 deg lands inside the 5 % band at the low edge (below 605 us).
+    _set_offset(cfg, 'lf_hip_joint', 85.0)
+    msgs = rs.check_servos(cfg, rs.load(cfg))
+    assert any('у края' in t for _, t in msgs), msgs

@@ -6,6 +6,7 @@ Client -> server (JSON text frames):
   {"type": "command", "name": "stand" | "lie" | "greet" | "survey" | "crawl" | "trot"}
   {"type": "estop", "active": true | false}
   {"type": "pose", "pitch": -1..1, "height": <metres offset>}
+  {"type": "ping"}                                              keep-alive, no reply
 Server -> client:
   {"type": "hello", "limits": {...}}
   {"type": "state", "mode": "...", "estop": bool, "clients": n}
@@ -79,6 +80,8 @@ def handle_message(text: str, limits: Limits) -> Actions:
             out.estop = active
             if active:
                 out.twist = (0.0, 0.0, 0.0)
+        elif kind == 'ping':
+            pass  # keep-alive from the page: the server closes silent sessions
         elif kind == 'pose':
             out.pose = (
                 _num(msg, 'pitch', -1, 1) * limits.max_pitch,
@@ -89,6 +92,51 @@ def handle_message(text: str, limits: Limits) -> Actions:
     except (ValueError, json.JSONDecodeError) as exc:
         out = Actions(errors=[str(exc)])
     return out
+
+
+def estop_decision(current: bool, requested: bool):
+    """(allowed, publish, reason) for an E-STOP request from the web page.
+
+    Engaging is always allowed - stopping the robot is a safe action from anywhere.
+    Releasing is not: the page cannot know who is holding the robot, and a random
+    tab must not be able to clear the latch. The gamepad's Start button is the way
+    out (TEL-02).
+    """
+    if requested:
+        return True, True, ''
+    if not current:
+        return True, False, ''      # already released, nothing to publish
+    return False, False, 'the E-STOP is released from the gamepad, not the web page'
+
+
+def gate_actions(actions, *, drive_enabled: bool, estop_engaged: bool):
+    """Drop what this page may not do; returns (actions, errors).
+
+    In view-only mode (profile:=floor) the page shows state and may still hit the
+    E-STOP, but it cannot drive, command a pose or ask for a gait.
+    """
+    errors = []
+    if actions.estop is not None:
+        allowed, publish, reason = estop_decision(estop_engaged, actions.estop)
+        if not allowed:
+            errors.append(reason)
+            actions.estop = None
+        elif not publish:
+            actions.estop = None
+    if not drive_enabled:
+        if actions.twist is not None:
+            # An E-STOP message carries a zero twist on purpose; that is not an
+            # attempt to drive, so it is dropped silently.
+            if any(actions.twist):
+                errors.append('view only: this robot runs the floor profile')
+            actions.twist = None
+        if actions.command:
+            actions.command = None
+            errors.append('view only: commands come from the gamepad')
+        if actions.pose is not None:
+            actions.pose = None
+            errors.append('view only: body pose comes from the gamepad')
+    return actions, errors
 
 
 class DriveWatchdog:
@@ -116,8 +164,9 @@ def hello(limits: Limits) -> str:
     return json.dumps({'type': 'hello', 'limits': limits.__dict__})
 
 
-def state(mode: str, estop: bool, clients: int) -> str:
-    return json.dumps({'type': 'state', 'mode': mode, 'estop': estop, 'clients': clients})
+def state(mode: str, estop: bool, clients: int, view_only: bool = False) -> str:
+    return json.dumps({'type': 'state', 'mode': mode, 'estop': estop, 'clients': clients,
+                       'view_only': bool(view_only)})
 
 
 GUARD_STATES = ('clear', 'caution', 'step_over', 'crawl', 'stop', 'avoid')

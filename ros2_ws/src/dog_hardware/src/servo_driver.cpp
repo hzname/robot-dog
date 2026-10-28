@@ -374,6 +374,15 @@ bool ServoDriver::setCalibration(size_t index, const ServoCalibration & cal)
   return true;
 }
 
+double ServoDriver::liveCalibrationStepDeg(size_t index, const ServoCalibration & cal) const
+{
+  if (index >= cals_.size() || state_[index] != State::ON) {return 0.0;}
+  const double before = jointToPulseUs(cals_[index], current_[index], nullptr, parentAngle(index));
+  const double after = jointToPulseUs(cal, current_[index], nullptr, parentAngle(index));
+  const double us_per_deg = 0.5 * (cals_[index].usPerDeg() + cal.usPerDeg());
+  return std::abs(after - before) / (us_per_deg > 0.0 ? us_per_deg : 1.0);
+}
+
 bool ServoDriver::anyEnabled() const
 {
   return std::any_of(state_.begin(), state_.end(), [](State s) {return s == State::ON;});

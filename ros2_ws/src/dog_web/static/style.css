@@ -24,6 +24,8 @@ header { display: flex; justify-content: space-between; align-items: center;
 .pill.off { border-color: var(--danger); color: var(--danger); }
 .pill.estop { background: var(--danger); color: #fff; border-color: var(--danger); }
 .pill.walk { border-color: var(--accent); color: var(--accent); }
+.pill.viewonly { border-color: var(--accent); color: var(--accent); margin: 0 0 12px; }
+.locked, button:disabled { opacity: .35; pointer-events: none; }
 main { max-width: 900px; margin: 0 auto; padding: 12px 16px 24px; }
 
 .actions { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 8px; }

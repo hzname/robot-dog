@@ -11,6 +11,7 @@ Keyboard control runs in its own terminal (needs a TTY):
 """
 
 import os
+import sys
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -20,15 +21,27 @@ from launch_ros.actions import Node
 
 from dog_description.urdf import build_urdf, load_config
 
+# profile.py is installed next to this file (CMakeLists installs both into share/launch)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import profile as profiles  # noqa: E402
+
 NS = 'dog'
 
 
 def _setup(context):
     cfg = lambda name: LaunchConfiguration(name).perform(context)  # noqa: E731
+    log = lambda text: print('[dog_bringup] ' + text, flush=True)  # noqa: E731
     on = lambda name: cfg(name).lower() in ('1', 'true', 'yes')  # noqa: E731
     share = get_package_share_directory('dog_bringup')
     robot_yaml = cfg('robot_config') or os.path.join(share, 'config', 'robot.yaml')
     servos_yaml = cfg('servo_config') or os.path.join(share, 'config', 'servos.yaml')
+    # The measured calibration lands in servos.local.yaml: it is not tracked, so a
+    # `git pull` cannot overwrite what the robot was calibrated to (CAL-05). The
+    # overlay is passed second, so it wins over the reference values in git.
+    servos_local = os.path.join(os.path.dirname(servos_yaml), 'servos.local.yaml')
+    servo_files = [servos_yaml]
+    if os.path.isfile(servos_local):
+        servo_files.append(servos_local)
     power_yaml = os.path.join(share, 'config', 'power.yaml')
     # Power sensor: probe the bus on the robot; off for mock runs unless asked.
     power_backend = cfg('power') or ('auto' if cfg('backend') == 'pca9685' else 'off')
@@ -37,11 +50,15 @@ def _setup(context):
     # On hardware the driver waits for ~/arm: the robot is always started by hand
     # (D-06). A simulation has nobody to press it, so the mock backend arms itself.
     armed = (on('armed_on_start') if cfg('armed_on_start') else cfg('backend') == 'mock')
+    profile_name = profiles.check(cfg('profile'))
+    calibrate = on('calibrate')
     teleop_yaml = os.path.join(share, 'config', 'teleop.yaml')
     teleop_files = [teleop_yaml]
     if cfg('gamepad_profile') == 'ps':
         teleop_files.append(os.path.join(share, 'config', 'teleop_ps.yaml'))
 
+    log(profiles.summary(profile_name))
+    log('servo calibration: ' + ', '.join(servo_files))
     geometry, description = load_config(robot_yaml)
     urdf = build_urdf(geometry, description)
 
@@ -51,10 +68,12 @@ def _setup(context):
         # odom: dead-reckoned by locomotion (there is no odometry sensor); the
         # perception guard and map need a pose
         Node(package='dog_control', executable='locomotion_node', name='locomotion',
-             namespace=NS, parameters=[robot_yaml, {'odom.publish': True}], output='screen'),
+             namespace=NS,
+             parameters=[robot_yaml, {'odom.publish': True},
+                         profiles.params(profile_name, 'locomotion')], output='screen'),
         Node(package='dog_hardware', executable='servo_driver_node', name='servo_driver',
-             namespace=NS, parameters=[servos_yaml, {'backend': cfg('backend'),
-                                                     'armed_on_start': armed}],
+             namespace=NS, parameters=servo_files + [{'backend': cfg('backend'),
+                                                      'armed_on_start': armed}],
              output='screen'),
     ]
     if power_backend != 'off':
@@ -83,12 +102,17 @@ def _setup(context):
             Node(package='dog_teleop', executable='gamepad_node', name='gamepad',
                  namespace=NS, parameters=teleop_files, output='screen'),
             Node(package='dog_teleop', executable='joy_teleop_node', name='joy_teleop',
-                 namespace=NS, parameters=teleop_files, output='screen'),
+                 namespace=NS,
+                 parameters=teleop_files + [profiles.params(profile_name, 'joy_teleop')],
+                 output='screen'),
         ]
     if on('web'):
         actions.append(
             Node(package='dog_web', executable='web_teleop', name='web_teleop',
-                 namespace=NS, parameters=[teleop_yaml, {'port': int(cfg('web_port'))}],
+                 namespace=NS,
+                 parameters=[teleop_yaml, {'port': int(cfg('web_port'))},
+                             {'allow_calibration': profiles.allow_calibration(profile_name, calibrate)},
+                             profiles.params(profile_name, 'web_teleop')],
                  output='screen'))
     if on('rviz'):
         actions.append(
@@ -127,5 +151,11 @@ def generate_launch_description():
                               description='override path to robot.yaml'),
         DeclareLaunchArgument('servo_config', default_value='',
                               description='override path to servos.yaml'),
+        DeclareLaunchArgument('profile', default_value='bench',
+                              description='bench (table) or floor (first walk outside: 0.05 m/s, '
+                                          'IMU required, web view-only, no calibration)'),
+        DeclareLaunchArgument('calibrate', default_value='false',
+                              description='open the web calibration channel for a calibration '
+                                          'session; ignored by the floor profile'),
         OpaqueFunction(function=_setup),
     ])

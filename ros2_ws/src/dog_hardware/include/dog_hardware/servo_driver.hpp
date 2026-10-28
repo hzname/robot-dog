@@ -119,6 +119,12 @@ public:
   bool estop() const {return estop_;}
   bool setCalibration(size_t index, const ServoCalibration & cal);
 
+  /// How far [deg] the pulse of an enabled channel would move for its *current*
+  /// target if `cal` replaced the calibration now. Zero for a channel that is off:
+  /// nothing is holding it, so nothing can jump. Used to refuse a live calibration
+  /// step that would snap a servo (CAL-04).
+  double liveCalibrationStepDeg(size_t index, const ServoCalibration & cal) const;
+
   /// Latch the driver's own emergency release: every output off, commands
   /// ignored. Only an explicit operator action clears it (see `clearFault`).
   void latchFault(const std::string & reason);

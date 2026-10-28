@@ -28,7 +28,7 @@ set -euo pipefail
 
 usage() {
   echo "usage: $0 <package> <test> [gtest args...]" >&2
-  echo "  package: dog_control | dog_bench | dog_hardware" >&2
+  echo "  package: dog_control | dog_bench | dog_hardware | dog_teleop" >&2
 }
 
 if [ $# -lt 2 ]; then
@@ -41,9 +41,9 @@ TEST="$2"
 shift 2
 
 case "$PACKAGE" in
-  dog_control|dog_bench|dog_hardware) ;;
+  dog_control|dog_bench|dog_hardware|dog_teleop) ;;
   *)
-    echo "error: package '$PACKAGE' is not supported here (dog_control, dog_bench, dog_hardware)" >&2
+    echo "error: package '$PACKAGE' is not supported here (dog_control, dog_bench, dog_hardware, dog_teleop)" >&2
     exit 2
     ;;
 esac

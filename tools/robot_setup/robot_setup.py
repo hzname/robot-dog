@@ -253,6 +253,83 @@ def stand_angles(thigh, calf, h):
     return math.degrees(q1), math.degrees(q2)
 
 
+MIRROR_PAIRS = (('lf', 'rf'), ('lr', 'rr'))
+LEG_JOINTS = ('hip', 'thigh', 'calf')
+
+
+def servo_params(config_dir):
+    """The joint table of servos.yaml (`/**/servo_driver: ros__parameters`)."""
+    servos_p = paths(config_dir)[1]
+    doc = yaml.safe_load(open(servos_p)) or {}
+    node = doc.get('/**/servo_driver') or doc.get('/**') or {}
+    return node.get('ros__parameters', {}) or {}
+
+
+def check_servos(config_dir, v):
+    """[(level, text)] about the calibration itself (CAL-06).
+
+    Three mistakes a hand calibration makes: a mirrored pair drifts apart, the
+    offsets scatter across four legs, and a servo already sits at the edge of its
+    pulse range in the stand pose - the pose it spends most of its life in.
+    """
+    out = []
+    joints = {k: c for k, c in servo_params(config_dir).items()
+              if isinstance(c, dict) and 'offset_deg' in c}
+    if not joints:
+        return [('warn', 'servos.yaml: нет таблицы суставов — калибровку проверить нечем')]
+
+    for leg in LEG_JOINTS:
+        for a, b in MIRROR_PAIRS:
+            ka, kb = f'{a}_{leg}_joint', f'{b}_{leg}_joint'
+            if ka not in joints or kb not in joints:
+                continue
+            da, db = joints[ka], joints[kb]
+            gap = abs(abs(float(da['offset_deg'])) - abs(float(db['offset_deg'])))
+            if gap > 5.0:
+                out.append(('warn', f'{leg}: {a} и {b} разошлись на {gap:.1f}° '
+                                    f'({da["offset_deg"]} и {db["offset_deg"]}) — проверьте зеркальность'))
+            if int(da.get('direction', 1)) == int(db.get('direction', 1)):
+                out.append(('warn', f'{leg}: у {a} и {b} одинаковое направление '
+                                    f'({da.get("direction")}) — на зеркальных сервах оно обычно разное'))
+        vals = [float(joints[f'{a}_{leg}_joint']['offset_deg'])
+                for a in ('lf', 'rf', 'lr', 'rr') if f'{a}_{leg}_joint' in joints]
+        if len(vals) >= 3:
+            spread = max(vals) - min(vals)
+            level = 'warn' if spread > 15.0 else 'info'
+            out.append((level, f'{leg}: разброс смещений {spread:.1f}° '
+                               f'({min(vals):+.1f}…{max(vals):+.1f})'))
+
+    g = {k: float(v[k]) for k in FIELDS}
+    ang = stand_angles(g['thigh'], g['calf'], g['stand_height'])
+    if not ang:
+        return out
+    q1, q2 = ang
+    posed = {'hip': 0.0, 'thigh': q1, 'calf': q2}
+    for leg in ('lf', 'rf', 'lr', 'rr'):
+        for joint, q in posed.items():
+            key = f'{leg}_{joint}_joint'
+            c = joints.get(key)
+            if not c:
+                continue
+            if float(c.get('servo_arm_mm', 0.0) or 0.0) > 0:
+                out.append(('info', f'{key}: рычажный привод — край пульса считается драйвером'))
+                continue
+            parent = q1 if str(c.get('coupled_to') or '') else 0.0
+            if joint != 'calf':
+                parent = 0.0
+            pmin = float(c.get('pulse_min_us', 520.0))
+            pmax = float(c.get('pulse_max_us', 2220.0))
+            us_per_deg = (pmax - pmin) / float(c.get('range_deg', 180.0))
+            servo_deg = int(c.get('direction', 1)) * (
+                q + float(c.get('coupling', 0.0) or 0.0) * parent - float(c['offset_deg']))
+            pulse = 0.5 * (pmin + pmax) + servo_deg * us_per_deg
+            edge = 0.05 * (pmax - pmin)
+            if pulse < pmin + edge or pulse > pmax - edge:
+                out.append(('warn', f'{key}: в позе стоя пульс {pulse:.0f} мкс у края '
+                                    f'{pmin:.0f}…{pmax:.0f}'))
+    return out
+
+
 def linkage_closes(a, b, c, d):
     """Four-bar at the servo centre: servo arm a perpendicular to the axis line d,
     joint arm b, rod c. True if the rod can connect the two arms."""
@@ -619,7 +696,11 @@ NEXT = ('Дальше: проверить в симуляции, что робо
         '  cd ros2_ws && colcon build && source install/setup.bash\n'
         '  ros2 launch dog_gazebo sim.launch.py headless:=true web:=false &\n'
         '  ros2 run dog_gazebo walk_check\n'
-        'и закоммитить robot.yaml и servos.yaml.')
+        'и закоммитить robot.yaml и servos.yaml.\n'
+        'Калибровка с камеры (autocal --servos-yaml .../servos.local.yaml) остаётся в\n'
+        'servos.local.yaml: git pull её не перезаписывает. Когда робот принят с этой\n'
+        'калибровкой, поставьте тег, чтобы история знала, с чем ходили:\n'
+        '  git tag robot-calibrated-$(date +%F) && git push --tags')
 
 
 # ------------------------------------------------------------------ CLI
@@ -776,7 +857,9 @@ def main(argv=None):
     ap.add_argument('--no-browser', action='store_true')
     a = ap.parse_args(argv)
     if a.check:
-        msgs, _ = validate(load(a.config))
+        v = load(a.config)
+        msgs, _ = validate(v)
+        msgs = list(msgs) + check_servos(a.config, v)
         for lv, t in msgs:
             print({'error': 'ОШИБКА', 'warn': 'внимание', 'info': '·'}[lv], t)
         return 2 if any(lv == 'error' for lv, _ in msgs) else 0

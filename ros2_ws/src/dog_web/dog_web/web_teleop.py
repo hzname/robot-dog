@@ -67,7 +67,12 @@ class WebTeleop(Node):
         self.mode = 'unknown'
         self.web_clients = set()
         self._aio_loop = None
-        self.allow_calibration = bool(self.declare_parameter('allow_calibration', True).value)
+        # Closed by default: the page may tune calibration only when the launch file
+        # was started with calibrate:=true for a calibration session (TEL-02).
+        self.allow_calibration = bool(self.declare_parameter('allow_calibration', False).value)
+        # The floor profile starts the page read-only: state and the E-STOP only.
+        self.drive_enabled = bool(self.declare_parameter('drive_enabled', True).value)
+        self._estop = False          # last E-STOP state we published
         self.cal = CalibrationBridge(self) if self.allow_calibration else None
         # The driver comes up disarmed (SAF-12). Pressing "stand" is the operator's
         # explicit gesture, so the page arms first and then asks for the pose.
@@ -111,6 +116,7 @@ class WebTeleop(Node):
 
     def send_actions(self, actions: protocol.Actions):
         if actions.estop is not None:
+            self._estop = bool(actions.estop)
             self.estop_pub.publish(Bool(data=actions.estop))
             self.get_logger().warning('web: E-STOP %s' % ('ENGAGED' if actions.estop else 'released'))
         if actions.command:
@@ -179,7 +185,8 @@ class WebTeleop(Node):
                     lambda: asyncio.ensure_future(self._broadcast(text)))
 
     def _state_json(self):
-        return protocol.state(self.mode, self.mode == 'estop', len(self.web_clients))
+        return protocol.state(self.mode, self.mode == 'estop', len(self.web_clients),
+                              view_only=not self.drive_enabled)
 
     async def _broadcast_state(self):
         text = self._state_json()
@@ -215,6 +222,10 @@ class WebTeleop(Node):
                 if actions.errors:
                     await ws.send(json.dumps({'type': 'error', 'message': actions.errors[0]}))
                     continue
+                actions, refused = protocol.gate_actions(
+                    actions, drive_enabled=self.drive_enabled, estop_engaged=self._estop)
+                for reason in refused:
+                    await ws.send(json.dumps({'type': 'error', 'message': reason}))
                 if actions.twist is not None:
                     watchdog.feed(actions.twist, time.monotonic())
                 try:
@@ -277,7 +288,9 @@ class WebTeleop(Node):
         stop = asyncio.Event()
         for sig in (signal.SIGINT, signal.SIGTERM):
             self._aio_loop.add_signal_handler(sig, stop.set)
-        server = Server(self.static_dir, self.handle_client)
+        server = Server(self.static_dir, self.handle_client,
+                        max_clients=int(self.declare_parameter('max_clients', 4).value),
+                        idle_timeout=float(self.declare_parameter('idle_timeout', 60.0).value))
         port = await server.start(self.host, self.port)
         self.get_logger().info('web teleop on http://%s:%d' % (self.host, port))
         try:

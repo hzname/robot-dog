@@ -170,3 +170,17 @@ TEST(KeyboardMapper, CommandsEstopAndQuit)
   ASSERT_TRUE(out.twist);
   EXPECT_TRUE(out.twist->isZero());
 }
+
+TEST(JoyMapper, TurboScaleCapsTheTurboButton)
+{
+  // The floor profile sets turbo_scale equal to normal_scale: the button still
+  // works, it just gives nothing extra.
+  Limits lim;
+  JoyProfile p;
+  p.normal_scale = 0.5;
+  p.turbo_scale = 0.5;
+  JoyMapper m(p, lim);
+  const auto out = m.process(axes(0.0f, 1.0f, 1.0f), buttons({LB, RB}));
+  ASSERT_TRUE(out.twist);
+  EXPECT_NEAR(out.twist->vx, 0.5 * lim.max_vx, 1e-9);
+}

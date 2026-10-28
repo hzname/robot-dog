@@ -164,6 +164,10 @@ public:
       });
 
     estop_pub_ = create_publisher<std_msgs::msg::Bool>("estop", rclcpp::QoS(10).reliable());
+    // Latched so a tool started later (keyboard_teleop, a script) sees the profile
+    // this robot was launched with. profile:=floor makes that tool stand down.
+    profile_pub_ = create_publisher<std_msgs::msg::String>(
+      "profile", rclcpp::QoS(1).reliable().transient_local());
     diag_ = std::make_unique<dog_diagnostics::Reporter>(this, "locomotion");
     diag_timer_ = create_wall_timer(std::chrono::seconds(1), [this]() {report();});
     release_client_ = create_client<std_srvs::srv::Trigger>("servo_driver/release_fault");
@@ -405,6 +409,12 @@ private:
     }
     p.safety_require_imu = profile == "floor";
     risk_profile_ = profile;
+    {
+      std_msgs::msg::String msg;
+      msg.data = risk_profile_;
+      profile_pub_->publish(msg);
+      RCLCPP_INFO(get_logger(), "profile: %s", risk_profile_.c_str());
+    }
 
     p.max_velocity.vx = declare_parameter("limits.max_vx", p.max_velocity.vx);
     p.max_velocity.vy = declare_parameter("limits.max_vy", p.max_velocity.vy);
@@ -747,6 +757,7 @@ private:
   bool fall_announced_{false};
   int recover_attempts_{0};
   std::string risk_profile_{"bench"};
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr profile_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 

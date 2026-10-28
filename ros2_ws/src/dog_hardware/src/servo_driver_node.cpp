@@ -350,6 +350,18 @@ private:
         result.reason = name + ": " + e.what();
         return result;
       }
+      const double step = driver_->liveCalibrationStepDeg(i, c);
+      if (step > max_live_step_deg_) {
+        // A live calibration change that snaps an enabled servo is refused, not
+        // smoothed: the operator sees the reason in cal_set_result (CAL-04).
+        char buf[192];
+        std::snprintf(buf, sizeof(buf),
+          "%s: live change would jump %.1f deg (limit %.0f) - move the joint or disarm first",
+          name.c_str(), step, max_live_step_deg_);
+        result.successful = false;
+        result.reason = buf;
+        return result;
+      }
       const auto err = c.validate();
       if (!err.empty() || !driver_->setCalibration(i, c)) {
         result.successful = false;
@@ -458,6 +470,7 @@ private:
   double relax_timeout_{2.0};
   bool relax_on_exit_{true};
   double last_cmd_{0.0};
+  double max_live_step_deg_{10.0};  // CAL-04: a live change may not snap a servo further
   bool timed_out_{false};
   int timeouts_{0};
   std::array<int, kPwmChannels> logged_faults_{};

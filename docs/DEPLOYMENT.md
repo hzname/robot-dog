@@ -760,3 +760,41 @@ journalctl -u servo-guard -f
 
 Проверка: `docker kill robot_dog` — в журнале сторожа должна появиться строка `outputs dropped` в
 течение секунды.
+
+## Калибровка серв: надстройка и тег
+
+Калибровка с камеры (`tools/autocal`) пишется не в отслеживаемый `servos.yaml`, а в
+`servos.local.yaml` рядом с ним:
+
+```
+python -m robotdog_autocal --apply \
+    --servos-yaml ros2_ws/src/dog_bringup/config/servos.local.yaml
+```
+
+- Файл перечислен в `.gitignore`, поэтому `git pull` его не перезаписывает: робот остаётся
+  откалиброванным после обновления кода.
+- `robot.launch.py` подхватывает надстройку сам, если она есть (`servos.yaml`, затем
+  `servos.local.yaml`; второй файл перекрывает первый) и печатает список файлов калибровки в лог.
+- `servos.yaml` остаётся эталоном в git: с ним поднимается новый робот и с ним же сравнивают.
+
+Правило «всё, с чем ходили, видно в истории» закрывается тегом, а не коммитом калибровки:
+
+```
+git tag robot-calibrated-$(date +%F) && git push --tags
+```
+
+Команду печатает `robot_setup` в конце работы.
+
+## Изоляция от симулятора (ROS_DOMAIN_ID)
+
+В `docker-compose.yml` у контейнера свой домен и без обнаружения по сети:
+
+```
+ROS_DOMAIN_ID=42
+ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
+```
+
+Симулятор на ноутбуке живёт в домене 0 и робота не видит. Плата отладки с ноутбука: запустить там
+`ROS_DOMAIN_ID=42 ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET`, а на роботе на время отладки поднять диапазон
+до `SUBNET` (иначе он не ответит на запросы из сети).
+

@@ -722,3 +722,37 @@ TEST_F(ArmTest, TheFirstMoveAfterArmingIsSlewLimited)
   EXPECT_NEAR(driver->positions()[0], 0.01, 1e-9);
   EXPECT_NEAR(bus->pulse(0), jointToPulseUs(driver->calibrations()[0], 0.01), 1e-9);
 }
+
+// --- CAL-04: a live calibration change may not snap an enabled servo -----------
+
+TEST(LiveCalibrationTest, AnEnabledChannelReportsHowFarItWouldJump)
+{
+  auto bus = std::make_shared<MockBus>();
+  DriverParams p;
+  p.armed_on_start = true;
+  const ServoCalibration c = knee();
+  ServoDriver driver(bus, {"lf_calf_joint"}, {c}, p);
+  driver.setTargets({"lf_calf_joint"}, {-90.0 * kDeg}, 0.0);
+  for (int step = 1; step <= 5; ++step) {
+    driver.update(step * 0.1);
+  }
+  ASSERT_TRUE(driver.anyEnabled());
+
+  ServoCalibration nudge = c;
+  nudge.offset_deg += 1.0;
+  EXPECT_NEAR(driver.liveCalibrationStepDeg(0, nudge), 1.0, 0.2);
+
+  ServoCalibration jump = c;
+  jump.offset_deg += 21.0;
+  EXPECT_GT(driver.liveCalibrationStepDeg(0, jump), 10.0)
+    << "the node refuses a live step above its limit";
+}
+
+TEST(LiveCalibrationTest, ADisabledChannelCannotJump)
+{
+  auto bus = std::make_shared<MockBus>();
+  ServoDriver driver(bus, {"lf_calf_joint"}, {knee()}, DriverParams{});  // not armed
+  ServoCalibration c = knee();
+  c.offset_deg += 40.0;
+  EXPECT_DOUBLE_EQ(driver.liveCalibrationStepDeg(0, c), 0.0);
+}
