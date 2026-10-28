@@ -52,7 +52,7 @@ class TestFallProtection(unittest.TestCase):
         latched = rclpy.qos.QoSProfile(depth=1, durability=rclpy.qos.DurabilityPolicy.TRANSIENT_LOCAL)
         self.node.create_subscription(Bool, 'estop', lambda m: self.estops.append(m.data), 10)
         self.node.create_subscription(String, 'state', lambda m: self.states.append(m.data), latched)
-        self.node.create_subscription(DiagnosticArray, 'diagnostics', self.on_diagnostics, 10)
+        self.node.create_subscription(DiagnosticArray, '/dog/diagnostics', self.on_diagnostics, 10)
         self.cmd = self.node.create_publisher(String, 'command', 10)
 
     def on_diagnostics(self, msg):
@@ -106,7 +106,7 @@ class TestFallProtection(unittest.TestCase):
         self.assertIn(True, self.estops, 'the fall must be announced as estop=true')
         self.spin(1.5)  # diagnostics are published at 1 Hz
         fall = [msg for name, level, msg in self.diags if name == 'locomotion' and level == 2]
-        self.assertTrue(fall, 'the fall must be an ERROR in diagnostics')
+        self.assertTrue(fall, 'the fall must be an ERROR in diagnostics; got %s' % (self.diags[-6:],))
         self.assertIn('tilt', fall[-1].lower())
 
         res = self.call('/dog/locomotion/recover')

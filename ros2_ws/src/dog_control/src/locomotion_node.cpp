@@ -247,12 +247,20 @@ public:
           a.z = -a.z;
         }
         const double norm = std::sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
-        if (norm > 0.5 * 9.80665 && norm < 1.5 * 9.80665) {
+        // Only a plausible "at rest" read may feed the guard: a landing spike or a
+        // bounce distorts the vector (the simulator spawns the robot from 0.25 m and
+        // the impact read as 46 degrees for a fifth of a second), while a robot
+        // actually toppling still reads close to 1 g.
+        if (norm > 0.8 * 9.80665 && norm < 1.2 * 9.80665) {
           const double roll_acc = std::atan2(a.y, a.z);
           const double pitch_acc = std::atan2(-a.x, std::sqrt(a.y * a.y + a.z * a.z));
           controller_->setFallTilt(
-            std::max(std::abs(roll_acc), std::abs(roll)) * (roll_acc < 0 ? -1.0 : 1.0) ,
+            std::max(std::abs(roll_acc), std::abs(roll)) * (roll_acc < 0 ? -1.0 : 1.0),
             std::max(std::abs(pitch_acc), std::abs(pitch)) * (pitch_acc < 0 ? -1.0 : 1.0));
+        } else {
+          // Implausible sample: hold the guard to the filter, which also resets its
+          // debounce instead of counting the spike towards a fall.
+          controller_->setFallTilt(roll, pitch);
         }
       });
 
