@@ -3,11 +3,11 @@ gsd_state_version: "1.0"
 current_phase: 07
 current_phase_name: Калибровка и аварийные проверки в люльке
 status: in_progress
-stopped_at: Phase 05 complete - profile:=floor is one argument, the page cannot release an e-stop, WebSocket has Origin/cap/idle limits, live calibration cannot snap a servo, and the calibration lives outside git; CI 40751490766 green
-last_updated: "2026-10-29T16:20:00.000Z"
+stopped_at: Phase 07 plans 01, 02 and 06 complete in code - IMU calibration gate, power latch with thresholds from a recording, and the bench tools that need no robot (imu_axes, robot_setup --report, fault drill on the mock bus, joy_replay, record-to-thresholds); the bench itself (07-03..07-05) needs the robot
+last_updated: "2026-10-29T18:40:00.000Z"
 last_activity: 2026-10-29
-last_activity_desc: Phase 05 closed - the floor profile, a view-only page, Origin/client/idle limits on the WebSocket, a 10-degree guard on live calibration, servos.local.yaml outside git, and a calibration check that found a 26-degree split between the front thighs
-state_head: ebdc33f
+last_activity_desc: Phase 07 without the robot - three drills prove the safety chain on the mock stack, the gamepad replay passes 13 of 13, and the check found that file-compressed recordings cannot be read back on this distro
+state_head: dbcf13b
 progress:
   total_phases: 8
   completed_phases: 4
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 
 ## Current Position
 
-Phase: 05 (Профиль первого выхода и защита пультов) — COMPLETE
-Plan: все пять планов закрыты (CAL-04, CAL-05, CAL-06, CAL-07, TEL-02, TEL-03, TEL-04, TEL-06, TEL-11)
-Status: код в `ebdc33f`, CI `40751490766` — `build + test` и `gazebo walk check` на обоих дистрибутивах, инструментальные джобы зелёные
-Last activity: 2026-10-29 - фаза 05: один аргумент `profile:=floor` делает робота консервативным, страница стала только просмотром и не снимает аварию, сокет получил Origin/лимит/простой, живая калибровка не может дёрнуть серву больше 10°, калибровка живёт в servos.local.yaml вне git
+Phase: 07 (Калибровка и аварийные проверки в люльке) — IN PROGRESS
+Plan: 07-01, 07-02, 07-06 закрыты кодом; 07-03, 07-04, 07-05 ждут робота
+Status: код в `dbcf13b`, CI `40928147502` — `build + test` на jazzy и lyrical, оба `gazebo walk check`, terrain, preflight, robot_setup, autocal, анализ скоростей — зелёные
+Last activity: 2026-10-29 - фаза 07 без робота: ворота калибровки IMU (CAL-08), защёлка потери шины и пороги по записи (SAF-07), пять инструментов стенда; три аварийных упражнения доказаны на мок-шине, пульт-реплей 13 из 13, запись → пороги сквозным прогоном; найдено, что запись со сжатием на этой сборке не читается — сжатие выключено
 
 Progress: [░░░░░░░░░░] 0%
 
