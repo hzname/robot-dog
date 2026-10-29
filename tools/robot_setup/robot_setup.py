@@ -13,14 +13,17 @@ kept as *.bak. Needs Python 3.8+ and PyYAML.
 """
 
 import argparse
+import datetime
 import difflib
 import functools
+import hashlib
 import http.server
 import json
 import math
 import os
 import re
 import shutil
+import subprocess
 import sys
 import webbrowser
 
@@ -257,12 +260,47 @@ MIRROR_PAIRS = (('lf', 'rf'), ('lr', 'rr'))
 LEG_JOINTS = ('hip', 'thigh', 'calf')
 
 
-def servo_params(config_dir):
-    """The joint table of servos.yaml (`/**/servo_driver: ros__parameters`)."""
-    servos_p = paths(config_dir)[1]
-    doc = yaml.safe_load(open(servos_p)) or {}
+def _servos_node(path):
+    doc = yaml.safe_load(open(path)) or {}
     node = doc.get('/**/servo_driver') or doc.get('/**') or {}
     return node.get('ros__parameters', {}) or {}
+
+
+def servo_params(config_dir):
+    """The joint table of servos.yaml (`/**/servo_driver: ros__parameters`)."""
+    return _servos_node(paths(config_dir)[1])
+
+
+def merged_servos(config_dir):
+    """What the driver sees: servos.yaml with servos.local.yaml laid on top, per joint.
+
+    The launch passes the local file as a second params file, so the robot's own
+    calibration wins; the factory file keeps the geometry nobody is supposed to edit.
+    """
+    base = servo_params(config_dir)
+    local_p = os.path.join(config_dir, 'servos.local.yaml')
+    if not os.path.exists(local_p):
+        return base, None
+    out = dict(base)
+    for key, value in _servos_node(local_p).items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = dict(out[key], **value)
+        else:
+            out[key] = value
+    return out, local_p
+
+
+def stand_pulse(g, c, joint, q1):
+    """Pulse of one servo in the stand pose, or None for a linkage drive (CAL-06)."""
+    if float(c.get('servo_arm_mm', 0.0) or 0.0) > 0:
+        return None
+    parent = q1 if (joint == 'calf' and str(c.get('coupled_to') or '')) else 0.0
+    pmin = float(c.get('pulse_min_us', 520.0))
+    pmax = float(c.get('pulse_max_us', 2220.0))
+    us_per_deg = (pmax - pmin) / float(c.get('range_deg', 180.0))
+    servo_deg = int(c.get('direction', 1)) * (
+        g + float(c.get('coupling', 0.0) or 0.0) * parent - float(c['offset_deg']))
+    return 0.5 * (pmin + pmax) + servo_deg * us_per_deg
 
 
 def check_servos(config_dir, v):
@@ -311,23 +349,109 @@ def check_servos(config_dir, v):
             c = joints.get(key)
             if not c:
                 continue
-            if float(c.get('servo_arm_mm', 0.0) or 0.0) > 0:
+            pulse = stand_pulse(q, c, joint, q1)
+            if pulse is None:
                 out.append(('info', f'{key}: рычажный привод — край пульса считается драйвером'))
                 continue
-            parent = q1 if str(c.get('coupled_to') or '') else 0.0
-            if joint != 'calf':
-                parent = 0.0
             pmin = float(c.get('pulse_min_us', 520.0))
             pmax = float(c.get('pulse_max_us', 2220.0))
-            us_per_deg = (pmax - pmin) / float(c.get('range_deg', 180.0))
-            servo_deg = int(c.get('direction', 1)) * (
-                q + float(c.get('coupling', 0.0) or 0.0) * parent - float(c['offset_deg']))
-            pulse = 0.5 * (pmin + pmax) + servo_deg * us_per_deg
             edge = 0.05 * (pmax - pmin)
             if pulse < pmin + edge or pulse > pmax - edge:
                 out.append(('warn', f'{key}: в позе стоя пульс {pulse:.0f} мкс у края '
                                     f'{pmin:.0f}…{pmax:.0f}'))
     return out
+
+
+def _sha256(path, chars=12):
+    h = hashlib.sha256()
+    with open(path, 'rb') as f:
+        for chunk in iter(lambda: f.read(65536), b''):
+            h.update(chunk)
+    return h.hexdigest()[:chars]
+
+
+def _git_rev():
+    try:
+        done = subprocess.run(['git', '-C', REPO, 'rev-parse', '--short', 'HEAD'],
+                              capture_output=True, text=True, timeout=5)
+        return done.stdout.strip() or 'неизвестно'
+    except (OSError, subprocess.SubprocessError):
+        return 'неизвестно'
+
+
+def report(config_dir, v):
+    """A markdown record of the calibration (CAL-01, CAL-03).
+
+    Written the moment the robot is calibrated, while the numbers are still in front of
+    you: the table behind the `robot-calibrated-<date>` tag, with both files hashed so a
+    later edit cannot pretend to be the same calibration.
+    """
+    joints, local_p = merged_servos(config_dir)
+    keys = [k for k in joints if isinstance(joints[k], dict) and 'offset_deg' in joints[k]]
+    g = {k: float(v[k]) for k in FIELDS}
+    ang = stand_angles(g['thigh'], g['calf'], g['stand_height'])
+    q1, q2 = ang if ang else (None, None)
+    pose = {'hip': 0.0, 'thigh': q1, 'calf': q2}
+
+    out = ['# Калибровка робота', '',
+           'Дата: %s' % datetime.datetime.now().strftime('%Y-%m-%d %H:%M'), '',
+           '- заводская раскладка `servos.yaml`: sha256 `%s`'
+           % _sha256(paths(config_dir)[1]),
+           '- калибровка робота `servos.local.yaml`: %s'
+           % ('sha256 `%s`' % _sha256(local_p) if local_p else 'файла нет — калибровка заводская'),
+           '- сборка: `%s`' % _git_rev(), '',
+           '| Сустав | Канал | Направление | offset, ° | Пределы, ° | В стойке, ° '
+           '| Пульс в стойке, мкс | Привод |',
+           '|---|---|---|---|---|---|---|---|']
+    # Leg-major, joint-minor: the order the robot is calibrated in (lf, rf, lr, rr).
+    ordered = ['%s_%s_joint' % (leg, joint) for leg in ('lf', 'rf', 'lr', 'rr')
+               for joint in LEG_JOINTS]
+    for key in [k for k in ordered if k in keys] + [k for k in sorted(keys) if k not in ordered]:
+        c = joints[key]
+        parts = key.split('_')
+        joint = parts[1] if len(parts) > 2 else ''
+        q = pose.get(joint)
+        pulse = stand_pulse(q, c, joint, q1) if q is not None else None
+        drive = 'рычаг'
+        if float(c.get('servo_arm_mm', 0.0) or 0.0) == 0:
+            drive = 'связано с бедром' if str(c.get('coupled_to') or '') else 'на валу'
+        out.append('| `%s` | %s | %+d | %+.1f | %+.0f…%+.0f | %s | %s | %s |' % (
+            key, c.get('channel', '—'), int(c.get('direction', 1)), float(c['offset_deg']),
+            float(c.get('min_deg', -180.0)), float(c.get('max_deg', 180.0)),
+            '%+.1f' % q if q is not None else '—',
+            '%.0f' % pulse if pulse is not None else '—', drive))
+
+    out += ['', '## Симметрия', '',
+            '| Сустав | lf и rf, ° | lr и rr, ° | Разброс по четырём, ° |',
+            '|---|---|---|---|']
+    for leg_joint in LEG_JOINTS:
+        cells = []
+        for a, b in MIRROR_PAIRS:
+            ka, kb = '%s_%s_joint' % (a, leg_joint), '%s_%s_joint' % (b, leg_joint)
+            if ka in joints and kb in joints:
+                cells.append('%+.1f' % (float(joints[ka]['offset_deg'])
+                                        - float(joints[kb]['offset_deg'])))
+            else:
+                cells.append('—')
+        vals = [float(joints['%s_%s_joint' % (a, leg_joint)]['offset_deg'])
+                for a in ('lf', 'rf', 'lr', 'rr')
+                if '%s_%s_joint' % (a, leg_joint) in joints]
+        spread = '%+.1f' % (max(vals) - min(vals)) if len(vals) >= 2 else '—'
+        out.append('| %s | %s | %s | %s |' % (leg_joint, cells[0], cells[1], spread))
+
+    checks = check_servos(config_dir, v)
+    out += ['', '## Замечания', '']
+    out += ['- %s: %s' % (lv, t) for lv, t in checks] or ['- нет']
+    errors = [t for lv, t in validate(v)[0] if lv == 'error']
+    out += ['- ОШИБКА: %s' % t for t in errors]
+
+    out += ['', '## Итог', '',
+            '- суставов в таблице: %d' % len(keys),
+            '- калибровка робота: %s' % ('своя' if local_p else 'заводская'),
+            '- замечаний: %d, ошибок: %d' % (len(checks), len(errors)), '',
+            'Этот файл прикладывается к тегу:',
+            '`git tag robot-calibrated-$(date +%F) && git push --tags`']
+    return '\n'.join(out) + '\n'
 
 
 def linkage_closes(a, b, c, d):
@@ -853,6 +977,8 @@ def main(argv=None):
     ap.add_argument('--config', default=CONFIG, help='folder with robot.yaml and servos.yaml')
     ap.add_argument('--cli', action='store_true', help='text mode instead of the web form')
     ap.add_argument('--check', action='store_true', help='only validate the current files')
+    ap.add_argument('--report', nargs='?', const='calibration-report.md', metavar='PATH',
+                    help='write the calibration record (markdown) and exit')
     ap.add_argument('--port', type=int, default=8765)
     ap.add_argument('--no-browser', action='store_true')
     a = ap.parse_args(argv)
@@ -863,6 +989,15 @@ def main(argv=None):
         for lv, t in msgs:
             print({'error': 'ОШИБКА', 'warn': 'внимание', 'info': '·'}[lv], t)
         return 2 if any(lv == 'error' for lv, _ in msgs) else 0
+    if a.report:
+        text = report(a.config, load(a.config))
+        if a.report == '-':
+            sys.stdout.write(text)
+        else:
+            with open(a.report, 'w', encoding='utf-8') as f:
+                f.write(text)
+            print('отчёт: %s' % a.report)
+        return 0
     if a.cli:
         return cli(a.config)
     return serve(a.config, a.port, not a.no_browser)

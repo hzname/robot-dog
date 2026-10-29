@@ -304,3 +304,57 @@ def test_servo_check_flags_a_servo_at_the_edge_in_the_stand_pose(cfg):
     _set_offset(cfg, 'lf_hip_joint', 85.0)
     msgs = rs.check_servos(cfg, rs.load(cfg))
     assert any('у края' in t for _, t in msgs), msgs
+
+
+# --- отчёт о калибровке (вход CAL-01 / CAL-03) ---------------------------------
+
+def test_the_report_covers_every_joint_and_hashes_both_files(cfg):
+    text = rs.report(cfg, rs.load(cfg))
+    for joint in rs.LEG_JOINTS:
+        for leg in ('lf', 'rf', 'lr', 'rr'):
+            assert '%s_%s_joint' % (leg, joint) in text, (leg, joint)
+    assert 'sha256' in text
+    assert 'файла нет' in text                       # no servos.local.yaml in a fresh clone
+    assert len([l for l in text.splitlines() if l.startswith('| `')]) == 12
+    # the factory asymmetry the shipped file really carries is named, not hidden
+    assert 'разошлись' in text or 'разброс' in text
+
+
+def test_the_report_shows_the_robots_own_calibration_over_the_factory_one(cfg):
+    with open(os.path.join(cfg, 'servos.local.yaml'), 'w') as f:
+        f.write('/**/servo_driver:\n  ros__parameters:\n'
+                '    lf_thigh_joint: {offset_deg: 47.5}\n'
+                '    rf_thigh_joint: {offset_deg: -47.5, direction: -1}\n')
+    text = rs.report(cfg, rs.load(cfg))
+    assert '+47.5' in text
+    assert '-47.5' in text
+    assert 'своя' in text                             # calibration source is the robot
+    # an overlay is a patch, not a replacement: channel and limits still come from the
+    # factory file, which the local file never mentions
+    row = [l for l in text.splitlines() if '`lf_thigh_joint`' in l][0]
+    assert '| 1 |' in row and '-45…+135' in row
+
+
+def test_the_report_pulse_follows_the_servo_it_belongs_to(cfg):
+    """A pulse is only useful next to its channel: a shifted offset must move it."""
+    before = rs.report(cfg, rs.load(cfg))
+    with open(os.path.join(cfg, 'servos.local.yaml'), 'w') as f:
+        f.write('/**/servo_driver:\n  ros__parameters:\n'
+                '    lf_hip_joint: {offset_deg: -14.0}\n')
+    after = rs.report(cfg, rs.load(cfg))
+    assert before != after
+    row_before = [l for l in before.splitlines() if 'lf_hip_joint' in l][0]
+    row_after = [l for l in after.splitlines() if 'lf_hip_joint' in l][0]
+    assert row_before != row_after
+    pulse_before = float(row_before.split('|')[7])
+    pulse_after = float(row_after.split('|')[7])
+    # 10 deg of offset at 9.44 us/deg: the pulse must move by about 94 us
+    assert abs(abs(pulse_after - pulse_before) - 94.4) < 2.0, (pulse_before, pulse_after)
+
+
+def test_the_report_cli_writes_a_file(cfg, tmp_path, monkeypatch, capsys):
+    out = tmp_path / 'calibration-report.md'
+    assert rs.main(['--config', cfg, '--report', str(out)]) == 0
+    assert 'отчёт' in capsys.readouterr().out
+    assert '# Калибровка робота' in out.read_text(encoding='utf-8')
+    assert 'Итог' in out.read_text(encoding='utf-8')
