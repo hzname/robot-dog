@@ -94,7 +94,10 @@ def _setup(context):
     delay_ms = parse_override('servo_delay_ms', cfg('servo_delay_ms'))
     backlash_deg, delay_s = bridge_settings(model, description.get('servo_sim'), delay_ms)
     sim_time = {'use_sim_time': True}
-    overrides = {'slope.compensation': on('slope_compensation'), 'heading.hold': on('heading_hold')}
+    # The simulated IMU is a model: no bias, known axes, nothing to verify, and the
+    # simulator never publishes imu/calibrated (there is no imu_node here).
+    overrides = {'slope.compensation': on('slope_compensation'), 'heading.hold': on('heading_hold'),
+                 'imu.require_calibrated': False}
     if on('dead_reckoning'):
         # the robot's own odometry beside Gazebo's true pose ("odom"), with a
         # heading from the gyro (plus a bias: a real gyro drifts)

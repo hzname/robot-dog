@@ -29,9 +29,21 @@ constexpr double kDt = 0.02;
 
 // Pinned reference set (the v1 robot as shipped before Phase 1): these tests check the
 // algorithm, so they must not move when plan 01-15 syncs the shipped defaults with the measured robot.
+/// The attitude tests drive the IMU directly: no bias, known axes, nothing to verify,
+/// so the calibration gate stands down here. The robot-side gate is in test_safety.cpp.
+LocomotionParams modelImu()
+{
+  LocomotionParams p;
+  p.imu_require_calibrated = false;
+  return p;
+}
+
 LocomotionParams pinnedParams()
 {
   LocomotionParams p;
+  // These tests check the algorithm against a model: the IMU here has no bias and known
+  // axes, so it needs no imu/calibrated (the robot-side gate is tested in test_safety).
+  p.imu_require_calibrated = false;
   p.leg.hip = 0.055;
   p.leg.thigh = 0.105;
   p.leg.calf = 0.105;
@@ -122,7 +134,7 @@ double phaseAdvance(LocomotionController & c)
 
 TEST(Locomotion, PassiveUntilStand)
 {
-  LocomotionController c(LocomotionParams{});
+  LocomotionController c(modelImu());
   EXPECT_EQ(c.mode(), Mode::PASSIVE);
   EXPECT_FALSE(c.update(kDt));
   c.setVelocity({0.1, 0, 0});
@@ -132,7 +144,7 @@ TEST(Locomotion, PassiveUntilStand)
 
 TEST(Locomotion, StandUpReachesStandHeight)
 {
-  LocomotionParams p;
+  const LocomotionParams p = modelImu();
   LocomotionController c(p);
   ASSERT_TRUE(c.request("stand"));
   EXPECT_TRUE(c.update(kDt));
@@ -152,7 +164,7 @@ TEST(Locomotion, StandUpReachesStandHeight)
 
 TEST(Locomotion, WalksAndStops)
 {
-  LocomotionController c(LocomotionParams{});
+  LocomotionController c(modelImu());
   c.request("stand");
   run(c, 2.0);
   c.setVelocity({0.1, 0, 0});
@@ -166,7 +178,7 @@ TEST(Locomotion, WalksAndStops)
 
 TEST(Locomotion, VelocityIsClampedAndRateLimited)
 {
-  LocomotionParams p;
+  const LocomotionParams p = modelImu();
   LocomotionController c(p);
   c.request("stand");
   run(c, 2.0);
@@ -182,7 +194,7 @@ TEST(Locomotion, VelocityIsClampedAndRateLimited)
 
 TEST(Locomotion, LieWhileWalkingFinishesStepsFirst)
 {
-  LocomotionController c(LocomotionParams{});
+  LocomotionController c(modelImu());
   c.request("stand");
   run(c, 2.0);
   c.setVelocity({0.1, 0, 0});
@@ -196,7 +208,7 @@ TEST(Locomotion, LieWhileWalkingFinishesStepsFirst)
 
 TEST(Locomotion, EstopGoesPassiveAndBlocksCommands)
 {
-  LocomotionController c(LocomotionParams{});
+  LocomotionController c(modelImu());
   c.request("stand");
   run(c, 2.0);
   c.setEstop(true);
@@ -210,7 +222,7 @@ TEST(Locomotion, EstopGoesPassiveAndBlocksCommands)
 
 TEST(Locomotion, BodyPitchLowersTheNose)
 {
-  LocomotionParams p;
+  const LocomotionParams p = modelImu();
   LocomotionController c(p);
   c.request("stand");
   run(c, 2.0);
@@ -225,7 +237,7 @@ TEST(Locomotion, BodyPitchLowersTheNose)
 
 TEST(Locomotion, UnknownCommandRejected)
 {
-  LocomotionController c(LocomotionParams{});
+  LocomotionController c(modelImu());
   EXPECT_FALSE(c.request("dance"));
 }
 
@@ -258,7 +270,7 @@ TEST(Locomotion, JointSpeedsFitTheServos)
 
 TEST(Locomotion, SlopeCompensationShiftsFeetDownhill)
 {
-  LocomotionParams p;
+  const LocomotionParams p = modelImu();
   LocomotionController c(p);
   c.request("stand");
   run(c, 2.0);
@@ -286,7 +298,7 @@ TEST(Locomotion, CrawlPutsItsFeetWithoutTheSlopeShift)
   // The crawl pitches the body on stairs itself; the IMU reads that as a
   // slope, and the trot's shift would put every foot a few cm off the
   // foothold the crawl chose on the map.
-  LocomotionParams p;
+  const LocomotionParams p = modelImu();
   LocomotionController c(p);
   c.request("stand");
   run(c, 2.0);
@@ -303,7 +315,7 @@ TEST(Locomotion, CrawlPutsItsFeetWithoutTheSlopeShift)
 
 TEST(Locomotion, SlopeCompensationIgnoresFallsAndCanBeDisabled)
 {
-  LocomotionParams p;
+  const LocomotionParams p = modelImu();
   LocomotionController c(p);
   c.request("stand");
   run(c, 2.0);
@@ -324,7 +336,7 @@ TEST(Locomotion, SlopeCompensationIgnoresFallsAndCanBeDisabled)
 
 TEST(Locomotion, HeadingHoldCountersYawDrift)
 {
-  LocomotionParams p;
+  const LocomotionParams p = modelImu();
   LocomotionController c(p);
   c.request("stand");
   run(c, 2.0);
@@ -372,7 +384,7 @@ TEST(Locomotion, HeadingHoldClosedLoopKeepsCourse)
 
 TEST(Locomotion, HeadingHoldTracksCommandedTurns)
 {
-  LocomotionParams p;
+  const LocomotionParams p = modelImu();
   LocomotionController c(p);
   c.request("stand");
   run(c, 2.0);
@@ -403,7 +415,7 @@ TEST(Locomotion, HeadingHoldTracksCommandedTurns)
 
 TEST(Locomotion, HeadingHoldIdleWithoutImuOrWhenStanding)
 {
-  LocomotionParams p;
+  const LocomotionParams p = modelImu();
   LocomotionController c(p);
   c.request("stand");
   run(c, 2.0);
@@ -426,7 +438,7 @@ TEST(Locomotion, HeadingHoldCountsEveryGyroSample)
 {
   // IMU at twice the control rate, the robot jerked round by 0.5 rad/s for
   // one IMU sample in every two: the latest rate alone would read zero.
-  LocomotionParams p;
+  const LocomotionParams p = modelImu();
   LocomotionController c(p);
   c.request("stand");
   run(c, 2.0);
@@ -444,7 +456,7 @@ TEST(Locomotion, HeadingHoldCountsEveryGyroSample)
 
 TEST(Locomotion, GuardLimitsForwardSpeedAndRaisesSwingPerLeg)
 {
-  LocomotionParams p;
+  const LocomotionParams p = modelImu();
   LocomotionController c(p);
   const double nan = std::nan("");
   c.request("stand");
@@ -504,7 +516,7 @@ TEST(DeadReckoning, IntegratesTwistWithImuHeading)
 
 TEST(Locomotion, SwitchesToCrawlOnlyWhenStoppedAndGoesRound)
 {
-  LocomotionParams p;
+  const LocomotionParams p = modelImu();
   LocomotionController c(p);
   const double nan = std::nan("");
   c.request("stand");
@@ -617,7 +629,7 @@ TEST(Locomotion, LeavesTheCrawlWithItsFeetOnALowStep)
 
 TEST(Locomotion, SurveyLooksAroundWithTheFeetWhereTheyStand)
 {
-  LocomotionParams p;
+  const LocomotionParams p = modelImu();
   LocomotionController c(p);
   c.request("stand");
   run(c, 2.0);
@@ -915,7 +927,7 @@ TEST(Locomotion, ReconfigureNoFitKeepsTheGait)
 
 TEST(Locomotion, TiltGovernorIsOffWithoutTheImu)
 {
-  LocomotionController c(LocomotionParams{});
+  LocomotionController c(modelImu());
   c.request("stand");
   run(c, 2.0);
   EXPECT_DOUBLE_EQ(c.tiltScale(), 1.0);
@@ -925,7 +937,7 @@ TEST(Locomotion, TiltGovernorScalesLinearlyWithTheSlope)
 {
   const double deg = M_PI / 180.0;
   auto settled = [deg](double pitch_deg, double roll_deg) {
-    LocomotionController c(LocomotionParams{});
+    LocomotionController c(modelImu());
     c.request("stand");
     for (int i = 0; i < 600; ++i) {  // 12 s: the 0.8 s slope filter settles
       c.setImuAttitude(roll_deg * deg, pitch_deg * deg, kDt);
@@ -943,7 +955,7 @@ TEST(Locomotion, TiltGovernorScalesLinearlyWithTheSlope)
 TEST(Locomotion, TiltGovernorLeavesAGentleSlopeAlone)
 {
   const double deg = M_PI / 180.0;
-  LocomotionController c(LocomotionParams{});
+  LocomotionController c(modelImu());
   c.request("stand");
   run(c, 2.0);
   c.setVelocity({0.1, 0, 0});
@@ -958,7 +970,7 @@ TEST(Locomotion, TiltGovernorLeavesAGentleSlopeAlone)
 TEST(Locomotion, TiltGovernorStopsTheWalkAtTheStopAngle)
 {
   const double deg = M_PI / 180.0;
-  LocomotionController c(LocomotionParams{});
+  LocomotionController c(modelImu());
   c.request("stand");
   run(c, 2.0);
   c.setVelocity({0.1, 0, 0});
@@ -997,7 +1009,7 @@ TEST(Locomotion, SlopeEstimateIgnoresTheGaitRocking)
   // between 15 and 19 deg and the tilt governor never reached its stop. The mean
   // over one gait period must not care about a periodic wobble at that period.
   const double deg = M_PI / 180.0;
-  LocomotionController c(LocomotionParams{});
+  LocomotionController c(modelImu());
   c.request("stand");
   run(c, 2.0);
   const double period = c.gaitPeriod();
@@ -1018,7 +1030,7 @@ TEST(Locomotion, SlopeEstimateIgnoresTheGaitRocking)
 TEST(Locomotion, SlopeEstimateSettlesWithinOneGaitPeriod)
 {
   const double deg = M_PI / 180.0;
-  LocomotionController c(LocomotionParams{});
+  LocomotionController c(modelImu());
   c.request("stand");
   run(c, 2.0);
   EXPECT_NEAR(c.slopePitch(), 0.0, 1e-9);

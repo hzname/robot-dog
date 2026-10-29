@@ -32,9 +32,11 @@ target_link_libraries(servo_driver_node
   ${std_srvs_TARGETS})
 
 add_executable(power_monitor_node src/power_monitor_node.cpp)
+# std_srvs for ~/clear_power_fault: the target's include path comes from its own
+# dependencies, not from the package's.
 target_link_libraries(power_monitor_node
   dog_hardware_core dog_diagnostics::dog_diagnostics rclcpp::rclcpp
-  ${sensor_msgs_TARGETS} ${std_msgs_TARGETS})
+  ${sensor_msgs_TARGETS} ${std_msgs_TARGETS} ${std_srvs_TARGETS})
 
 add_executable(imu_node src/imu_node.cpp)
 target_link_libraries(imu_node

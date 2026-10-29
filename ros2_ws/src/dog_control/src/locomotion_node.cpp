@@ -414,6 +414,7 @@ private:
       throw std::invalid_argument("safety.profile must be 'floor' or 'bench', got '" + profile + "'");
     }
     p.safety_require_imu = profile == "floor";
+    p.imu_require_calibrated = declare_parameter("imu.require_calibrated", p.imu_require_calibrated);
     risk_profile_ = profile;
 
     p.max_velocity.vx = declare_parameter("limits.max_vx", p.max_velocity.vx);

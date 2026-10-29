@@ -89,7 +89,10 @@ struct LocomotionParams
   double safety_hysteresis_deg{3.0}; // [deg] come back below soft - hysteresis
   double safety_imu_timeout_s{0.2};  // [s] silence that counts as a lost IMU
   double safety_idle_lie_s{90.0};    // [s] holding a pose without commands: lie down
-  bool safety_require_imu{false};    // floor profile: no calibrated IMU, no walking
+  bool safety_require_imu{false};
+  /// CAL-08: an IMU is trusted for attitude only after imu/calibrated. A simulator has
+  /// no bias and known axes, so there the flag is turned off; on the robot it stays on.
+  bool imu_require_calibrated{true};
 
   // Heading hold from the gyro: the heading error (commanded minus measured
   // yaw, integrated while walking) is fed back (PI) into the yaw rate of the gait.
@@ -144,6 +147,8 @@ public:
   /// The IMU says its gyro bias is known. In the floor profile a robot without
   /// this flag refuses to stand: the fall guard would be blind (SAF-06).
   void setImuCalibrated(bool calibrated) {imu_calibrated_ = calibrated;}
+  /// Attitude is trusted after imu/calibrated - or always, when the IMU is a model.
+  bool imuTrusted() const {return imu_calibrated_ || !p_.imu_require_calibrated;}
   bool imuCalibrated() const {return imu_calibrated_;}
   double slopePitch() const {return slope_pitch_;}
   double slopeRoll() const {return slope_roll_;}

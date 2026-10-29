@@ -353,7 +353,7 @@ void LocomotionController::setImuAttitude(double roll, double pitch, double dt)
   // nor slope compensation, nor the heading hold - a wrong sign would steer the robot
   // rather than steady it. The heartbeat above still counts, so a silent IMU is a
   // fall, not a calibration problem.
-  if (!imu_calibrated_) {return;}
+  if (p_.imu_require_calibrated && !imu_calibrated_) {return;}
   tilt_deg_ = std::max(std::abs(roll), std::abs(pitch)) * 180.0 / M_PI;
   if (!p_.slope_compensation || dt <= 0.0) {return;}
   const bool upright = mode_ == Mode::STAND || mode_ == Mode::WALK;
@@ -452,7 +452,7 @@ void LocomotionController::evaluateSafety(double dt)
   const double worst_tilt = tilt_raw_valid_ ? std::max(tilt_deg_, tilt_raw_deg_) : tilt_deg_;
   // CAL-08: the same rule for the raw accelerometer path - an unchecked axis mapping
   // can read a level robot as 90 degrees, and a fall as level.
-  const bool too_far = imu_calibrated_ && imu_seen_ && worst_tilt > p_.safety_hard_deg;
+  const bool too_far = imuTrusted() && imu_seen_ && worst_tilt > p_.safety_hard_deg;
   hard_t_ = too_far ? hard_t_ + dt : 0.0;
   if (too_far && hard_t_ >= p_.safety_debounce_s) {
     char buf[128];
