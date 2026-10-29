@@ -344,12 +344,17 @@ void LocomotionController::setImuAttitude(double roll, double pitch, double dt)
   // The soft threshold reads the filtered attitude: it must not fire on the gait's
   // own accelerations. The hard one reads the accelerometer (setFallTilt), which
   // sees a fall while it happens.
-  if (std::isfinite(roll) && std::isfinite(pitch)) {
-    tilt_deg_ = std::max(std::abs(roll), std::abs(pitch)) * 180.0 / M_PI;
-    // A message arrived: that is the heartbeat, whatever the source of the angle.
-    imu_seen_ = true;
-    imu_age_ = 0.0;
-  }
+  if (!(std::isfinite(roll) && std::isfinite(pitch))) {return;}
+  // A message arrived: that is the heartbeat, whatever the source of the angle.
+  imu_seen_ = true;
+  imu_age_ = 0.0;
+  // CAL-08: an IMU whose axes and sign were never checked cannot say what "level" is.
+  // Until imu/calibrated says otherwise its attitude drives neither the tilt governor,
+  // nor slope compensation, nor the heading hold - a wrong sign would steer the robot
+  // rather than steady it. The heartbeat above still counts, so a silent IMU is a
+  // fall, not a calibration problem.
+  if (!imu_calibrated_) {return;}
+  tilt_deg_ = std::max(std::abs(roll), std::abs(pitch)) * 180.0 / M_PI;
   if (!p_.slope_compensation || dt <= 0.0) {return;}
   const bool upright = mode_ == Mode::STAND || mode_ == Mode::WALK;
   if (!upright) {  // the hold starts from the heading at the next walk
@@ -445,7 +450,9 @@ void LocomotionController::evaluateSafety(double dt)
   // 1. Hard tilt: the robot is going over. Count time, not frames: the IMU rate
   //    may differ from the control loop's.
   const double worst_tilt = tilt_raw_valid_ ? std::max(tilt_deg_, tilt_raw_deg_) : tilt_deg_;
-  const bool too_far = imu_seen_ && worst_tilt > p_.safety_hard_deg;
+  // CAL-08: the same rule for the raw accelerometer path - an unchecked axis mapping
+  // can read a level robot as 90 degrees, and a fall as level.
+  const bool too_far = imu_calibrated_ && imu_seen_ && worst_tilt > p_.safety_hard_deg;
   hard_t_ = too_far ? hard_t_ + dt : 0.0;
   if (too_far && hard_t_ >= p_.safety_debounce_s) {
     char buf[128];

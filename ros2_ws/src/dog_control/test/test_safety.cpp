@@ -39,6 +39,9 @@ void run(LocomotionController & c, double seconds, double roll_deg = 0.0,
   double pitch_deg = 0.0, bool imu = true)
 {
   const double dt = 0.01;
+  // Feeding the IMU in a test means its axes and sign have been verified (CAL-08); the
+  // one test that is about the unverified case does not use this helper.
+  c.setImuCalibrated(true);
   for (double t = 0.0; t < seconds; t += dt) {
     if (imu) {
       c.setImuAttitude(roll_deg * kDeg, pitch_deg * kDeg, dt);
@@ -329,4 +332,41 @@ TEST(SafetyFallen, RecoverTrustsTheAccelerometerWhileTheFilterStillRemembers)
   c.update(0.01);
   EXPECT_EQ(c.recover(), std::string())
     << "a robot that is already straight must not be refused because of the filter's lag";
+}
+
+// ------------------------------------------------------------------ CAL-08
+
+TEST(SafetyTilt, TheGuardWaitsForTheImuToBeVerified)
+{
+  // CAL-08: an IMU whose axes and sign have not been checked is not evidence. A tilt
+  // read from it must not latch a fall - and once imu/calibrated arrives, the same
+  // reading must.
+  LocomotionController c(benchParams());
+  for (double t = 0.0; t < 3.0; t += 0.01) {
+    c.setImuAttitude(60.0 * kDeg, 0.0, 0.01);
+    c.setFallTilt(60.0, 0.0);
+    c.update(0.01);
+  }
+  EXPECT_FALSE(c.fallen()) << "an unverified IMU must not latch a fall";
+
+  c.setImuCalibrated(true);
+  for (double t = 0.0; t < 0.5; t += 0.01) {
+    c.setImuAttitude(60.0 * kDeg, 0.0, 0.01);
+    c.setFallTilt(60.0, 0.0);
+    c.update(0.01);
+  }
+  EXPECT_TRUE(c.fallen()) << "after verification the same tilt is a fall";
+}
+
+TEST(SafetyTilt, AnUnverifiedImuStillHasToBeAlive)
+{
+  // The heartbeat is not part of the calibration gate: a robot whose IMU went quiet
+  // must stop, calibrated or not.
+  LocomotionParams p = benchParams();
+  p.safety_imu_timeout_s = 0.2;
+  LocomotionController c(p);
+  run(c, 0.5);                     // the IMU talks, the guard is on standby
+  EXPECT_FALSE(c.fallen());
+  run(c, 1.0, 0.0, 0.0, false);    // and now it is silent
+  EXPECT_TRUE(c.fallen()) << "a silent IMU is still a fall";
 }

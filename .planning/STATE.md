@@ -1,8 +1,8 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 06
-current_phase_name: Питание, выключатель и запуск на Pi
-status: phase_complete
+current_phase: 07
+current_phase_name: Калибровка и аварийные проверки в люльке
+status: in_progress
 stopped_at: Phase 05 complete - profile:=floor is one argument, the page cannot release an e-stop, WebSocket has Origin/cap/idle limits, live calibration cannot snap a servo, and the calibration lives outside git; CI 40751490766 green
 last_updated: "2026-10-29T16:20:00.000Z"
 last_activity: 2026-10-29
@@ -11,8 +11,8 @@ state_head: ebdc33f
 progress:
   total_phases: 8
   completed_phases: 4
-  total_plans: 40
-  completed_plans: 40
+  total_plans: 45
+  completed_plans: 42
   percent: 50
 ---
 
