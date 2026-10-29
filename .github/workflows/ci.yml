@@ -339,7 +339,11 @@ jobs:
           test "$code" -eq 2
       # CAL-09, second half: the image launches the real stack with the mock backend.
       - name: The image boots robot.launch.py backend:=mock
-        run: docker run --rm --platform linux/arm64 robot-dog:ci bash /ws/docker/ci_smoke.sh
+        # DOG_PREFLIGHT=off because the entrypoint sees the shell command, not the
+        # launch arguments: the script asks preflight itself, with backend:=mock.
+        run: >
+          docker run --rm --platform linux/arm64 -e DOG_PREFLIGHT=off
+          robot-dog:ci bash /ws/docker/ci_smoke.sh
 
   acceptance:
     name: acceptance (${{ matrix.distro }}, ${{ matrix.servo_model }})
