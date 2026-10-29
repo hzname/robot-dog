@@ -39,6 +39,10 @@ COPY docker/entrypoint.sh /entrypoint.sh
 COPY docker/ci_smoke.sh /ws/docker/ci_smoke.sh
 COPY docker/check_state.py /ws/docker/check_state.py
 COPY tools/preflight /ws/tools/preflight
+# The bench tools run inside this image, where ros2 lives: the IMU check walks the
+# operator through four positions, the threshold tool turns a recording into settings.
+COPY tools/imu_axes /ws/tools/imu_axes
+COPY tools/power_thresholds /ws/tools/power_thresholds
 ENV ROS_DISTRO=${ROS_DISTRO}
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["ros2", "launch", "dog_bringup", "robot.launch.py"]

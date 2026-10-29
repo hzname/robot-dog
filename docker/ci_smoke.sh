@@ -42,4 +42,22 @@ if ! timeout 120 python3 /ws/docker/check_state.py; then
   tail -40 /tmp/launch.log
   exit 1
 fi
+
+# The bench tool must be able to read the IMU and leave a record. The mock IMU stands
+# still, so the verdict here is "no movement seen" (exit 1) - a correct answer. What is
+# checked is the plumbing: exit 2 means the topic was silent, which is the real failure.
+printf '\n\n\n\n' | timeout 120 python3 /ws/tools/imu_axes/run_ros.py --seconds 1 \
+    --out /tmp/imu-check > /tmp/imu.log 2>&1
+imu_rc=$?
+if [ "$imu_rc" -eq 2 ]; then
+  echo "smoke: the IMU check could not read /dog/imu/data"
+  tail -20 /tmp/imu.log
+  exit 1
+fi
+if ! grep -q "записано" /tmp/imu.log; then
+  echo "smoke: the IMU check recorded nothing"
+  tail -20 /tmp/imu.log
+  exit 1
+fi
+echo "smoke: the IMU check read the topic ($(grep -c 'записано' /tmp/imu.log) steps) and a verdict"
 exit 0
