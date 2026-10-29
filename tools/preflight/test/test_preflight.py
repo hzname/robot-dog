@@ -88,3 +88,58 @@ def test_gamepad_defaults_follow_the_launch_arguments(args_, expected):
     # the same rule main() uses, without touching the bus
     gamepad = 'false' if 'gamepad:=false' in args_ else 'true'
     assert gamepad == expected
+
+
+# CAL-01/CAL-03 at the door: the profile that walks in the open asks for a calibration of
+# this robot first. Everything below runs without a robot, which is the point.
+
+def fake_run(code, text=''):
+    calls = []
+
+    def run(config_dir):
+        calls.append(config_dir)
+        return code, text
+    run.calls = calls
+    return run
+
+
+def test_the_floor_profile_without_a_local_calibration_is_blocked(tmp_path):
+    items = preflight.calibration_gate(str(tmp_path), 'floor')
+    assert items and not items[0][0]
+    assert 'servos.local.yaml' in items[0][1]
+    assert items[0][2] is True          # blocking, not advice
+
+
+def test_a_calibrated_robot_passes(tmp_path):
+    (tmp_path / 'servos.local.yaml').write_text('/**/servo_driver: {ros__parameters: {}}\n')
+    run = fake_run(0, 'robot_setup: калибровка есть у всех суставов (servos.local.yaml)')
+    items = preflight.calibration_gate(str(tmp_path), 'floor', run)
+    assert [ok for ok, _t, _r in items] == [True]
+    assert 'калибровка есть' in items[0][1]
+    assert run.calls == [str(tmp_path)]
+
+
+def test_a_half_calibrated_robot_is_blocked_with_the_reason(tmp_path):
+    (tmp_path / 'servos.local.yaml').write_text('/**/servo_driver: {ros__parameters: {}}\n')
+    run = fake_run(3, 'robot_setup: калибровка неполная — в servos.local.yaml нет 10 суставов: lf_calf_joint')
+    items = preflight.calibration_gate(str(tmp_path), 'floor', run)
+    assert not items[0][0]
+    assert 'калибровка неполная' in items[0][1]
+    assert 'lf_calf_joint' in items[0][1]
+
+
+def test_a_tool_that_cannot_run_blocks_instead_of_passing(tmp_path):
+    (tmp_path / 'servos.local.yaml').write_text('/**/servo_driver: {ros__parameters: {}}\n')
+    items = preflight.calibration_gate(str(tmp_path), 'floor', fake_run(1, 'не запустить robot_setup'))
+    assert not items[0][0]
+    assert 'проверка не запустилась' in items[0][1]
+
+
+def test_the_bench_profile_asks_nothing_about_calibration(tmp_path):
+    assert preflight.calibration_gate(str(tmp_path), 'bench') == []
+    assert preflight.calibration_gate(str(tmp_path), '') == []
+
+
+def test_the_profile_comes_from_the_launch_arguments():
+    assert preflight.launch_profile('backend:=pca9685 profile:=floor gamepad:=true') == 'floor'
+    assert preflight.launch_profile('backend:=pca9685') == ''

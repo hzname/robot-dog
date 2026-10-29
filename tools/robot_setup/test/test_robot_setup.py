@@ -358,3 +358,47 @@ def test_the_report_cli_writes_a_file(cfg, tmp_path, monkeypatch, capsys):
     assert 'отчёт' in capsys.readouterr().out
     assert '# Калибровка робота' in out.read_text(encoding='utf-8')
     assert 'Итог' in out.read_text(encoding='utf-8')
+
+
+# CAL-01/CAL-03 gate: the factory file is not a calibration. A joint that only the factory
+# file defines has never had its zero set, and a robot walking on it believes its servos are
+# exactly where the drawing says they are.
+
+def write_local(cfg, joints):
+    base = rs.servo_params(cfg)
+    node = {j: {'offset_deg': 1.5, 'direction': base[j].get('direction', 1)} for j in joints}
+    text = '/**/servo_driver:\n  ros__parameters:\n'
+    for j, v in node.items():
+        text += '    %s:\n      offset_deg: %s\n      direction: %s\n' % (j, v['offset_deg'], v['direction'])
+    open(os.path.join(cfg, 'servos.local.yaml'), 'w').write(text)
+
+
+def all_joints():
+    return ['%s_%s_joint' % (leg, k) for leg in rs.LEGS for k in rs.LEG_JOINTS]
+
+
+def test_a_fresh_robot_has_no_calibration_at_all(cfg):
+    missing = rs.uncalibrated(cfg)
+    assert len(missing) == 12, missing
+    assert 'lf_calf_joint' in missing
+
+
+def test_a_half_calibrated_robot_names_the_joints_left(cfg):
+    write_local(cfg, ['lf_hip_joint', 'lf_thigh_joint'])
+    missing = rs.uncalibrated(cfg)
+    assert 'lf_hip_joint' not in missing
+    assert 'lf_calf_joint' in missing
+    assert len(missing) == 10
+
+
+def test_a_calibrated_robot_has_nothing_left(cfg):
+    write_local(cfg, all_joints())
+    assert rs.uncalibrated(cfg) == []
+
+
+def test_the_verify_code_says_whether_the_robot_is_calibrated(cfg, capsys):
+    assert rs.main(['--verify', '--config', cfg]) == 3
+    assert 'калибровка неполная' in capsys.readouterr().out
+    write_local(cfg, all_joints())
+    assert rs.main(['--verify', '--config', cfg]) == 0
+    assert 'калибровка есть у всех суставов' in capsys.readouterr().out

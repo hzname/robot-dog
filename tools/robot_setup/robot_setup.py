@@ -290,6 +290,24 @@ def merged_servos(config_dir):
     return out, local_p
 
 
+def uncalibrated(config_dir):
+    """Joints the factory file defines and servos.local.yaml does not: nobody has set
+    their zero on this robot. Empty means every joint carries its own calibration.
+
+    The factory file is not a calibration - it is a starting point with offset_deg 0, and a
+    robot walking on it believes its servos are exactly where the drawing says."""
+    base = servo_params(config_dir)
+    local_p = os.path.join(config_dir, 'servos.local.yaml')
+    mine = _servos_node(local_p) if os.path.exists(local_p) else {}
+    out = []
+    for leg in LEGS:
+        for kind in LEG_JOINTS:
+            key = f'{leg}_{kind}_joint'
+            if key in base and key not in mine:
+                out.append(key)
+    return out
+
+
 def stand_pulse(g, c, joint, q1):
     """Pulse of one servo in the stand pose, or None for a linkage drive (CAL-06)."""
     if float(c.get('servo_arm_mm', 0.0) or 0.0) > 0:
@@ -977,6 +995,8 @@ def main(argv=None):
     ap.add_argument('--config', default=CONFIG, help='folder with robot.yaml and servos.yaml')
     ap.add_argument('--cli', action='store_true', help='text mode instead of the web form')
     ap.add_argument('--check', action='store_true', help='only validate the current files')
+    ap.add_argument('--verify', action='store_true',
+                    help='калиброван ли робот целиком: 0 да, 3 не все суставы, 2 файлы не читаются')
     ap.add_argument('--report', nargs='?', const='calibration-report.md', metavar='PATH',
                     help='write the calibration record (markdown) and exit')
     ap.add_argument('--port', type=int, default=8765)
@@ -989,6 +1009,30 @@ def main(argv=None):
         for lv, t in msgs:
             print({'error': 'ОШИБКА', 'warn': 'внимание', 'info': '·'}[lv], t)
         return 2 if any(lv == 'error' for lv, _ in msgs) else 0
+    if a.verify:
+        msgs, _ = validate(load(a.config))
+        errors = [t for lv, t in msgs if lv == 'error']
+        if errors:
+            print('robot_setup: файлы конфигурации не читаются')
+            for t in errors:
+                print('   - ' + t)
+            return 2
+        missing = uncalibrated(a.config)
+        # A servo already at the edge of its pulse range in the stand pose is pushed past
+        # the limit by the first step, whatever the file says about its zero.
+        edges = [(lv, t) for lv, t in check_servos(a.config, load(a.config))
+                 if 'у края' in t]
+        if missing:
+            print('robot_setup: калибровка неполная — в servos.local.yaml нет %d суставов: %s'
+                  % (len(missing), ', '.join(missing)))
+            return 3
+        if edges:
+            for _lv, text in edges:
+                print('robot_setup: ' + text)
+            print('robot_setup: калибровка уводит серву к пределу — на пол так нельзя')
+            return 3
+        print('robot_setup: калибровка есть у всех суставов (servos.local.yaml)')
+        return 0
     if a.report:
         text = report(a.config, load(a.config))
         if a.report == '-':

@@ -195,6 +195,8 @@ ros2 service call /dog/locomotion/recover std_srvs/srv/Trigger "{}"
 ```
 ros2 launch dog_bringup robot.launch.py profile:=floor
 ```
+Preflight пустит это только с калибровкой робота: `robot_setup --verify` должен ответить 0
+(все двенадцать суставов в `servos.local.yaml`, ни одна серва не у края пульса в стойке).
 
 Один аргумент вместо списка чисел в руках оператора: опечатка в таком списке на первом выходе — это
 падение. Значения профиля лежат в `ros2_ws/src/dog_bringup/launch/profile.py` и покрыты тестом,
