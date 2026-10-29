@@ -6,7 +6,8 @@
 The topic list is the contract: it lives in ``TOPICS`` so a test can check every
 name against the sources - a renamed topic must not silently drop out of the bag.
 What is recorded: the state machine and commands, the joint targets and measured
-pulses, the IMU, the power rail, the gamepad, the profile and the terrain estimate.
+pulses, the IMU, the power rail, the gamepad, the profile, the terrain estimate, the
+odometry and the nodes' diagnostics.
 That is what a post-mortem needs after a fall.
 
 Stop it with Ctrl-C in a terminal. A script must send SIGTERM to the recorder itself: with
@@ -35,6 +36,10 @@ TOPICS = [
     '/dog/body_pose',
     '/dog/profile',
     '/dog/terrain/profile',
+    '/dog/odom',
+    # The driver's own words about bus errors and latches: a post-mortem that cannot say
+    # "the bus failed" is a bag of numbers with no story.
+    '/dog/diagnostics',
 ]
 
 

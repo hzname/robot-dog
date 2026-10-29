@@ -47,6 +47,7 @@ COPY tools/power_thresholds /ws/tools/power_thresholds
 COPY tools/joy_replay /ws/tools/joy_replay
 # Preflight asks robot_setup whether this robot is calibrated before a floor launch.
 COPY tools/robot_setup /ws/tools/robot_setup
+COPY tools/floor_run /ws/tools/floor_run
 ENV ROS_DISTRO=${ROS_DISTRO}
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["ros2", "launch", "dog_bringup", "robot.launch.py"]

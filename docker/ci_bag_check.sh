@@ -99,4 +99,26 @@ if [ -z "$samples" ] || [ "$samples" -lt 20 ]; then
   exit 1
 fi
 echo "bag: запись прочитана, отсчётов тока ${samples}, пороги посчитаны"
+
+# The same recording must answer the floor criterion (FLOOR-01): a 20-second mock run cannot
+# pass it, and that is the point - the tool has to read the bag and say so, naming every
+# point it checked instead of falling over.
+timeout 120 python3 /ws/tools/floor_run/floor_run.py --bag "$BAG" --temp-c 45 > /tmp/floor.log 2>&1
+floor_code=$?
+cat /tmp/floor.log
+if [ "$floor_code" -ne 1 ]; then
+  echo "floor: ожидался отказ по длительности (код 1), получено ${floor_code}"
+  exit 1
+fi
+for line in 'длительность' 'шина' 'E-STOP' 'ошибки шины' 'путь'; do
+  if ! grep -q "$line" /tmp/floor.log; then
+    echo "floor: в приговоре нет строки про '${line}'"
+    exit 1
+  fi
+done
+if ! grep -q 'НЕ ГОДИТСЯ: длительность' /tmp/floor.log; then
+  echo "floor: короткий прогон не назван коротким"
+  exit 1
+fi
+echo "floor: приговор по записи вынесен — короткий прогон не засчитан"
 exit 0
