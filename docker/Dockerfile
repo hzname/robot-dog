@@ -43,6 +43,7 @@ COPY tools/preflight /ws/tools/preflight
 # operator through four positions, the threshold tool turns a recording into settings.
 COPY tools/imu_axes /ws/tools/imu_axes
 COPY tools/power_thresholds /ws/tools/power_thresholds
+COPY tools/joy_replay /ws/tools/joy_replay
 ENV ROS_DISTRO=${ROS_DISTRO}
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["ros2", "launch", "dog_bringup", "robot.launch.py"]

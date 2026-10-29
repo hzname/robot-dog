@@ -102,14 +102,17 @@ def _setup(context):
                  namespace=NS, parameters=[robot_yaml]
                  + ([{'localization.map': cfg('map')}] if cfg('map') else []), output='screen'))
     if on('gamepad'):
-        actions += [
-            Node(package='dog_teleop', executable='gamepad_node', name='gamepad',
-                 namespace=NS, parameters=teleop_files, output='screen'),
+        # The reader can be left out while joy_teleop stays: the bench drills feed /dog/joy
+        # themselves (tools/joy_replay) to test the timeouts without a physical pad.
+        if on('gamepad_reader'):
+            actions.append(
+                Node(package='dog_teleop', executable='gamepad_node', name='gamepad',
+                     namespace=NS, parameters=teleop_files, output='screen'))
+        actions.append(
             Node(package='dog_teleop', executable='joy_teleop_node', name='joy_teleop',
                  namespace=NS,
                  parameters=teleop_files + [profiles.params(profile_name, 'joy_teleop')],
-                 output='screen'),
-        ]
+                 output='screen'))
     if on('web'):
         actions.append(
             Node(package='dog_web', executable='web_teleop', name='web_teleop',
@@ -133,6 +136,9 @@ def generate_launch_description():
                               description='mock backend only: the bus starts failing after N s'),
         DeclareLaunchArgument('gamepad', default_value='true',
                               description='start gamepad reader + joy_teleop'),
+        DeclareLaunchArgument('gamepad_reader', default_value='true',
+                              description='read /dev/input/js*; false when another publisher '
+                                          'feeds /dog/joy (fault drill, joy replay)'),
         DeclareLaunchArgument('gamepad_profile', default_value='xbox',
                               description='button layout: xbox or ps'),
         DeclareLaunchArgument('web', default_value='true', description='start the web teleop page'),
