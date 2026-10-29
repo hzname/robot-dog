@@ -2,7 +2,7 @@
 gsd_state_version: "1.0"
 current_phase: 06
 current_phase_name: Питание, выключатель и запуск на Pi
-status: in_progress
+status: phase_complete
 stopped_at: Phase 05 complete - profile:=floor is one argument, the page cannot release an e-stop, WebSocket has Origin/cap/idle limits, live calibration cannot snap a servo, and the calibration lives outside git; CI 40751490766 green
 last_updated: "2026-10-29T16:20:00.000Z"
 last_activity: 2026-10-29
@@ -10,10 +10,10 @@ last_activity_desc: Phase 05 closed - the floor profile, a view-only page, Origi
 state_head: ebdc33f
 progress:
   total_phases: 8
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 40
-  completed_plans: 39
-  percent: 38
+  completed_plans: 40
+  percent: 50
 ---
 
 # Project State
@@ -23,7 +23,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-29)
 
 **Core value:** Робот надёжно и безопасно ходит по полу с геймпада, не падая и не убивая свои сервы.
-**Current focus:** Phase 06 — код и CI закрыты, 06-04 ждёт стенда
+**Current focus:** Phase 07 — Калибровка и аварийные проверки в люльке
 
 ## Current Position
 
