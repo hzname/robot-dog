@@ -107,7 +107,9 @@ public:
     estop_pub_ = create_publisher<std_msgs::msg::Bool>("estop", rclcpp::QoS(10).reliable());
     command_pub_ = create_publisher<std_msgs::msg::String>("command", 10);
     timer_ = create_wall_timer(std::chrono::duration<double>(1.0 / rate), [this]() {tick();});
-    clear_srv_ = create_service<std_srvs::srv::Trigger>("clear_power_fault",
+    // '~/' makes it /<ns>/power_monitor/clear_power_fault, the same private style as
+    // ~/recover in locomotion and ~/release_fault in the driver.
+    clear_srv_ = create_service<std_srvs::srv::Trigger>("~/clear_power_fault",
       [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
              std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
         const bool was = guard_->latched();

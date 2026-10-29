@@ -94,7 +94,15 @@ class TestPowerMonitor(unittest.TestCase):
 
         # A human looked at the supply and cleared it; now it can fire again.
         cle = self.node.create_client(Trigger, '/dog/power_monitor/clear_power_fault')
-        self.assertTrue(cle.wait_for_service(timeout_sec=10))
+        # A freshly created client needs the graph to catch up: wait_for_service does not
+        # spin, so the discovery event would never be processed and the wait would fail
+        # on a service that is in fact offered.
+        deadline = time.time() + 10.0
+        while time.time() < deadline and not cle.service_is_ready():
+            rclpy.spin_once(self.node, timeout_sec=0.1)
+        self.assertTrue(cle.service_is_ready(),
+                        'clear_power_fault must be offered; services: %s'
+                        % (self.node.get_service_names_and_types(),))
         fut = cle.call_async(Trigger.Request())
         rclpy.spin_until_future_complete(self.node, fut, timeout_sec=5)
         self.assertTrue(fut.result().success)
