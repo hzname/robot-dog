@@ -33,16 +33,13 @@ if ! grep -q "locomotion ready at 50 Hz" /tmp/launch.log; then
 fi
 echo "smoke: the launch reached the state machine"
 
-# Under qemu every `ros2` call is another python start of tens of seconds: one read,
-# with a timeout that survives emulation, is worth more than a fast retry loop.
-if ! timeout 90 ros2 topic echo --once /dog/state > /tmp/state.txt 2>/dev/null; then
+# /dog/state is latched: a volatile subscriber (what `ros2 topic echo` uses) waits for
+# the next change of state instead of reading the stored one. check_state.py asks for
+# transient_local and prints the state, or says why it could not.
+if ! timeout 120 python3 /ws/docker/check_state.py; then
   echo "smoke: the launch is up but /dog/state says nothing"
-  ros2 node list 2>&1 | head -20
-  ros2 topic list 2>&1 | head -20
+  ros2 topic info /dog/state 2>&1 | head -10
   tail -40 /tmp/launch.log
   exit 1
 fi
-
-echo "smoke: /dog/state answered"
-sed -n 1,4p /tmp/state.txt
 exit 0

@@ -326,6 +326,9 @@ jobs:
           load: true
           tags: robot-dog:ci
           build-args: BUILD_JOBS=4
+          # Without a cache every iteration rebuilds the emulated colcon step (~25 min).
+          cache-from: type=gha,scope=arm64
+          cache-to: type=gha,mode=max,scope=arm64
       # CAL-09, first half: in a container there is no /dev/i2c-0, so the robot must
       # refuse to start. A preflight that passes here would be a rubber stamp.
       - name: Preflight refuses to start without the robot's hardware
