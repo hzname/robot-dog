@@ -575,12 +575,14 @@ git tag robot-calibrated-$(date +%F) && git push --tags
 2. Все ноги в «Встать»: ток покоя 1–3 А. Ток в ходьбе на подставке запомнить: от него зависят пороги.
 3. Пороги считаются по записи, а не на глаз. Записать ходьбу в люльке и разобрать её:
    ```bash
-   docker compose exec robot ros2 topic echo /dog/power --field current > /tmp/current.txt
-   # в другом окне, пока идёт ходьба
-   docker compose exec robot ros2 topic echo /dog/power --field voltage > /tmp/voltage.txt
-   python3 /ws/tools/power_thresholds/power_thresholds.py \
-       --current /tmp/current.txt --voltage /tmp/voltage.txt --sensor ina219-0.1
+   docker compose exec robot ros2 launch dog_bringup record.launch.py
+   # … походить 30–60 с, затем Ctrl-C в этом же окне
+   docker compose exec robot python3 /ws/tools/power_thresholds/power_thresholds.py \
+       --bag /home/sg/dog-bags/<дата-время> --sensor ina219-0.1
    ```
+   Запись читается прямо из rosbag, колонки руками копировать не нужно. Если запись уже
+   разобрана в два столбца (например, снята с живого топика), подойдёт
+   `--current /tmp/current.txt --voltage /tmp/voltage.txt`.
    Инструмент печатает p50/p99/максимум, готовый блок `/**/power_monitor:` для
    `config/power.yaml` и — если порог выше предела шунта — прямо говорит, что защита по
    току будет мнимой. Штатный INA219 с шунтом 0.1 Ом видит до 3.2 А, а двенадцать MG996R в
@@ -664,10 +666,15 @@ limits: {max_vx: 0.05, max_vy: 0.03, max_wz: 0.3}
    ```bash
    docker compose exec robot ros2 launch dog_bringup record.launch.py
    ```
-   Запись ложится в `~/dog-bags/<дата>-<время>` (zstd), четырнадцать топиков: состояние,
+   Запись ложится в `~/dog-bags/<дата>-<время>`, четырнадцать топиков: состояние,
    команды, импульсы серв, сторож, IMU, питание, пульт, поза корпуса, профиль, рельеф.
    Список живёт в `ros2_ws/src/dog_bringup/launch/record.launch.py` — если топик переименован,
    правится там, а не в блокноте.
+
+   Останавливать — **Ctrl-C в том же терминале**. Скрипт должен слать SIGTERM самому
+   rosbag2: без терминала на stdin запись игнорирует SIGINT и остаётся незакрытой. Сжатие
+   файлов не включаем: на этой сборке rosbag2 пишет `.mcap.zstd`, который потом сам же не
+   открывает («invalid magic bytes»), то есть сессия записана и потеряна.
 
 **Критерий перехода:** 5 минут ходьбы на малой скорости по всем направлениям без падений и без `clamped`.
 

@@ -37,6 +37,7 @@ COPY docker/entrypoint.sh /entrypoint.sh
 # a step someone can forget is not a check (CAL-09). The smoke script is what CI
 # runs to prove the image can start the stack.
 COPY docker/ci_smoke.sh /ws/docker/ci_smoke.sh
+COPY docker/ci_bag_check.sh /ws/docker/ci_bag_check.sh
 COPY docker/check_state.py /ws/docker/check_state.py
 COPY tools/preflight /ws/tools/preflight
 # The bench tools run inside this image, where ros2 lives: the IMU check walks the

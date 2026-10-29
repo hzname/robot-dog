@@ -8,6 +8,9 @@ name against the sources - a renamed topic must not silently drop out of the bag
 What is recorded: the state machine and commands, the joint targets and measured
 pulses, the IMU, the power rail, the gamepad, the profile and the terrain estimate.
 That is what a post-mortem needs after a fall.
+
+Stop it with Ctrl-C in a terminal. A script must send SIGTERM to the recorder itself: with
+no terminal on stdin the recorder ignores SIGINT, and the bag stays unfinalised.
 """
 
 import os
@@ -47,7 +50,11 @@ def generate_launch_description():
         DeclareLaunchArgument('out', default_value=default_output(),
                               description='directory for this bag'),
         ExecuteProcess(
-            cmd=['ros2', 'bag', 'record', '-o', out,
-                 '--compression-mode', 'file', '--compression-format', 'zstd'] + TOPICS,
+            # No --compression-mode file: on this distro that writes <name>_0.mcap.zstd and
+            # the reader then hands the zstd bytes to the mcap plugin ("invalid magic
+            # bytes"), so `ros2 bag info` reports an empty bag and nothing can be played
+            # or analysed afterwards - a recorded session that is lost. Measured
+            # 2026-10-29; a bag of a ten-minute walk is small enough to keep plain.
+            cmd=['ros2', 'bag', 'record', '-o', out] + TOPICS,
             output='screen'),
     ])

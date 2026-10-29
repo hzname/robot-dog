@@ -347,6 +347,13 @@ jobs:
         run: >
           docker run --rm --platform linux/arm64 -e DOG_PREFLIGHT=off
           robot-dog:ci bash /ws/docker/ci_smoke.sh
+      # SAF-07 end to end: the recording the bench makes must feed the tool that turns it
+      # into thresholds. Also proves the bag is readable afterwards - file compression
+      # used to write a bag this distro cannot open.
+      - name: The recording feeds the threshold tool
+        run: >
+          docker run --rm --platform linux/arm64 -e DOG_PREFLIGHT=off
+          robot-dog:ci bash /ws/docker/ci_bag_check.sh
 
   acceptance:
     name: acceptance (${{ matrix.distro }}, ${{ matrix.servo_model }})
