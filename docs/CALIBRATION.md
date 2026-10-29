@@ -1,6 +1,18 @@
 # Калибровка сервоприводов
 
-Калибровка задаёт для каждой сервы две вещи: **`direction`** (в какую сторону она вращает сустав) и **`offset_deg`** (какой угол сустава соответствует центральному импульсу). Значения хранятся в `ros2_ws/src/dog_bringup/config/servos.yaml`. Этот каталог смонтирован в контейнер, поэтому после правки файла достаточно перезапустить контейнер, пересобирать образ не нужно.
+Калибровка задаёт для каждой сервы две вещи: **`direction`** (в какую сторону она вращает сустав) и **`offset_deg`** (какой угол сустава соответствует центральному импульсу).
+
+Значения живут в двух файлах одного каталога `ros2_ws/src/dog_bringup/config/`:
+
+- `servos.yaml` — заводская раскладка: каналы, геометрия, признаки связи колена с бедром.
+  Он под git, `git pull` его обновляет;
+- `servos.local.yaml` — калибровка **этого** робота (смещения, направления, пределы). В git не
+  попадает, поэтому `git pull` её не затирает. Запуск подхватывает его вторым файлом параметров,
+  поверх заводского.
+
+Каталог смонтирован в контейнер: после правки достаточно перезапустить контейнер, пересобирать
+образ не нужно. Если персонального файла ещё нет, начните с копии заводского:
+`cp servos.yaml servos.local.yaml`.
 
 ## Автоматически: камера ноутбука
 
@@ -172,8 +184,12 @@ ros2 param set /dog/servo_driver lf_thigh_joint.offset_deg 47.5
 ```bash
 # servo_pose_trim.json — файл со страницы (лежит рядом со скриптом на Pi)
 python3 tools/servo_pose/servo_pose_apply.py --trim servo_pose_trim.json \
-        --servos ros2_ws/src/dog_bringup/config/servos.yaml --write
+        --servos ros2_ws/src/dog_bringup/config/servos.local.yaml --write
 ```
+
+Страница по умолчанию пишет в заводской `servos.yaml`; чтобы подстройка легла в файл робота,
+запустите её с явным путём:
+`SERVO_POSE_SERVOS=ros2_ws/src/dog_bringup/config/servos.local.yaml python3 tools/servo_pose/servo_pose_server.py`.
 
 `offset_deg = опорный угол − подстройка` (hip 0°, thigh +45°, calf −90°);
 без `--write` — сухой прогон с отчётом.
@@ -184,7 +200,15 @@ python3 tools/servo_pose/servo_pose_apply.py --trim servo_pose_trim.json \
 ros2 param dump /dog/servo_driver > /tmp/servo_driver.yaml
 ```
 
-Перенесите `direction` и `offset_deg` в `ros2_ws/src/dog_bringup/config/servos.yaml` на хосте и сделайте коммит.
+Перенесите `direction` и `offset_deg` в `ros2_ws/src/dog_bringup/config/servos.local.yaml` —
+это файл робота, коммит ему не нужен. Проверьте результат:
+
+```bash
+python3 tools/robot_setup/robot_setup.py --check
+```
+
+Он сверяет зеркальные пары, разброс смещений и края импульсов. Когда робот принят с этой
+калибровкой, поставьте тег: `git tag robot-calibrated-$(date +%F) && git push --tags`.
 
 ## 6. Пределы
 

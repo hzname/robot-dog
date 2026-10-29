@@ -479,22 +479,42 @@ docker compose run --rm robot ros2 run dog_hardware pca9685_probe check     # ч
 3. `preview --view left`: все метки видны, углы похожи на правду.
 4. Запустить стек в обычном режиме (сервы под током, `passive`) и затем:
    ```bash
+   # если персонального файла ещё нет — начать с заводского
+   cp ros2_ws/src/dog_bringup/config/servos.yaml \
+      ros2_ws/src/dog_bringup/config/servos.local.yaml
    python3 -m robotdog_autocal run --robot dog.local --view all --passes 2 --apply --find-limits \
-       --servos-yaml ros2_ws/src/dog_bringup/config/servos.yaml
+       --servos-yaml ros2_ws/src/dog_bringup/config/servos.local.yaml
    ```
    Программа попросит поставить камеру спереди, сзади, слева и справа.
+
+   Калибровка этого робота ложится в `servos.local.yaml` рядом с заводским `servos.yaml`, а не
+   в файл под git. Запуск подхватывает его вторым файлом параметров (`robot.launch.py`), поэтому
+   `git pull` калибровку не затирает.
 5. Проверить результат: `calib_pose 0 30 -90`. Все ноги одинаково, по угольнику.
 
 **Вариант Б — вручную** по [CALIBRATION.md](CALIBRATION.md): `calib_pose`, `ros2 param set ... direction/offset_deg`, угольник.
 
-После калибровки — `git commit` файла `servos.yaml`.
+После калибровки проверить симметрию и края импульсов:
+
+```bash
+python3 tools/robot_setup/robot_setup.py --check
+```
+
+Инструмент сверяет зеркальные пары (lf/rf, lr/rr), разброс смещений и то, что ни одна серва
+не упирается в край импульсного диапазона в стойке. Когда робот принят с этой калибровкой —
+тег, чтобы история знала, с чем ходили:
+
+```bash
+git tag robot-calibrated-$(date +%F) && git push --tags
+```
 
 **Критерий перехода:**
 - в стойке все четыре ноги одинаковы с точностью 1–2°;
 - `calib_pose 15 0 -90` уводит **все** стопы влево;
 - `calib_pose 0 20 -90` — назад;
 - пределы найдены;
-- `servos.yaml` закоммичен.
+- значения лежат в `servos.local.yaml` (в git он не попадает), `--check` чистый;
+- поставлен тег `robot-calibrated-<дата>`.
 
 ---
 
@@ -504,14 +524,23 @@ docker compose run --rm robot ros2 run dog_hardware pca9685_probe check     # ч
 
 **IMU:**
 1. Стек запущен, робот неподвижен первую секунду: в это время меряется смещение гироскопа.
-2. Проверить оси:
+2. Проверить оси инструментом — он сам ведёт по четырём положениям и выносит вердикт:
    ```bash
-   docker compose exec robot ros2 topic echo /dog/imu/data --field orientation
+   docker compose exec robot python3 /ws/tools/imu_axes/run_ros.py --out /tmp/imu-check
    ```
-   - наклонить нос вниз → тангаж положительный;
-   - поднять левый бок → крен положительный (REP-103).
+   Покой (ровно и неподвижно) → нос вниз → левый бок вверх → поворот против часовой.
+   Что проверяется: `|roll|, |pitch| < 5°` в покое, знак тангажа при наклоне носа, знак крена
+   при подъёме бока, знак `angular_velocity.z` при повороте против часовой, частота ≈100 Гц
+   и шум гироскопа в покое. В конце — «оси и знак гироскопа верны» и готовое `axes:` для
+   `config/imu.yaml`, либо имя перевёрнутой оси. Записи шагов остаются в `/tmp/imu-check`
+   и прикладываются к протоколу.
 
-   Если нет — поменять `axes` в `config/imu.yaml` по схеме ниже и перезапустить.
+   Инструмент сверяет `orientation` с акселерометром: расхождение больше 5° — это дефект
+   пересчёта, а не монтажа, и чинится в коде, а не поворотом платы.
+
+3. Если `axes` меняли — перезапустить стек и прогнать проверку заново. Отметку
+   `calibrated: true` нода ставит сама после замера смещения; до неё компенсация уклона,
+   удержание курса и защита по наклону **не работают** (CAL-08) — это не поломка.
 
    ```
    IMU, вид СВЕРХУ, «вперёд» → вправо. Стрелки X/Y напечатаны на плате MPU6050,
@@ -530,18 +559,40 @@ docker compose run --rm robot ros2 run dog_hardware pca9685_probe check     # ч
    Подробная схема: [img/measure_imu_axes.svg](img/measure_imu_axes.svg)
 
    ![Оси IMU](img/measure_imu_axes.svg)
-3. Покрутить робота вокруг вертикали: знак `angular_velocity.z` положительный при повороте против часовой стрелки. От этого зависит удержание курса: если знак неверный, робот будет «удерживать» курс в обратную сторону и закручиваться.
-4. Частота: `ros2 topic hz /dog/imu/data` ≈ 100 Гц.
+4. Посмотреть на живые числа глазами (по желанию, после вердикта):
+   ```bash
+   docker compose exec robot ros2 topic echo /dog/imu/data --field orientation
+   ```
 
 **Датчик тока** (если стоит):
 1. `ros2 topic echo /dog/power`. Напряжение совпадает с мультиметром ±0.05 В.
 2. Все ноги в «Встать»: ток покоя 1–3 А. Ток в ходьбе на подставке запомнить: от него зависят пороги.
-3. Пороги в `config/power.yaml`: `overcurrent_a` примерно в 1.5 раза выше пикового тока нормальной ходьбы (по умолчанию 5 А за 0.5 с).
+3. Пороги считаются по записи, а не на глаз. Записать ходьбу в люльке и разобрать её:
+   ```bash
+   docker compose exec robot ros2 topic echo /dog/power --field current > /tmp/current.txt
+   # в другом окне, пока идёт ходьба
+   docker compose exec robot ros2 topic echo /dog/power --field voltage > /tmp/voltage.txt
+   python3 /ws/tools/power_thresholds/power_thresholds.py \
+       --current /tmp/current.txt --voltage /tmp/voltage.txt --sensor ina219-0.1
+   ```
+   Инструмент печатает p50/p99/максимум, готовый блок `/**/power_monitor:` для
+   `config/power.yaml` и — если порог выше предела шунта — прямо говорит, что защита по
+   току будет мнимой. Штатный INA219 с шунтом 0.1 Ом видит до 3.2 А, а двенадцать MG996R в
+   ходьбе берут 6–12 А: нужен шунт 10 мОм (или INA226), и порог из записи, а не 5 А из головы.
+
+4. Проверить защёлку: кратковременно просадить шину (лабораторный блок) — должно прийти
+   `rail lost at X V - protection latched`, робот ложится. После устранения причины снять
+   защёлку сервисом:
+   ```bash
+   docker compose exec robot ros2 service call /dog/power_monitor/clear_power_fault std_srvs/srv/Trigger
+   ```
+   Защёлка не снимается сама: потеря шины — отказ питания, который человек должен увидеть.
 
 **Критерий перехода:**
-- оси IMU проверены по трём движениям;
-- знак гироскопа Z верный;
-- ток и напряжение правдоподобные.
+- `tools/imu_axes` вынес «оси и знак гироскопа верны», `axes` в `config/imu.yaml` совпадает;
+- ток и напряжение правдоподобные (сверены с мультиметром);
+- пороги посчитаны по записи ходьбы в люльке, шунт это выдерживает;
+- защёлка потери шины проверена и снимается `~/clear_power_fault`.
 
 ---
 
@@ -591,10 +642,14 @@ limits: {max_vx: 0.05, max_vy: 0.03, max_wz: 0.3}
    - в логе нет `clamped`.
 3. Назад, влево, вправо, разворот. Потом «Лечь».
 4. Если **робот уходит вбок или разворачивается** — это ожидаемо без IMU. С IMU удержание курса включено само; сравнить, стоя на скотче-разметке.
-5. Записать первый rosbag для сверки с симуляцией:
+5. Записать первый rosbag для сверки с симуляцией — тем же набором топиков, что и всегда:
    ```bash
-   docker compose exec robot ros2 bag record -o /tmp/walk1 /dog/joint_commands /dog/joint_states /dog/imu/data /dog/power /dog/state /dog/cmd_vel
+   docker compose exec robot ros2 launch dog_bringup record.launch.py
    ```
+   Запись ложится в `~/dog-bags/<дата>-<время>` (zstd), четырнадцать топиков: состояние,
+   команды, импульсы серв, сторож, IMU, питание, пульт, поза корпуса, профиль, рельеф.
+   Список живёт в `ros2_ws/src/dog_bringup/launch/record.launch.py` — если топик переименован,
+   правится там, а не в блокноте.
 
 **Критерий перехода:** 5 минут ходьбы на малой скорости по всем направлениям без падений и без `clamped`.
 
