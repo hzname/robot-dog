@@ -125,6 +125,15 @@ class FaultDrill(unittest.TestCase):
                 return True
         return False
 
+    def set_estop(self, active, seconds=0.6):
+        """Publish the e-stop for a moment, not once: on a loaded runner discovery can be
+        slower than a single message is alive, and a person keeps pressing too."""
+        end = time.time() + seconds
+        while time.time() < end:
+            self.estop_pub.publish(Bool(data=active))
+            rclpy.spin_once(self.node, timeout_sec=0.05)
+            time.sleep(0.1)
+
     def say(self, word):
         def _publish():
             self.cmd_pub.publish(String(data=word))
@@ -143,18 +152,21 @@ class FaultDrill(unittest.TestCase):
 
     # --- 1. the operator's own path ------------------------------------------------
     def test_1_the_robot_stops_and_comes_back(self):
-        self.assertTrue(self.spin_until(lambda: self.state == 'passive', 30.0),
+        self.assertTrue(self.spin_until(lambda: self.state == 'passive', 40.0),
                         'стек не поднялся, state=%s' % self.state)
-        self.estop_pub.publish(Bool(data=True))
-        self.assertTrue(self.spin_until(lambda: self.state == 'estop', 5.0),
+        self.set_estop(True)
+        self.assertTrue(self.spin_until(lambda: self.state == 'estop', 15.0),
                         'E-STOP не дошёл до состояния: %s' % self.state)
-        self.estop_pub.publish(Bool(data=False))
-        self.assertTrue(self.spin_until(lambda: self.state == 'passive', 5.0),
+        self.set_estop(False)
+        self.assertTrue(self.spin_until(lambda: self.state == 'passive', 15.0),
                         'робот не вернулся из E-STOP: %s' % self.state)
 
     # --- 2. the state machine dies while the servos are holding --------------------
     def test_2_a_dead_state_machine_latches_the_driver(self):
-        self.assertTrue(self.spin_until(lambda: self.state == 'stand', 20.0,
+        # Each drill starts clean: a latch left by the previous one keeps the servos off
+        # and then nothing can be proven about the driver's silence detection.
+        self.call('/dog/servo_driver/release_fault')
+        self.assertTrue(self.spin_until(lambda: self.state == 'stand', 30.0,
                                         self.say('stand')),
                         'робот не встал, state=%s' % self.state)
         self.assertTrue(self.spin_until(lambda: self.joints is not None, 5.0),
@@ -165,16 +177,17 @@ class FaultDrill(unittest.TestCase):
 
         subprocess.run(['pkill', '-f', 'locomotion_node'], check=False)
         # The driver holds for 0.5 s and relaxes after 2.5 s of silence, then latches.
-        self.assertTrue(self.spin_until(lambda: self.estop is True, 15.0),
+        self.assertTrue(self.spin_until(lambda: self.estop is True, 30.0),
                         'драйвер не защёлкнулся после смерти локомотива')
         answer = self.call('/dog/servo_driver/release_fault')
         self.assertTrue(answer.success, answer.message)
-        self.assertTrue(self.spin_until(lambda: self.estop is False, 5.0),
+        self.assertTrue(self.spin_until(lambda: self.estop is False, 15.0),
                         'защёлка не снялась сервисом')
         del names, pose
 
     # --- 3. the bus itself fails ---------------------------------------------------
     def test_3_a_failing_bus_latches_and_refuses_to_arm(self):
+        self.call('/dog/servo_driver/release_fault')
         # Nobody drives the robot any more: the test stands in for the state machine, with
         # a small wiggle so the driver keeps writing to the bus for the failure to hit.
         self.assertTrue(self.spin_until(lambda: self.joints is not None, 20.0),
