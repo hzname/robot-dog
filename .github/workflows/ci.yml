@@ -293,11 +293,25 @@ jobs:
             ros2_ws/*.sim.log
             ros2_ws/perception_*.txt
 
+  preflight:
+    name: preflight and recording (pure python)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pytest
+      # Both suites are stdlib-only on purpose: the checks that decide whether the
+      # robot may start must be testable without ROS and without the robot.
+      - run: python -m pytest -q tools/preflight/test ros2_ws/src/dog_bringup/test/test_record.py
+
   robot-image:
-    name: robot image (arm64)
+    name: robot image (arm64) boots the stack
     # Emulated arm64 C++ build is slow; run on main and on demand only.
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
@@ -309,7 +323,23 @@ jobs:
           file: docker/Dockerfile
           platforms: linux/arm64
           push: false
+          load: true
+          tags: robot-dog:ci
           build-args: BUILD_JOBS=4
+      # CAL-09, first half: in a container there is no /dev/i2c-0, so the robot must
+      # refuse to start. A preflight that passes here would be a rubber stamp.
+      - name: Preflight refuses to start without the robot's hardware
+        run: |
+          set +e
+          docker run --rm --platform linux/arm64 robot-dog:ci \
+            python3 /ws/tools/preflight/preflight.py --args "backend:=pca9685 gamepad:=false"
+          code=$?
+          set -e
+          echo "preflight exit code: $code (2 = blocked)"
+          test "$code" -eq 2
+      # CAL-09, second half: the image launches the real stack with the mock backend.
+      - name: The image boots robot.launch.py backend:=mock
+        run: docker run --rm --platform linux/arm64 robot-dog:ci bash /ws/docker/ci_smoke.sh
 
   acceptance:
     name: acceptance (${{ matrix.distro }}, ${{ matrix.servo_model }})

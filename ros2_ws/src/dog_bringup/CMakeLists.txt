@@ -14,6 +14,7 @@ if(BUILD_TESTING)
   add_launch_test(test/test_mock_bringup.py TIMEOUT 120 ENV ROS_DOMAIN_ID=43)
   # No ROS in this one: the floor profile is a table of numbers.
   ament_add_pytest_test(test_profile test/test_profile.py)
+  ament_add_pytest_test(test_record test/test_record.py)
 endif()
 
 ament_package()

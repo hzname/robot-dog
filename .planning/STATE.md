@@ -1,8 +1,8 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 05
-current_phase_name: Профиль первого выхода и защита пультов
-status: phase_complete
+current_phase: 06
+current_phase_name: Питание, выключатель и запуск на Pi
+status: in_progress
 stopped_at: Phase 05 complete - profile:=floor is one argument, the page cannot release an e-stop, WebSocket has Origin/cap/idle limits, live calibration cannot snap a servo, and the calibration lives outside git; CI 40751490766 green
 last_updated: "2026-10-29T16:20:00.000Z"
 last_activity: 2026-10-29
@@ -11,8 +11,8 @@ state_head: ebdc33f
 progress:
   total_phases: 8
   completed_phases: 3
-  total_plans: 36
-  completed_plans: 36
+  total_plans: 40
+  completed_plans: 39
   percent: 38
 ---
 
@@ -23,7 +23,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-29)
 
 **Core value:** Робот надёжно и безопасно ходит по полу с геймпада, не падая и не убивая свои сервы.
-**Current focus:** Phase 06 — Питание, выключатель и запуск на Pi
+**Current focus:** Phase 06 — код и CI закрыты, 06-04 ждёт стенда
 
 ## Current Position
 
@@ -313,7 +313,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-29T16:20:00.000Z
-Stopped at: Phase 05 closed in code and CI. Осталось до приёмки фазы: проверки на живом роботе (TEL-05 — залипшие оси и переподключение геймпада) уходят в фазу 6/7 вместе с остальным железом
-Next: фаза 06 (питание, выключатель и запуск на Pi) по ROADMAP
-Resume file: .planning/phases/05-profil-pervogo-vyhoda-i-zashchita-pultov/05-05-SUMMARY.md
+Last session: 2026-10-29T18:40:00.000Z
+Stopped at: Phase 06 code half closed - preflight runs inside the entrypoint, one command records a floor session, and the arm64 image now boots the stack in CI; the power measurements and the switch wait for the bench
+Next: 06-04 на стенде (измерения 1-10 по docs/POWER.md, выключатель в V+ серв, сигнализатор батареи), затем фаза 07
+Resume file: .planning/phases/06-pitanie-vyklyuchatel-i-zapusk-na-pi/06-04-PLAN.md

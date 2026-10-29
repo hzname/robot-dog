@@ -29,6 +29,9 @@ services:
       # laptop set ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET and the same domain there.
       - ROS_DOMAIN_ID=42
       - ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
+      # The entrypoint runs tools/preflight first. Set DOG_PREFLIGHT=off only for
+      # bench work where the bus is deliberately absent (CAL-09).
+      - DOG_PREFLIGHT=${DOG_PREFLIGHT:-auto}
     stop_signal: SIGINT
     stop_grace_period: 10s
     command: >

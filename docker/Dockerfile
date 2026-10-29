@@ -33,6 +33,11 @@ RUN source /opt/ros/${ROS_DISTRO}/setup.bash \
  && rm -rf build log
 
 COPY docker/entrypoint.sh /entrypoint.sh
+# Preflight ships inside the image and the entrypoint runs it before the launch:
+# a step someone can forget is not a check (CAL-09). The smoke script is what CI
+# runs to prove the image can start the stack.
+COPY docker/ci_smoke.sh /ws/docker/ci_smoke.sh
+COPY tools/preflight /ws/tools/preflight
 ENV ROS_DISTRO=${ROS_DISTRO}
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["ros2", "launch", "dog_bringup", "robot.launch.py"]

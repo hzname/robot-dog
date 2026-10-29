@@ -785,6 +785,12 @@ git tag robot-calibrated-$(date +%F) && git push --tags
 
 Команду печатает `robot_setup` в конце работы.
 
+## Проверка питания перед сервами
+
+Список измерений и ожиданий — `docs/POWER.md`, таблица для записей —
+`.planning/phases/06-pitanie-vyklyuchatel-i-zapusk-na-pi/06-MEASUREMENTS.md`.
+Пока строки 1–6 не сходятся, сервы к V+ не подключаются.
+
 ## Изоляция от симулятора (ROS_DOMAIN_ID)
 
 В `docker-compose.yml` у контейнера свой домен и без обнаружения по сети:
