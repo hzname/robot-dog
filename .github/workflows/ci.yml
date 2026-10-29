@@ -304,7 +304,7 @@ jobs:
       - run: pip install pytest
       # Both suites are stdlib-only on purpose: the checks that decide whether the
       # robot may start must be testable without ROS and without the robot.
-      - run: python -m pytest -q tools/preflight/test tools/power_thresholds/test tools/imu_axes/test tools/joy_replay/test tools/floor_run/test ros2_ws/src/dog_bringup/test/test_record.py
+      - run: python -m pytest -q tools/preflight/test tools/power_thresholds/test tools/imu_axes/test tools/joy_replay/test tools/floor_run/test tools/servo_guard/test ros2_ws/src/dog_bringup/test/test_record.py
 
   robot-image:
     name: robot image (arm64) boots the stack
