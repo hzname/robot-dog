@@ -60,6 +60,9 @@ def generate_launch_description():
             # bytes"), so `ros2 bag info` reports an empty bag and nothing can be played
             # or analysed afterwards - a recorded session that is lost. Measured
             # 2026-10-29; a bag of a ten-minute walk is small enough to keep plain.
-            cmd=['ros2', 'bag', 'record', '-o', out] + TOPICS,
+            # --topics, not a positional list: rosbag2 deprecates the positional form and
+            # every run printed the warning. Supported on jazzy and newer, which is what
+            # the image and CI use.
+            cmd=['ros2', 'bag', 'record', '-o', out, '--topics'] + TOPICS,
             output='screen'),
     ])

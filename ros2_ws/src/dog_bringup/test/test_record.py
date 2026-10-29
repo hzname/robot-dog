@@ -59,6 +59,14 @@ def test_the_post_mortem_topics_are_recorded():
         assert name in record.TOPICS, name
 
 
+def test_the_topics_are_named_not_positional():
+    """rosbag2 deprecates the positional list and warns about it on every run, so the
+    launch names the flag. The day the positional form disappears this still works."""
+    text = open(record.__file__, encoding='utf-8').read()
+    assert "'--topics'" in text
+    assert "'--compression-mode'" not in text      # unreadable bags, see DEPLOYMENT stage 9
+
+
 def test_each_run_gets_its_own_directory():
     first = record.default_output(0)
     second = record.default_output(1)
