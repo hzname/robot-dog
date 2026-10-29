@@ -195,14 +195,16 @@ def render(verdict):
         for p in verdict['problems']:
             out.append('НЕ ТАК: ' + p)
         out.append('')
-        out.append('Оси не проверены. В imu.yaml должно остаться calibrated: false.')
+        out.append('Оси не проверены. В imu.yaml должно остаться axes_verified: false.')
     else:
         out.append('')
         out.append('ИТОГ: оси и знак гироскопа верны, ' + verdict['mount'])
         if verdict['axes']:
             out.append('в imu.yaml: axes: "%s"' % verdict['axes'])
-        out.append('отметку calibrated: true ставит imu_node сам после замера смещения;')
-        out.append('убедившись в этом, включите slope.compensation и heading.hold.')
+        out.append('и рядом с ним: axes_verified: true')
+        out.append('без этой строки imu_node не пускает отношение в уклон, курс и защиту')
+        out.append('по наклону (CAL-08), даже когда смещение гироскопа уже замерено.')
+        out.append('После правки imu.yaml перезапустите стек (docker compose restart robot).')
     return '\n'.join(out)
 
 

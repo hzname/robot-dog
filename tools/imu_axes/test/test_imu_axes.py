@@ -58,6 +58,20 @@ def test_a_slow_topic_fails_the_rate_check():
     assert not report['ok']
 
 
+def test_the_verdict_says_what_to_write_in_the_config():
+    """Two lines, not a congratulation: `axes` chooses the mount, `axes_verified` opens
+    the gate. A verdict that omits the second leaves imu_node waiting with no hint why."""
+    text = ia.render(ia.judge(*good_steps()))
+    assert 'axes: "x,y,z"' in text
+    assert 'axes_verified: true' in text
+
+
+def test_a_failed_check_leaves_the_mark_off():
+    steps = (rows(), rows(pitch=1.0), rows(roll=15.0), rows(yaw_rate_dps=40.0))
+    text = ia.render(ia.judge(*steps))
+    assert 'axes_verified: false' in text
+
+
 def test_an_operator_who_did_not_move_gets_asked_again():
     steps = (rows(), rows(pitch=1.0), rows(roll=15.0), rows(yaw_rate_dps=40.0))
     v = ia.judge(*steps)
@@ -71,7 +85,7 @@ def test_an_inverted_gyro_is_called_out_by_name():
     v = ia.judge(*steps)
     assert not v['ok']
     assert any('гироскоп Z инвертирован' in p for p in v['problems'])
-    assert 'калибровк' in ia.render(v).lower() or 'calibrated' in ia.render(v)
+    assert 'axes_verified: false' in ia.render(v)
 
 
 def test_a_plate_turned_by_half_a_turn_gets_a_proper_rotation():

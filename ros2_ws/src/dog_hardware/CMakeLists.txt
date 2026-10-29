@@ -64,6 +64,7 @@ if(BUILD_TESTING)
   add_launch_test(test/test_power_monitor.py TIMEOUT 60 ENV ROS_DOMAIN_ID=41)
   add_launch_test(test/test_servo_driver_fault.py TIMEOUT 60 ENV ROS_DOMAIN_ID=42)
   add_launch_test(test/test_servo_driver_timeout.py TIMEOUT 60 ENV ROS_DOMAIN_ID=43)
+  add_launch_test(test/test_imu_gate.py TIMEOUT 90 ENV ROS_DOMAIN_ID=45)
 endif()
 
 ament_export_targets(export_dog_hardware HAS_LIBRARY_TARGET)

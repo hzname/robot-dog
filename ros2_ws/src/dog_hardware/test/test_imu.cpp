@@ -4,6 +4,7 @@
 
 #include "dog_hardware/imu_sensor.hpp"
 
+using dog_hardware::attitudeTrusted;
 using dog_hardware::AttitudeFilter;
 using dog_hardware::AxisMap;
 using dog_hardware::GyroBias;
@@ -105,4 +106,25 @@ TEST(Imu, GyroBiasRestartsOnMotion)
   EXPECT_TRUE(b.done());
   EXPECT_NEAR(b.bias()[0], 0.01, 1e-9);
   EXPECT_NEAR(b.bias()[2], 0.003, 1e-9);
+}
+
+// CAL-08: the gyro bias alone is not permission to trust the attitude. Somebody has to
+// look at the axes first, and the check is worth nothing if a timer can replace it.
+
+TEST(ImuTrust, BiasAloneIsNotEnoughOnRealHardware)
+{
+  EXPECT_FALSE(attitudeTrusted(false, false, false));
+  EXPECT_FALSE(attitudeTrusted(true, false, false));
+}
+
+TEST(ImuTrust, VerifiedAxesOpenTheGate)
+{
+  EXPECT_FALSE(attitudeTrusted(false, true, false));   // verified, but still measuring
+  EXPECT_TRUE(attitudeTrusted(true, true, false));
+}
+
+TEST(ImuTrust, AModelNeedsNoVerification)
+{
+  EXPECT_TRUE(attitudeTrusted(true, false, true));     // a simulator, or the mock backend
+  EXPECT_FALSE(attitudeTrusted(false, false, true));   // but it still has to measure
 }

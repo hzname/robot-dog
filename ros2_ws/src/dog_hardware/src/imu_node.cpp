@@ -63,6 +63,11 @@ public:
     filter_ = AttitudeFilter(declare_parameter("filter_tau", 1.0), declare_parameter("accel_gate", 0.15));
     bias_ = GyroBias(std::max(1, static_cast<int>(declare_parameter("bias_time", 1.0) * rate)));
     frame_ = declare_parameter("frame_id", std::string("base_link"));
+    // CAL-08: a person, not a timer, decides whether the axes are right. tools/imu_axes
+    // prints the line to put here; until it is there, attitude stays untrusted even
+    // though the gyro bias has already been measured.
+    axes_verified_ = declare_parameter("axes_verified", false);
+    model_ = declare_parameter("mock.trust_axes", true) && backend == "mock";
     declare_parameter("mock.roll_deg", 0.0);
     declare_parameter("mock.pitch_deg", 0.0);
 
@@ -96,6 +101,12 @@ public:
     timer_ = create_wall_timer(std::chrono::duration<double>(1.0 / rate), [this]() {tick();});
     RCLCPP_INFO(get_logger(), "IMU: %s; measuring gyro bias, keep the robot still",
       sensor_->describe().c_str());
+    if (!axes_verified_ && !model_) {
+      RCLCPP_WARN(get_logger(),
+        "IMU axes are not verified (axes_verified: false): roll and pitch will drive "
+        "neither slope compensation, heading hold nor the tilt guard until the check in "
+        "docs/DEPLOYMENT.md step 7 is done");
+    }
   }
 
   bool active() const {return sensor_ != nullptr;}
@@ -106,7 +117,12 @@ private:
   {
     using dog_diagnostics::Level;
     Level level = calibrated_ ? Level::OK : Level::WARN;
-    std::string reason = calibrated_ ? "calibrated" : "calibrating the gyro";
+    std::string reason = "calibrating the gyro";
+    if (calibrated_) {
+      reason = "calibrated";
+    } else if (bias_.done()) {
+      reason = "axes not verified - run tools/imu_axes, then set axes_verified: true";
+    }
     if (quiet_announced_) {
       level = Level::ERROR;
       reason = "imu silent (test hook)";
@@ -116,6 +132,7 @@ private:
     }
     diag_->publish(level, reason, {
       {"calibrated", calibrated_ ? "true" : "false"},
+      {"axes_verified", axes_verified_ ? "true" : "false"},
       {"read_failures", std::to_string(read_failures_)}});
   }
 
@@ -144,8 +161,13 @@ private:
       if (bias_.add(b.gyro)) {
         const auto g = bias_.bias();
         RCLCPP_INFO(get_logger(), "gyro bias %.4f %.4f %.4f rad/s", g[0], g[1], g[2]);
-        calibrated_ = true;
-        cal_pub_->publish(std_msgs::msg::Bool().set__data(true));
+        if (attitudeTrusted(true, axes_verified_, model_)) {
+          calibrated_ = true;
+          cal_pub_->publish(std_msgs::msg::Bool().set__data(true));
+        } else {
+          RCLCPP_WARN(get_logger(),
+            "gyro bias measured, but the axes are unverified: not publishing imu/calibrated");
+        }
       }
       filter_.update(b, 0.0);
       last_ = t;
@@ -188,6 +210,8 @@ private:
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr cal_pub_;
   bool calibrated_{false};
+  bool axes_verified_{false};   // CAL-08: set by a person after tools/imu_axes
+  bool model_{false};           // a mock IMU has no mount to get wrong
   double silence_after_{0.0};   // [s] test hook: go quiet after this
   double quiet_since_{0.0};
   bool quiet_announced_{false};
