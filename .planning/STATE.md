@@ -313,7 +313,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-29T18:40:00.000Z
-Stopped at: Phase 06 code half closed - preflight runs inside the entrypoint, one command records a floor session, and the arm64 image now boots the stack in CI; the power measurements and the switch wait for the bench
+Last session: 2026-10-29T20:10:00.000Z
+Stopped at: Phase 06 code half closed and proven - preflight blocks a container without the bus and passes the mock backend, one command records a 14-topic bag, and the arm64 image (emulated) boots the stack until /dog/state answers; CI 40838368583 green; the power measurements and the switch wait for the bench
 Next: 06-04 на стенде (измерения 1-10 по docs/POWER.md, выключатель в V+ серв, сигнализатор батареи), затем фаза 07
 Resume file: .planning/phases/06-pitanie-vyklyuchatel-i-zapusk-na-pi/06-04-PLAN.md

@@ -1,6 +1,7 @@
 # 06-03: образ arm64 доказывается запуском — сводка волны
 
-Код `3e05e47`.
+Код `378b77f`. CI `40838368583` (workflow_dispatch, arm64 под qemu) — **success**:
+`preflight exit code: 2 (2 = blocked)` и `smoke: /dog/state answered: passive`.
 
 ## Что сделано
 
@@ -32,4 +33,4 @@
 
 | Требование | Где | Чем проверено |
 |---|---|---|
-| CAL-09 (часть 2) | `.github/workflows/ci.yml` (джоба `robot-image`), `docker/ci_smoke.sh`, `docker/Dockerfile` | локально: preflight → 2, смоук → `/dog/state answered`; в CI: та же джоба на arm64 |
+| CAL-09 (часть 2) | `.github/workflows/ci.yml` (джоба `robot-image`), `docker/ci_smoke.sh`, `docker/check_state.py`, `docker/Dockerfile` | локально: preflight → 2, смоук → `/dog/state answered`; в CI на arm64 (`40838368583`): то же самое |
