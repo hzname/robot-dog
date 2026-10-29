@@ -12,6 +12,13 @@ if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   # Own DDS domain: colcon runs packages in parallel and every test uses /dog.
   add_launch_test(test/test_mock_bringup.py TIMEOUT 120 ENV ROS_DOMAIN_ID=43)
+  # SAF-18 without a robot: the e-stop round trip, a dead state machine and a failing bus.
+  # Its own domain, so it cannot disturb the mock bringup test running beside it.
+  add_launch_test(test/test_fault_drill.py TIMEOUT 200 ENV ROS_DOMAIN_ID=44)
+  # It kills the state machine on purpose: nobody else's node may be in the way.
+  if(TEST test_fault_drill)
+    set_tests_properties(test_fault_drill PROPERTIES RUN_SERIAL TRUE)
+  endif()
   # No ROS in this one: the floor profile is a table of numbers.
   ament_add_pytest_test(test_profile test/test_profile.py)
   ament_add_pytest_test(test_record test/test_record.py)

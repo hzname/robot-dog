@@ -73,7 +73,11 @@ def _setup(context):
                          profiles.params(profile_name, 'locomotion')], output='screen'),
         Node(package='dog_hardware', executable='servo_driver_node', name='servo_driver',
              namespace=NS, parameters=servo_files + [{'backend': cfg('backend'),
-                                                      'armed_on_start': armed}],
+                                                      'armed_on_start': armed,
+                                                      # 0 = no fault; >0 makes the mock bus
+                                                      # start failing N seconds in, so the
+                                                      # fault drill runs on a healthy stack
+                                                      'mock.fail_after': float(cfg('bus_fail_after'))}],
              output='screen'),
     ]
     if power_backend != 'off':
@@ -125,6 +129,8 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('backend', default_value='pca9685',
                               description='servo output: pca9685 (I2C) or mock'),
+        DeclareLaunchArgument('bus_fail_after', default_value='0.0',
+                              description='mock backend only: the bus starts failing after N s'),
         DeclareLaunchArgument('gamepad', default_value='true',
                               description='start gamepad reader + joy_teleop'),
         DeclareLaunchArgument('gamepad_profile', default_value='xbox',
