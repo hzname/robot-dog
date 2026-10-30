@@ -173,6 +173,9 @@ ServoDriver::ServoDriver(std::shared_ptr<ServoBus> bus, std::vector<std::string>
   pulses_.assign(names_.size(), 0.0);
   state_.assign(names_.size(), State::OFF);
   enable_at_.assign(names_.size(), 0.0);
+  dirty_.assign(names_.size(), false);
+  target_set_.assign(names_.size(), false);
+  armed_ = params_.armed_on_start;
   params_.joints_per_group = std::max(params_.joints_per_group, 1);
   for (size_t i = 0; i < cals_.size(); ++i) {
     if (cals_[i].coupled_to == static_cast<int>(i) || cals_[i].coupled_to >= static_cast<int>(cals_.size())) {
@@ -184,7 +187,7 @@ ServoDriver::ServoDriver(std::shared_ptr<ServoBus> bus, std::vector<std::string>
 int ServoDriver::setTargets(const std::vector<std::string> & names,
   const std::vector<double> & positions, double now)
 {
-  if (estop_) {return 0;}
+  if (estop_ || fault_) {return 0;}
   int matched = 0;
   int group_rank = 0;  // stagger counter among servos powered by this call
   int last_group = -1;
@@ -194,7 +197,9 @@ int ServoDriver::setTargets(const std::vector<std::string> & names,
     if (it == names_.end() || !std::isfinite(positions[k])) {continue;}
     const size_t i = static_cast<size_t>(it - names_.begin());
     target_[i] = positions[k];
+    target_set_[i] = true;
     ++matched;
+    if (!armed_) {continue;}  // the pose is remembered, nothing is powered yet
     if (state_[i] == State::OFF) {
       // Position is unknown while unpowered: jump straight to the target, one
       // leg at a time to limit the inrush current.
@@ -221,8 +226,10 @@ void ServoDriver::update(double now)
 {
   const double dt = last_update_ < 0.0 ? 0.0 : std::clamp(now - last_update_, 0.0, 0.1);
   last_update_ = now;
-  if (estop_) {return;}
+  if (estop_ || fault_ || !armed_) {return;}
   clamped_ = 0;
+  frame_failed_ = false;
+  frame_written_ = false;
   const double max_step = params_.max_joint_speed * dt;
   std::vector<bool> changed(names_.size(), false);
   for (size_t i = 0; i < names_.size(); ++i) {
@@ -246,34 +253,110 @@ void ServoDriver::update(double now)
       }
     }
   }
-  // A coupled servo must follow its parent even when its own target is still.
+  // A coupled servo must follow its parent even when its own target is still,
+  // and a channel whose last write failed is retried until the pulse lands.
   for (size_t i = 0; i < names_.size(); ++i) {
     const int p = cals_[i].coupled_to;
-    if (state_[i] == State::ON && (changed[i] || (p >= 0 && changed[p]))) {
+    if (state_[i] == State::ON && (changed[i] || (p >= 0 && changed[p]) || dirty_[i])) {
       write(i);
+    }
+  }
+  if (frame_written_) {
+    if (frame_failed_) {
+      if (++failed_frames_ >= kFaultFrames) {
+        latchFault("bus write failed " + std::to_string(failed_frames_) + " frames in a row");
+      }
+    } else {
+      failed_frames_ = 0;
     }
   }
 }
 
-void ServoDriver::write(size_t i)
+bool ServoDriver::write(size_t i)
 {
   bool clamped = false;
   pulses_[i] = jointToPulseUs(cals_[i], current_[i], &clamped, parentAngle(i));
-  bus_->setPulseUs(cals_[i].channel, pulses_[i]);
   if (clamped) {++clamped_;}
+  frame_written_ = true;
+  const int channel = cals_[i].channel;
+  if (!bus_->setPulseUs(channel, pulses_[i])) {
+    // The chip kept its previous pulse; the driver must not pretend otherwise.
+    ++bus_faults_;
+    ++channel_faults_[channel];
+    frame_failed_ = true;
+    dirty_[i] = true;
+    return false;
+  }
+  dirty_[i] = false;
+  outputs_confirmed_off_ = false;  // something is being driven now
+  return true;
+}
+
+void ServoDriver::arm()
+{
+  if (estop_ || fault_) {return;}
+  armed_ = true;
+  const double now = last_update_ < 0.0 ? 0.0 : last_update_;
+  int rank = 0;
+  int last_group = -1;
+  for (size_t i = 0; i < names_.size(); ++i) {
+    if (!target_set_[i] || state_[i] != State::OFF) {continue;}
+    const int group = static_cast<int>(i) / params_.joints_per_group;
+    if (group != last_group) {
+      if (last_group >= 0) {++rank;}
+      last_group = group;
+    }
+    state_[i] = State::PENDING;
+    enable_at_[i] = now + rank * params_.enable_stagger;
+  }
+}
+
+void ServoDriver::disarm()
+{
+  armed_ = false;
+  relax();
+}
+
+void ServoDriver::latchFault(const std::string & reason)
+{
+  if (fault_) {return;}
+  armed_ = false;  // an emergency release always leaves the driver disarmed
+  fault_ = true;
+  fault_reason_ = reason;
+  estop_ = false;  // the fault is its own latch; the estop flag stays the operator's
+  relax();
+}
+
+void ServoDriver::clearFault()
+{
+  fault_ = false;
+  fault_reason_.clear();
+  failed_frames_ = 0;
 }
 
 void ServoDriver::setEstop(bool active)
 {
-  if (active) {relax();}
+  if (active) {relax();}  // the result lands in outputsConfirmedOff()/estopDone()
   estop_ = active;
 }
 
-void ServoDriver::relax()
+bool ServoDriver::relax()
 {
-  bus_->disableAll();
+  // One retry covers an I2C hiccup; after that the all-call itself may be the
+  // broken path, so every channel is disabled on its own before giving up.
+  bool confirmed = bus_->disableAll() || bus_->disableAll();
+  if (!confirmed) {
+    confirmed = true;
+    for (int ch = 0; ch < kPwmChannels; ++ch) {
+      if (!bus_->disable(ch)) {confirmed = false;}
+    }
+  }
+  if (!confirmed) {++relax_failures_;}
+  outputs_confirmed_off_ = confirmed;
   std::fill(state_.begin(), state_.end(), State::OFF);
   std::fill(pulses_.begin(), pulses_.end(), 0.0);
+  std::fill(dirty_.begin(), dirty_.end(), false);
+  return confirmed;
 }
 
 bool ServoDriver::setCalibration(size_t index, const ServoCalibration & cal)
@@ -289,6 +372,15 @@ bool ServoDriver::setCalibration(size_t index, const ServoCalibration & cal)
     write(index);  // live preview while calibrating
   }
   return true;
+}
+
+double ServoDriver::liveCalibrationStepDeg(size_t index, const ServoCalibration & cal) const
+{
+  if (index >= cals_.size() || state_[index] != State::ON) {return 0.0;}
+  const double before = jointToPulseUs(cals_[index], current_[index], nullptr, parentAngle(index));
+  const double after = jointToPulseUs(cal, current_[index], nullptr, parentAngle(index));
+  const double us_per_deg = 0.5 * (cals_[index].usPerDeg() + cal.usPerDeg());
+  return std::abs(after - before) / (us_per_deg > 0.0 ? us_per_deg : 1.0);
 }
 
 bool ServoDriver::anyEnabled() const

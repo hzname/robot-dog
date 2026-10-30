@@ -70,7 +70,7 @@ TeleopOutput JoyMapper::process(const std::vector<float> & axes, const std::vect
 
   const bool deadman = p_.button_deadman < 0 || button(buttons, p_.button_deadman);
   if (deadman && !out.estop.value_or(false)) {
-    const double scale = button(buttons, p_.button_turbo) ? 1.0 : p_.normal_scale;
+    const double scale = button(buttons, p_.button_turbo) ? p_.turbo_scale : p_.normal_scale;
     Twist2D t;
     t.vx = snap(applyDeadzone(axis(axes, p_.axis_vx), p_.deadzone) * lim_.max_vx * scale);
     t.vy = snap(applyDeadzone(axis(axes, p_.axis_vy), p_.deadzone) * lim_.max_vy * scale);

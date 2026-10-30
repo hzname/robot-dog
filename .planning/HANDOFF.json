@@ -1,0 +1,63 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-10-06T07:33:14.144Z",
+  "phase": "01",
+  "phase_name": "Замеры на столе и ход назад в симуляции",
+  "phase_dir": ".planning/phases/01-zamery-na-stole-i-hod-nazad-v-simulyatsii",
+  "plan": 14,
+  "task": 1,
+  "total_tasks": 4,
+  "status": "paused",
+  "grain_note": "Проект исполняется по-планово (план = единица учёта); completed_tasks/remaining_tasks перечисляют ПЛАНЫ фазы, не отдельные задачи.",
+  "completed_tasks": [
+    {"id": "01-01", "name": "Ветка фазы + tools/ci_dispatch/ci_dispatch.sh + tools/local_gtest/run.sh", "status": "done", "commit": "925214d"},
+    {"id": "01-02", "name": "Контракт конфигурации Phase 1 (robot.yaml, robot_setup, тесты)", "status": "done", "commit": "9a5d3ef"},
+    {"id": "01-03", "name": "dog_gazebo/acceptance_stats + pytest (68 тестов)", "status": "done", "commit": "aee4276"},
+    {"id": "01-04", "name": "ROS-free ядро dog_control/servo_limits + gtest (9 тестов)", "status": "done", "commit": "4236ba0"},
+    {"id": "01-05", "name": "Пакет dog_bench (fake I2C, INA219, selftest CLI)", "status": "done", "commit": "0a6909c"},
+    {"id": "01-06", "name": "tools/servo_speed — офлайн-анализ скорости насыщения серв (77 pytest)", "status": "done", "commit": "5a1766f"},
+    {"id": "01-07", "name": "Документы владельца (лист замеров, заказ деталей, REVIEW и др.)", "status": "done", "commit": "d6af2a7"},
+    {"id": "01-08", "name": "Автопериод походки из скорости серв + live reconfig (CI зелёный)", "status": "done", "commit": "8b3b6ad"},
+    {"id": "01-09", "name": "dog_bench: рампа, safety-предохранитель, PWM-выход", "status": "done", "commit": "20e62dc"},
+    {"id": "01-10", "name": "Профиль серв в симуляции (люфт/задержка/CommandShaper)", "status": "done", "commit": "3127cf9"},
+    {"id": "01-11", "name": "Приёмочный CLI walk_check --maneuvers (125 pytest)", "status": "done", "commit": "171fe9e"},
+    {"id": "01-12", "name": "Сессия измерений, SignalGuard, CSV (46 gtest; CI зелёный)", "status": "done", "commit": "fd687af"},
+    {"id": "01-13", "name": "ci.yml: входы + job-ы acceptance/servo-speed; пробный прогон и baseline (CI зелёные)", "status": "done", "commit": "d10e449"}
+  ],
+  "remaining_tasks": [
+    {"id": "01-14", "name": "ЧЕКПОИНТ ВЛАДЕЛЬЦА: замер скорости MG996R на роботе", "status": "in_progress_checkpoint", "note": "оркестратор выполнил по просьбе владельца: клон репо на Pi (ветка фазы 30ae1d1), бэкап-тег robot-dog:2.0-before-phase1, сборка образа ЗАВЕРШЕНА (Image robot-dog:2.0 Built, ID 7537243cbb09), шаг 4 --help exit=0 → image_ok=yes; probe check/off OK, скан i2c-0: 40/68/70 без INA219, пульсы 1134/1606 визуально OK (канал 1). Ждём владельца: v_plus_volts, INA219 (адрес), инструментальный замер угла; затем задачи 2-4."},
+    {"id": "01-15", "name": "Ввод измеренных чисел в умолчания", "status": "not_started"},
+    {"id": "01-16", "name": "Форма траектории переноса при заднем ходе", "status": "not_started"},
+    {"id": "01-17", "name": "Итоговая приёмка хода назад", "status": "not_started"}
+  ],
+  "blockers": [],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {"action": "01-14 (отложено владельцем на «позже»): подключить INA219 (адрес 0x41/0x44/0x45) и провести инструментальный замер угла транспортиром (повтор пульсов 1134/1606); прислать v_plus_volts, protractor_angle_deg, ina_address", "context": "Без INA219 и угла задача 2 (selftest/dry-run/run) не запускается; замер по конструкции требует INA219", "blocking": false},
+    {"action": "Вернуть delegation.subagent_auto_approve: false после завершения фазы 1 (сейчас true по решению владельца 2026-10-05)", "context": "Временное расширение прав субагентов на время фазы", "blocking": false},
+    {"action": "Отозвать на GitHub старый токен, ранее вшитый в URL origin (URL уже почищен планом 01-01)", "context": "Гигиена секретов", "blocking": false}
+  ],
+  "decisions": [
+    {"decision": "Исполнение фазы на Hermes: по одному плану за раз, через субагента-исполнителя (delegate_task), без worktrees", "rationale": "USE_WORKTREES=false, dispatch-capacity=1; параллельные исполнители на главном дереве небезопасны", "phase": "01"},
+    {"decision": "delegation.subagent_auto_approve: true на время фазы", "rationale": "субагенты не могут отвечать на интерактивные подтверждения; без ключа исполнители встают на первом же гейте (случилось на 01-01)", "phase": "01"},
+    {"decision": "origin URL заменён на канонический HTTPS (токен убран), авторизация через gh credential helper", "rationale": "старый URL с токеном не работал неинтерактивно; реализовано в 01-01 (deviation 1)", "phase": "01"},
+    {"decision": "Scope workflow выдан владельцем 2026-10-06; ветка с правками ci.yml запушена", "rationale": "нужен для push .github/workflows/*; 01-13 завершён", "phase": "01"},
+    {"decision": "01-14, отступления владельца: конденсатор на V+ не ставить (п.6); INA219 пока не подключён — временно без него; инструментальный замер угла — отложен («позже»)", "rationale": "решения владельца в ходе чек-листа 01-14; замер без INA219 невозможен по конструкции инструмента", "phase": "01"}
+  ],
+  "uncommitted_files": [
+    "?? .gsd/",
+    "?? .planning/milestone.lock",
+    "?? .planning/phase-1-PLAN.md",
+    "?? .planning/phase-1-SPEC.md",
+    "?? .planning/phases/phase-2-PLAN.md",
+    "?? .planning/phases/phase-2-SPEC.md",
+    "?? .planning/state.json",
+    "?? legacy/RobotDog2_handoff.md",
+    "?? legacy/RobotDog2_handoff.md:Zone.Identifier",
+    "?? robot_configurator.py",
+    "?? robot_dog_ws/",
+    "?? test_servo_config_reader.sh"
+  ],
+  "next_action": "1) Раздел A закрыт (image_ok=yes; шаг 4 exit=0; образ 7537243cbb09). 2) Ждём владельца: INA219 + инструментальный замер угла + v_plus_volts. 3) Когда значения собраны — continuation-субагент 01-14 (проверка значений → задачи 2-4).",
+  "context_notes": "Состояние на 2026-10-06 10:33 МСК: 13/17; 01-14 идёт при участии оркестратора по просьбе владельца (SSH-часть на Pi). Pi: ssh sg@192.168.31.174 (id_ed25519; dog.local из WSL не резолвится; sudo неинтерактивно недоступен). Репо на Pi: ~/robot-dog (ветка фазы 30ae1d1); рантайм: ~/robot-dog-v2. Сборка образа ЗАВЕРШЕНА (Image robot-dog:2.0 Built, ID 7537243cbb09; шаг 4 exit=0 → image_ok=yes). Скан i2c-0: 40/68/70 (INA219 нет). Собрано: gnd=yes, vcc=ок, shunt=R100, capacitor=нет, power_cutoff=switch, image_ok=yes. Отложено владельцем: INA219, инструментальный замер угла («позже»). Локальные навыки процесса: hermes-gsd-operations (+templates/delegate-executor-brief.md) и hermes-subagent-execution. Python: /usr/bin/python3; gh в фоне: env -u GITHUB_TOKEN."
+}

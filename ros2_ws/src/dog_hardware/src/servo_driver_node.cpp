@@ -12,7 +12,9 @@
 // coupling <joint>.coupled_to / .coupling) can be changed at runtime with
 // `ros2 param set`; an enabled servo moves to the new mapping immediately.
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <cstdio>
 #include <cmath>
 #include <memory>
 #include <stdexcept>
@@ -20,10 +22,12 @@
 #include <vector>
 
 #include "dog_hardware/servo_bus.hpp"
+#include "dog_diagnostics/reporter.hpp"
 #include "dog_hardware/servo_driver.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "std_msgs/msg/bool.hpp"
+#include "std_srvs/srv/trigger.hpp"
 
 namespace dog_hardware
 {
@@ -81,11 +85,29 @@ public:
     const auto osc_hz = declare_parameter("pwm.oscillator_hz", 25e6);
     const auto rate = declare_parameter("update_rate", 100.0);
     cmd_timeout_ = declare_parameter("command_timeout", 0.5);
+    // Silence longer than the hold plus this grace relaxes the outputs and
+    // latches: a robot whose controller died must not stand there with hot
+    // servos until the battery dies (SAF-04).
+    // The robot only starts with a hand on it, so the driver comes up disarmed
+    // and waits for ~/arm (SAF-12). Mock and tests can ask for the old behaviour.
+    const bool armed_on_start = declare_parameter("armed_on_start", false);
+    relax_timeout_ = declare_parameter("command_relax_timeout", 2.0);
+    if (!(relax_timeout_ > 0.0)) {
+      throw std::runtime_error(
+        "command_relax_timeout must be > 0 s, got " + std::to_string(relax_timeout_));
+    }
     relax_on_exit_ = declare_parameter("relax_on_exit", true);
+    // Test hook: the mock backend starts failing every write after this many
+    // seconds, so a launch test can drive the whole fault path (SAF-01/03).
+    mock_fail_after_ = declare_parameter("mock.fail_after", 0.0);
 
     DriverParams dp;
     dp.max_joint_speed = declare_parameter("max_joint_speed", dp.max_joint_speed);
     dp.enable_stagger = declare_parameter("enable_stagger", dp.enable_stagger);
+    // CAL-04: how far a live calibration change may move an enabled servo. Wide
+    // enough for a real correction (the offset usually lands within 30 degrees),
+    // narrow enough that a typo cannot snap the leg.
+    max_live_step_deg_ = declare_parameter("calibration.max_live_step_deg", max_live_step_deg_);
 
     names_ = declare_parameter("joint_names", kDefaultJoints);
     std::vector<ServoCalibration> cals;
@@ -139,10 +161,69 @@ public:
       throw std::runtime_error("unknown backend '" + backend + "' (use pca9685 or mock)");
     }
     bus_ = bus;
+    dp.armed_on_start = true;  // decided once below, after the driver exists
     driver_ = std::make_unique<ServoDriver>(bus, names_, cals, dp);
+    if (!armed_on_start) {
+      driver_->disarm();
+      RCLCPP_INFO(get_logger(), "driver disarmed: release_fault then ~/arm or stand to move");
+    }
 
     state_pub_ = create_publisher<sensor_msgs::msg::JointState>("joint_states", 10);
     pulse_pub_ = create_publisher<sensor_msgs::msg::JointState>("servo_pulses", 10);
+    // The driver's own emergency release must reach whoever drives the robot:
+    // it publishes on the same `estop` topic it listens to (SAF-03).
+    estop_pub_ = create_publisher<std_msgs::msg::Bool>("estop", rclcpp::QoS(10).reliable());
+    release_srv_ = create_service<std_srvs::srv::Trigger>("~/release_fault",
+        [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+        std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
+          // The operator's one gesture: drop whatever keeps the servos off. An
+          // e-stop without a fault used to leave the driver latched in e-stop, and
+          // then ~/arm refused to arm it - the robot could not be brought back
+          // without a restart (found on the bench, phase 4).
+          const bool had_fault = driver_->fault();
+          const bool had_estop = driver_->estop();
+          driver_->clearFault();
+          driver_->setEstop(false);
+          announced_ = false;
+          publishEstop(false);
+          res->success = true;
+          if (had_fault) {
+            res->message = driver_->outputsConfirmedOff() ?
+              "fault released, outputs confirmed off - stand to move" :
+              "fault released, outputs NOT confirmed off - check the bus";
+          } else if (had_estop) {
+            res->message = "e-stop released, outputs confirmed off - stand to move";
+          } else {
+            res->message = "no fault latched";
+          }
+          RCLCPP_WARN(get_logger(), "release_fault: %s", res->message.c_str());
+        });
+    diag_ = std::make_unique<dog_diagnostics::Reporter>(this, "servo_driver");
+    diag_timer_ = create_wall_timer(std::chrono::seconds(1), [this]() {report();});
+    arm_srv_ = create_service<std_srvs::srv::Trigger>("~/arm",
+        [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+        std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
+          if (driver_->fault()) {
+            res->success = false;
+            res->message = "fault latched: fix the cause and call ~/release_fault first";
+            return;
+          }
+          if (driver_->estop()) {
+            res->success = false;
+            res->message = "e-stop engaged: release it before arming";
+            return;
+          }
+          driver_->arm();
+          // Arming restarts the clock. Without this a robot that was lying for
+          // longer than the timeout (a fall, the thermal pause) latched "no joint
+          // commands" a millisecond after it was armed, before the first frame could
+          // arrive - the operator saw a fault the instant they pressed "stand".
+          if (driver_->armed()) {last_cmd_ = steadySeconds(); timed_out_ = false;}
+          res->success = driver_->armed();
+          res->message = res->success ? "armed: the servos follow joint_commands" :
+            "not armed";
+          RCLCPP_WARN(get_logger(), "%s", res->message.c_str());
+        });
     cmd_sub_ = create_subscription<sensor_msgs::msg::JointState>(
       "joint_commands", 10, [this](sensor_msgs::msg::JointState::ConstSharedPtr msg) {
         if (driver_->setTargets(msg->name, msg->position, steadySeconds()) > 0) {
@@ -155,10 +236,14 @@ public:
       });
     estop_sub_ = create_subscription<std_msgs::msg::Bool>(
       "estop", rclcpp::QoS(10).reliable(), [this](std_msgs::msg::Bool::ConstSharedPtr msg) {
+        if (driver_->fault() && !msg->data) {
+          return;  // a latched fault is cleared by the service, not by the topic
+        }
         if (msg->data != driver_->estop()) {
           RCLCPP_WARN(get_logger(), "E-STOP %s", msg->data ? "ENGAGED - servos off" : "released");
         }
         driver_->setEstop(msg->data);
+        if (!msg->data) {last_cmd_ = steadySeconds();}
       });
     param_cb_ = add_on_set_parameters_callback(
       [this](const std::vector<rclcpp::Parameter> & params) {return onParams(params);});
@@ -200,9 +285,14 @@ private:
     const double now = steadySeconds();
     if (!timed_out_ && driver_->anyEnabled() && now - last_cmd_ > cmd_timeout_) {
       timed_out_ = true;
+      ++timeouts_;
       RCLCPP_WARN(get_logger(), "no joint commands for %.2fs - holding position", cmd_timeout_);
     }
+    armMockFault(now);
+    relaxIfCommandStreamDied(now);
     driver_->update(now);
+    logBusFaults();
+    announceFault();
     if (driver_->clampedCount() > 0) {
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
         "%d joint(s) clamped by limits/servo range - check calibration", driver_->clampedCount());
@@ -264,6 +354,18 @@ private:
         result.reason = name + ": " + e.what();
         return result;
       }
+      const double step = driver_->liveCalibrationStepDeg(i, c);
+      if (step > max_live_step_deg_) {
+        // A live calibration change that snaps an enabled servo is refused, not
+        // smoothed: the operator sees the reason in cal_set_result (CAL-04).
+        char buf[192];
+        std::snprintf(buf, sizeof(buf),
+          "%s: live change would jump %.1f deg (limit %.0f) - move the joint or disarm first",
+          name.c_str(), step, max_live_step_deg_);
+        result.successful = false;
+        result.reason = buf;
+        return result;
+      }
       const auto err = c.validate();
       if (!err.empty() || !driver_->setCalibration(i, c)) {
         result.successful = false;
@@ -275,18 +377,121 @@ private:
     return result;
   }
 
+  /// Test hook: after `mock.fail_after` seconds every write on the mock bus
+  /// fails, which is how a launch test reaches the fault path without hardware.
+  void armMockFault(double now)
+  {
+    if (mock_fail_after_ <= 0.0 || mock_fault_armed_) {return;}
+    if (mock_start_ < 0.0) {mock_start_ = now;}
+    if (now - mock_start_ < mock_fail_after_) {return;}
+    mock_fault_armed_ = true;
+    if (auto mock = std::dynamic_pointer_cast<MockBus>(bus_)) {
+      mock->failNext(1000000);
+      RCLCPP_WARN(get_logger(), "mock bus: writes fail from now on (test hook)");
+    }
+  }
+
+  /// The hold keeps the pose for `command_timeout`; past `command_relax_timeout`
+  /// more, the pose is not worth holding any more and the driver latches.
+  void relaxIfCommandStreamDied(double now)
+  {
+    if (driver_->fault() || driver_->estop() || !driver_->anyEnabled()) {return;}
+    if (now - last_cmd_ <= cmd_timeout_ + relax_timeout_) {return;}
+    char reason[128];
+    std::snprintf(reason, sizeof(reason),
+      "no joint commands for %.1f s (hold %.1f s + relax %.1f s)",
+      now - last_cmd_, cmd_timeout_, relax_timeout_);
+    driver_->latchFault(reason);
+  }
+
+  /// What the driver is doing, in the words the page shows and the log carries.
+  void report()
+  {
+    using dog_diagnostics::Level;
+    Level level = Level::OK;
+    std::string reason = driver_->armed() ? "armed, following joint commands" : "relaxed";
+    if (driver_->fault()) {
+      level = Level::ERROR;
+      reason = driver_->faultReason();
+    } else if (driver_->estop()) {
+      level = Level::WARN;
+      reason = "e-stop engaged, outputs released";
+    }
+    const double age = last_cmd_ > 0.0 ? steadySeconds() - last_cmd_ : -1.0;
+    char age_text[32];
+    std::snprintf(age_text, sizeof(age_text), "%.2f", age);
+    diag_->publish(level, reason, {
+      {"armed", driver_->armed() ? "true" : "false"},
+      {"bus_faults", std::to_string(driver_->busFaults())},
+      {"clamped_joints", std::to_string(driver_->clampedCount())},
+      {"command_age_s", age_text}});
+  }
+
+  void publishEstop(bool active)
+  {
+    std_msgs::msg::Bool msg;
+    msg.data = active;
+    estop_pub_->publish(msg);
+  }
+
+  /// A fault the driver latched is announced once, so the control node can drop
+  /// to PASSIVE instead of walking a robot whose servos stopped listening.
+  void announceFault()
+  {
+    if (!driver_->fault() || announced_) {return;}
+    announced_ = true;
+    publishEstop(true);
+    RCLCPP_ERROR(get_logger(), "fault latched (%s) - estop published, release with ~/release_fault",
+      driver_->faultReason().c_str());
+  }
+
+  /// A failed write is the one failure the servos cannot show themselves: the
+  /// chip keeps the old pulse, the robot looks alive but is frozen. Every
+  /// channel gets a line once a second, and the latch gets one summary with
+  /// the counters DIA-03 asks for.
+  void logBusFaults()
+  {
+    for (int ch = 0; ch < kPwmChannels; ++ch) {
+      const int faults = driver_->channelFaults(ch);
+      if (faults == logged_faults_[ch]) {continue;}
+      logged_faults_[ch] = faults;
+      RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 1000,
+        "write failed ch=%d (faults=%d, failed frames=%d)", ch, faults, driver_->failedFrames());
+    }
+    if (driver_->fault() && !fault_logged_) {
+      fault_logged_ = true;
+      RCLCPP_ERROR(get_logger(),
+        "bus fault latched: %s; %d bus fault(s), %d clamped, %d command timeout(s)",
+        driver_->faultReason().c_str(), driver_->busFaults(), driver_->clampedCount(), timeouts_);
+    }
+  }
+
   std::vector<std::string> names_;
   std::vector<std::string> coupled_names_;
   std::shared_ptr<ServoBus> bus_;
   std::unique_ptr<ServoDriver> driver_;
   double cmd_timeout_{0.5};
+  double relax_timeout_{2.0};
   bool relax_on_exit_{true};
   double last_cmd_{0.0};
+  double max_live_step_deg_{30.0};  // CAL-04: a live change may not snap a servo further
   bool timed_out_{false};
+  int timeouts_{0};
+  std::array<int, kPwmChannels> logged_faults_{};
+  bool fault_logged_{false};
+  bool announced_{false};
+  double mock_fail_after_{0.0};
+  double mock_start_{-1.0};
+  bool mock_fault_armed_{false};
   sensor_msgs::msg::JointState state_msg_;
 
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr state_pub_;
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr pulse_pub_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr estop_pub_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr release_srv_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr arm_srv_;
+  std::unique_ptr<dog_diagnostics::Reporter> diag_;
+  rclcpp::TimerBase::SharedPtr diag_timer_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr cmd_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr estop_sub_;
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_;

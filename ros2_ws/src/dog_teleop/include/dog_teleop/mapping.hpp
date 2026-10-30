@@ -56,6 +56,8 @@ struct JoyProfile
   int button_release{7}; // Start
   double deadzone{0.08};
   double normal_scale{0.5};  // fraction of max speed without turbo
+  double turbo_scale{1.0};   // fraction with turbo held; the floor profile sets it to
+                             // normal_scale so the button gives nothing extra
   double height_step{0.01};  // [m] per d-pad press
 };
 

@@ -64,6 +64,12 @@ async def _await_future(fut, timeout):
 
 
 class CalibrationBridge:
+    #: The driver relaxes and latches when no joint command arrives for
+    #: `command_relax_timeout` (2 s on top of its 0.5 s hold). A calibration
+    #: session is mostly the operator looking at the leg, not moving a slider, so
+    #: the last pose is repeated at this rate while a session is open (SAF-04).
+    KEEPALIVE_HZ = 5.0
+
     def __init__(self, node, driver='servo_driver', locomotion='locomotion'):
         self.node = node
         ns = node.get_namespace().rstrip('/')
@@ -75,6 +81,9 @@ class CalibrationBridge:
         self.get_drv = node.create_client(GetParameters, f'{ns}/{driver}/get_parameters')
         self.set_drv = node.create_client(SetParameters, f'{ns}/{driver}/set_parameters')
         self.get_loco = node.create_client(GetParameters, f'{ns}/{locomotion}/get_parameters')
+        self._last_pose = None
+        self._sessions = 0
+        self._keepalive = None
 
     def _on_pulses(self, msg):
         self.pulses = dict(zip(msg.name, msg.position))
@@ -124,6 +133,31 @@ class CalibrationBridge:
                     'reason': '; '.join(f'{k}: {why}' for k, why in failed)}
         return {'type': 'cal_set_result', 'ok': True, 'reason': ''}
 
+    def open_session(self):
+        """A client started calibrating: keep the command stream alive."""
+        self._sessions += 1
+        if self._keepalive is None:
+            self._keepalive = asyncio.ensure_future(self._keepalive_loop())
+
+    def close_session(self):
+        self._sessions = max(0, self._sessions - 1)
+        if self._sessions == 0 and self._keepalive is not None:
+            self._keepalive.cancel()
+            self._keepalive = None
+
+    async def _keepalive_loop(self):
+        period = 1.0 / self.KEEPALIVE_HZ
+        while True:
+            await asyncio.sleep(period)
+            # Only while the robot is passive. Once someone presses "stand" the
+            # locomotion node publishes real commands at 50 Hz, and a stale pose
+            # mixed into that stream would jerk the legs.
+            if getattr(self.node, 'mode', None) not in ALLOWED_MODES:
+                continue
+            if self._last_pose is not None:
+                self._last_pose.header.stamp = self.node.get_clock().now().to_msg()
+                self.joint_pub.publish(self._last_pose)
+
     def pose(self, joints: dict):
         msg = JointState()
         for name, deg in joints.items():
@@ -133,4 +167,5 @@ class CalibrationBridge:
             msg.name.append(str(name))
             msg.position.append(math.radians(deg))
         msg.header.stamp = self.node.get_clock().now().to_msg()
+        self._last_pose = msg
         self.joint_pub.publish(msg)

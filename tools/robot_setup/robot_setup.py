@@ -13,13 +13,17 @@ kept as *.bak. Needs Python 3.8+ and PyYAML.
 """
 
 import argparse
+import datetime
 import difflib
+import functools
+import hashlib
 import http.server
 import json
 import math
 import os
 import re
 import shutil
+import subprocess
 import sys
 import webbrowser
 
@@ -56,6 +60,8 @@ GROUPS = [
         ('body_height', 'Высота корпуса', 'мм', 'description', 'body_height', 1000, 10, 200, 'для модели'),
         ('foot_radius', 'Радиус стопы', 'мм', 'description', 'foot_radius', 1000, 0, 40,
          'резиновый наконечник; для модели'),
+        ('body_com_x', 'body_com_x — центр масс корпуса вперёд от центра', 'мм', 'description', 'body_com_x', 1000, -60, 60,
+         'баланс корпуса без ног на пруте, ±3 мм; «+» вперёд'),
     ]),
     ('stance', 'Стойка', ['measure_leg_side.svg'], [
         ('stand_height', 'stand_height — ось бедра над полом в стойке', 'мм', 'stance', 'stand_height', 1000, 50, 400,
@@ -166,6 +172,9 @@ def load(config_dir):
     if names is not None and list(names) != list(TOF):
         raise SystemExit(f'sensors.tof_names = {names}: форма рассчитана на {list(TOF)}')
     v['total_mass'] = 0
+    # servo.knee_ratio is not a form field: it goes to validate() as-is through the dict
+    knee_ratio = r.get('servo', {}).get('knee_ratio')
+    v['servo_knee_ratio'] = float(knee_ratio) if knee_ratio is not None else None
     return v
 
 
@@ -247,6 +256,222 @@ def stand_angles(thigh, calf, h):
     return math.degrees(q1), math.degrees(q2)
 
 
+MIRROR_PAIRS = (('lf', 'rf'), ('lr', 'rr'))
+LEG_JOINTS = ('hip', 'thigh', 'calf')
+
+
+def _servos_node(path):
+    doc = yaml.safe_load(open(path)) or {}
+    node = doc.get('/**/servo_driver') or doc.get('/**') or {}
+    return node.get('ros__parameters', {}) or {}
+
+
+def servo_params(config_dir):
+    """The joint table of servos.yaml (`/**/servo_driver: ros__parameters`)."""
+    return _servos_node(paths(config_dir)[1])
+
+
+def merged_servos(config_dir):
+    """What the driver sees: servos.yaml with servos.local.yaml laid on top, per joint.
+
+    The launch passes the local file as a second params file, so the robot's own
+    calibration wins; the factory file keeps the geometry nobody is supposed to edit.
+    """
+    base = servo_params(config_dir)
+    local_p = os.path.join(config_dir, 'servos.local.yaml')
+    if not os.path.exists(local_p):
+        return base, None
+    out = dict(base)
+    for key, value in _servos_node(local_p).items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = dict(out[key], **value)
+        else:
+            out[key] = value
+    return out, local_p
+
+
+def uncalibrated(config_dir):
+    """Joints the factory file defines and servos.local.yaml does not: nobody has set
+    their zero on this robot. Empty means every joint carries its own calibration.
+
+    The factory file is not a calibration - it is a starting point with offset_deg 0, and a
+    robot walking on it believes its servos are exactly where the drawing says."""
+    base = servo_params(config_dir)
+    local_p = os.path.join(config_dir, 'servos.local.yaml')
+    mine = _servos_node(local_p) if os.path.exists(local_p) else {}
+    out = []
+    for leg in LEGS:
+        for kind in LEG_JOINTS:
+            key = f'{leg}_{kind}_joint'
+            if key in base and key not in mine:
+                out.append(key)
+    return out
+
+
+def stand_pulse(g, c, joint, q1):
+    """Pulse of one servo in the stand pose, or None for a linkage drive (CAL-06)."""
+    if float(c.get('servo_arm_mm', 0.0) or 0.0) > 0:
+        return None
+    parent = q1 if (joint == 'calf' and str(c.get('coupled_to') or '')) else 0.0
+    pmin = float(c.get('pulse_min_us', 520.0))
+    pmax = float(c.get('pulse_max_us', 2220.0))
+    us_per_deg = (pmax - pmin) / float(c.get('range_deg', 180.0))
+    servo_deg = int(c.get('direction', 1)) * (
+        g + float(c.get('coupling', 0.0) or 0.0) * parent - float(c['offset_deg']))
+    return 0.5 * (pmin + pmax) + servo_deg * us_per_deg
+
+
+def check_servos(config_dir, v):
+    """[(level, text)] about the calibration itself (CAL-06).
+
+    Three mistakes a hand calibration makes: a mirrored pair drifts apart, the
+    offsets scatter across four legs, and a servo already sits at the edge of its
+    pulse range in the stand pose - the pose it spends most of its life in.
+    """
+    out = []
+    joints = {k: c for k, c in servo_params(config_dir).items()
+              if isinstance(c, dict) and 'offset_deg' in c}
+    if not joints:
+        return [('warn', 'servos.yaml: нет таблицы суставов — калибровку проверить нечем')]
+
+    for leg in LEG_JOINTS:
+        for a, b in MIRROR_PAIRS:
+            ka, kb = f'{a}_{leg}_joint', f'{b}_{leg}_joint'
+            if ka not in joints or kb not in joints:
+                continue
+            da, db = joints[ka], joints[kb]
+            gap = abs(abs(float(da['offset_deg'])) - abs(float(db['offset_deg'])))
+            if gap > 5.0:
+                out.append(('warn', f'{leg}: {a} и {b} разошлись на {gap:.1f}° '
+                                    f'({da["offset_deg"]} и {db["offset_deg"]}) — проверьте зеркальность'))
+            if int(da.get('direction', 1)) == int(db.get('direction', 1)):
+                out.append(('warn', f'{leg}: у {a} и {b} одинаковое направление '
+                                    f'({da.get("direction")}) — на зеркальных сервах оно обычно разное'))
+        vals = [float(joints[f'{a}_{leg}_joint']['offset_deg'])
+                for a in ('lf', 'rf', 'lr', 'rr') if f'{a}_{leg}_joint' in joints]
+        if len(vals) >= 3:
+            spread = max(vals) - min(vals)
+            level = 'warn' if spread > 15.0 else 'info'
+            out.append((level, f'{leg}: разброс смещений {spread:.1f}° '
+                               f'({min(vals):+.1f}…{max(vals):+.1f})'))
+
+    g = {k: float(v[k]) for k in FIELDS}
+    ang = stand_angles(g['thigh'], g['calf'], g['stand_height'])
+    if not ang:
+        return out
+    q1, q2 = ang
+    posed = {'hip': 0.0, 'thigh': q1, 'calf': q2}
+    for leg in ('lf', 'rf', 'lr', 'rr'):
+        for joint, q in posed.items():
+            key = f'{leg}_{joint}_joint'
+            c = joints.get(key)
+            if not c:
+                continue
+            pulse = stand_pulse(q, c, joint, q1)
+            if pulse is None:
+                out.append(('info', f'{key}: рычажный привод — край пульса считается драйвером'))
+                continue
+            pmin = float(c.get('pulse_min_us', 520.0))
+            pmax = float(c.get('pulse_max_us', 2220.0))
+            edge = 0.05 * (pmax - pmin)
+            if pulse < pmin + edge or pulse > pmax - edge:
+                out.append(('warn', f'{key}: в позе стоя пульс {pulse:.0f} мкс у края '
+                                    f'{pmin:.0f}…{pmax:.0f}'))
+    return out
+
+
+def _sha256(path, chars=12):
+    h = hashlib.sha256()
+    with open(path, 'rb') as f:
+        for chunk in iter(lambda: f.read(65536), b''):
+            h.update(chunk)
+    return h.hexdigest()[:chars]
+
+
+def _git_rev():
+    try:
+        done = subprocess.run(['git', '-C', REPO, 'rev-parse', '--short', 'HEAD'],
+                              capture_output=True, text=True, timeout=5)
+        return done.stdout.strip() or 'неизвестно'
+    except (OSError, subprocess.SubprocessError):
+        return 'неизвестно'
+
+
+def report(config_dir, v):
+    """A markdown record of the calibration (CAL-01, CAL-03).
+
+    Written the moment the robot is calibrated, while the numbers are still in front of
+    you: the table behind the `robot-calibrated-<date>` tag, with both files hashed so a
+    later edit cannot pretend to be the same calibration.
+    """
+    joints, local_p = merged_servos(config_dir)
+    keys = [k for k in joints if isinstance(joints[k], dict) and 'offset_deg' in joints[k]]
+    g = {k: float(v[k]) for k in FIELDS}
+    ang = stand_angles(g['thigh'], g['calf'], g['stand_height'])
+    q1, q2 = ang if ang else (None, None)
+    pose = {'hip': 0.0, 'thigh': q1, 'calf': q2}
+
+    out = ['# Калибровка робота', '',
+           'Дата: %s' % datetime.datetime.now().strftime('%Y-%m-%d %H:%M'), '',
+           '- заводская раскладка `servos.yaml`: sha256 `%s`'
+           % _sha256(paths(config_dir)[1]),
+           '- калибровка робота `servos.local.yaml`: %s'
+           % ('sha256 `%s`' % _sha256(local_p) if local_p else 'файла нет — калибровка заводская'),
+           '- сборка: `%s`' % _git_rev(), '',
+           '| Сустав | Канал | Направление | offset, ° | Пределы, ° | В стойке, ° '
+           '| Пульс в стойке, мкс | Привод |',
+           '|---|---|---|---|---|---|---|---|']
+    # Leg-major, joint-minor: the order the robot is calibrated in (lf, rf, lr, rr).
+    ordered = ['%s_%s_joint' % (leg, joint) for leg in ('lf', 'rf', 'lr', 'rr')
+               for joint in LEG_JOINTS]
+    for key in [k for k in ordered if k in keys] + [k for k in sorted(keys) if k not in ordered]:
+        c = joints[key]
+        parts = key.split('_')
+        joint = parts[1] if len(parts) > 2 else ''
+        q = pose.get(joint)
+        pulse = stand_pulse(q, c, joint, q1) if q is not None else None
+        drive = 'рычаг'
+        if float(c.get('servo_arm_mm', 0.0) or 0.0) == 0:
+            drive = 'связано с бедром' if str(c.get('coupled_to') or '') else 'на валу'
+        out.append('| `%s` | %s | %+d | %+.1f | %+.0f…%+.0f | %s | %s | %s |' % (
+            key, c.get('channel', '—'), int(c.get('direction', 1)), float(c['offset_deg']),
+            float(c.get('min_deg', -180.0)), float(c.get('max_deg', 180.0)),
+            '%+.1f' % q if q is not None else '—',
+            '%.0f' % pulse if pulse is not None else '—', drive))
+
+    out += ['', '## Симметрия', '',
+            '| Сустав | lf и rf, ° | lr и rr, ° | Разброс по четырём, ° |',
+            '|---|---|---|---|']
+    for leg_joint in LEG_JOINTS:
+        cells = []
+        for a, b in MIRROR_PAIRS:
+            ka, kb = '%s_%s_joint' % (a, leg_joint), '%s_%s_joint' % (b, leg_joint)
+            if ka in joints and kb in joints:
+                cells.append('%+.1f' % (float(joints[ka]['offset_deg'])
+                                        - float(joints[kb]['offset_deg'])))
+            else:
+                cells.append('—')
+        vals = [float(joints['%s_%s_joint' % (a, leg_joint)]['offset_deg'])
+                for a in ('lf', 'rf', 'lr', 'rr')
+                if '%s_%s_joint' % (a, leg_joint) in joints]
+        spread = '%+.1f' % (max(vals) - min(vals)) if len(vals) >= 2 else '—'
+        out.append('| %s | %s | %s | %s |' % (leg_joint, cells[0], cells[1], spread))
+
+    checks = check_servos(config_dir, v)
+    out += ['', '## Замечания', '']
+    out += ['- %s: %s' % (lv, t) for lv, t in checks] or ['- нет']
+    errors = [t for lv, t in validate(v)[0] if lv == 'error']
+    out += ['- ОШИБКА: %s' % t for t in errors]
+
+    out += ['', '## Итог', '',
+            '- суставов в таблице: %d' % len(keys),
+            '- калибровка робота: %s' % ('своя' if local_p else 'заводская'),
+            '- замечаний: %d, ошибок: %d' % (len(checks), len(errors)), '',
+            'Этот файл прикладывается к тегу:',
+            '`git tag robot-calibrated-$(date +%F) && git push --tags`']
+    return '\n'.join(out) + '\n'
+
+
 def linkage_closes(a, b, c, d):
     """Four-bar at the servo centre: servo arm a perpendicular to the axis line d,
     joint arm b, rod c. True if the rod can connect the two arms."""
@@ -258,6 +483,103 @@ def linkage_closes(a, b, c, d):
     c = c or d
     e = math.hypot(d, a)  # servo pin -> joint axis
     return abs(b - c) <= e <= b + c
+
+
+# ------------------------------------------------------------------ knee ratio
+KNEE_CENTER_DEG = -90.0  # [deg] knee angle at the servo centre pulse (calf offset_deg in
+# servos.yaml); the walking range -105.7..-80.5 deg is -15.7..+9.5 deg from this centre
+
+
+def _wrap_deg(a):
+    """Angle [deg] into (-180, 180], as the driver's Linkage wraps it."""
+    while a > 180.0:
+        a -= 360.0
+    while a <= -180.0:
+        a += 360.0
+    return a
+
+
+def _knee_lever(a, b, c, d, theta, branch):
+    """Joint-arm angle [rad] for the servo-arm angle theta [rad]; None when unsolvable."""
+    ax, ay = a * math.cos(theta), a * math.sin(theta)
+    dx, dy = d - ax, -ay
+    r = math.hypot(dx, dy)
+    if r < 1e-9:
+        return None
+    ratio = (c * c - r * r - b * b) / (2.0 * b) / r
+    if ratio < -1.0 or ratio > 1.0:
+        return None
+    return math.atan2(dy, dx) + branch * math.acos(ratio)
+
+
+def _knee_branch(a, b, c, d):
+    """Solution branch, as Linkage::_branch in dog_hardware/servo_driver.hpp."""
+    t = math.pi / 2
+    p, m = _knee_lever(a, b, c, d, t, 1), _knee_lever(a, b, c, d, t, -1)
+    if m is None:
+        return 1
+    if p is None:
+        return -1
+    dp = abs(_wrap_deg(math.degrees(p - t)))
+    dm = abs(_wrap_deg(math.degrees(m - t)))
+    return 1 if dp <= dm else -1
+
+
+def _knee_delta(a, b, c, d, branch, servo_deg):
+    """Joint rotation [deg] for a servo rotation [deg] from its centre; None if unsolvable."""
+    p0 = _knee_lever(a, b, c, d, math.pi / 2, branch)
+    p = _knee_lever(a, b, c, d, math.pi / 2 + math.radians(servo_deg), branch)
+    if p0 is None or p is None:
+        return None
+    return _wrap_deg(math.degrees(p - p0))
+
+
+@functools.lru_cache(maxsize=8)
+def _knee_scan(a, b, c, d):
+    """[(joint delta [deg] from the centre, servo speed / joint speed)] over the servo range.
+
+    The servo arm sweeps -90..+90 deg in 0.05 deg steps; the derivative is a central
+    difference with a 0.01 deg step. None when the centre pose is unsolvable.
+    """
+    branch = _knee_branch(a, b, c, d)
+    if _knee_delta(a, b, c, d, branch, 0.0) is None:
+        return None
+    out = []
+    step, h = 0.05, 0.01
+    for i in range(int(round(2 * 90.0 / step)) + 1):
+        s = -90.0 + i * step
+        g_lo = _knee_delta(a, b, c, d, branch, s - h)
+        g_hi = _knee_delta(a, b, c, d, branch, s + h)
+        g = _knee_delta(a, b, c, d, branch, s)
+        if g is None or g_lo is None or g_hi is None:
+            continue
+        dd = (g_hi - g_lo) / (2.0 * h)
+        if dd == 0.0:
+            continue
+        out.append((g, 1.0 / abs(dd)))
+    return tuple(out)
+
+
+def knee_ratio_max(servo_arm_mm, joint_arm_mm, rod_mm, axis_distance_mm, lo_deg=-105.7, hi_deg=-80.5):
+    """Worst servo-to-knee-joint speed ratio of the rod drive [servo rad per joint rad].
+
+    The maximum of 1/|d(joint)/d(servo)| over the knee angles lo_deg..hi_deg (the
+    walking range), the same four-bar linkage as dog_hardware/servo_driver.hpp;
+    measured on the 15/20/95/95 mm example: 1.388 (RESEARCH rounds to 1.40).
+    Direct drive returns 1.0; None when the linkage does not close in the range.
+    """
+    a = servo_arm_mm
+    if a <= 0:
+        return 1.0
+    b = joint_arm_mm if joint_arm_mm > 0 else a
+    c = rod_mm if rod_mm > 0 else axis_distance_mm
+    d = axis_distance_mm
+    scan = _knee_scan(a, b, c, d)
+    if scan is None:
+        return None
+    lo, hi = lo_deg - KNEE_CENTER_DEG, hi_deg - KNEE_CENTER_DEG
+    ratios = [r for delta, r in scan if lo <= delta <= hi]
+    return max(ratios) if ratios else None
 
 
 def validate(v):
@@ -312,6 +634,10 @@ def validate(v):
         out.append(('warn', 'hip_x больше половины длины корпуса: проверьте, это половина расстояния перёд–зад'))
     if g['hip_y'] > g['body_width'] / 2 + 60:
         out.append(('warn', 'hip_y сильно больше половины ширины корпуса: проверьте, это до оси отведения'))
+    com_x = g['body_com_x']
+    if abs(com_x) > g['hip_x']:
+        out.append(('warn', f'body_com_x = {com_x:g} мм дальше осей бёдер (hip_x = {g["hip_x"]:g} мм): '
+                            'проверьте мерку и знак («+» вперёд)'))
     m = g['body_mass'] + 4 * (g['hip_mass'] + g['thigh_mass'] + g['calf_mass'])
     info['model_mass_g'] = round(m)
     out.append(('info', f'масса по модели {m:.0f} г'))
@@ -325,8 +651,21 @@ def validate(v):
             out.append(('error', f'{k}: тяга не замыкается (рычаги {a:g}/{b or a:g}, тяга {c or d:g}, оси {d:g} мм)'))
         elif a > 0 and (b or a) < a:
             out.append(('info', f'{k}: рычаг сустава короче рычага сервы — ход сустава больше хода сервы'))
-    if int(g['calf_coupled']) and g['calf_servo_arm_mm'] <= 0:
-        out.append(('warn', 'колено «от корпуса» обычно бывает только с тягой (servo_arm_mm > 0)'))
+    if int(g['calf_coupled']):
+        out.append(('info', 'колено связано с бедром (coupled_to): серва колена задаёт s = бедро + колено, '
+                            'её окно считается по s (docs/CALIBRATION.md, раздел «Колено связано с бедром»)'))
+    if linkage_closes(g['calf_servo_arm_mm'], g['calf_joint_arm_mm'],
+                      g['calf_rod_mm'], g['calf_axis_distance_mm']):
+        ratio = knee_ratio_max(g['calf_servo_arm_mm'], g['calf_joint_arm_mm'],
+                               g['calf_rod_mm'], g['calf_axis_distance_mm'])
+        knee_cfg = v.get('servo_knee_ratio')
+        if ratio is not None and g['calf_servo_arm_mm'] > 0:
+            info['knee_ratio_max'] = round(ratio, 3)
+            out.append(('info', f'тяга колена: серва вращается до {ratio:.3f}× быстрее сустава '
+                                f'в рабочем диапазоне (servo.knee_ratio не меньше {ratio:.3f})'))
+        if ratio is not None and knee_cfg is not None and float(knee_cfg) < ratio - 0.005:
+            out.append(('warn', f'servo.knee_ratio = {float(knee_cfg):g} меньше вычисленного {ratio:.3f}: '
+                                'период и пик скорости серв колена тогда занижены (D-20)'))
     sensor_checks(g, out, info)
     return out, info
 
@@ -348,15 +687,34 @@ def _floor_hit(p, R, a, floor_z):
     return (t, p[0] + t * u[0], p[1] + t * u[1]) if t > 0 else None
 
 
+# Perception sensors physically on the robot (docs/HEAD.md: none, they exist
+# only in simulation). The geometry of the others is reported as a warning;
+# add 'gs2', 'tof' or 'x_lidar' here to make the problem block saving again.
+SENSORS_ON_ROBOT = frozenset()
+
+
+def _sensor_flag(kind, text):
+    """Sensor geometry message: an error for a sensor on the robot, else a warning."""
+    if kind in SENSORS_ON_ROBOT:
+        return ('error', text)
+    return ('warn', text + ' — датчика нет на роботе, на сохранение не влияет')
+
+
 def sensor_checks(g, out, info):
-    """Where the sensors meet the floor in the stand pose (all in mm, body frame)."""
+    """Where the sensors meet the floor in the stand pose (all in mm, body frame).
+
+    Sensor geometry problems are errors only for a sensor in SENSORS_ON_ROBOT;
+    for a simulated-only sensor they are warnings, so entering new body
+    measurements (a different stand_height, hip_x, hip_y) is not blocked by
+    template sensor values the real robot does not carry (D-18).
+    """
     floor = -g['stand_height']
     foot_x, foot_y = g['hip_x'], g['hip_y'] + g['hip_offset']
     if int(g['gs2']):
         p, R = (g['gs2_x'], g['gs2_y'], g['gs2_z']), _rot(0, g['gs2_pitch_deg'], 0)
         hit = _floor_hit(p, R, 0.0, floor)
         if hit is None or hit[0] > 300:
-            out.append(('error', 'GS2 не достаёт до пола в стойке (дальность 300 мм): увеличьте наклон вниз'))
+            out.append(_sensor_flag('gs2', 'GS2 не достаёт до пола в стойке (дальность 300 мм): увеличьте наклон вниз'))
         else:
             r, x, _ = hit
             half = math.acos(min(1.0, r / 300.0))
@@ -376,7 +734,7 @@ def sensor_checks(g, out, info):
             R = _rot(0, g[f'tof_{n}_pitch_deg'], g[f'tof_{n}_yaw_deg'])
             hit = _floor_hit(p, R, 0.0, floor)
             if hit is None or hit[0] > 1000:
-                out.append(('error', f'ToF {n.upper()}: луч не попадает на пол ближе 1 м'))
+                out.append(_sensor_flag('tof', f'ToF {n.upper()}: луч не попадает на пол ближе 1 м'))
                 continue
             r, x, y = hit
             out.append(('info', f'ToF {n.upper()}: пятно на полу x {x:.0f}, y {y:+.0f} мм, дальность {r:.0f} мм'))
@@ -396,7 +754,7 @@ def sensor_checks(g, out, info):
                     best = hit[1]
             crosses.append(best)
         if None in crosses:
-            out.append(('error', 'лидары: плоскость не пересекает пол впереди на оси — увеличьте наклон α'))
+            out.append(_sensor_flag('x_lidar', 'лидары: плоскость не пересекает пол впереди на оси — увеличьте наклон α'))
         else:
             x = max(crosses)
             info['x_lidar_cross_mm'] = round(x)
@@ -480,7 +838,11 @@ NEXT = ('Дальше: проверить в симуляции, что робо
         '  cd ros2_ws && colcon build && source install/setup.bash\n'
         '  ros2 launch dog_gazebo sim.launch.py headless:=true web:=false &\n'
         '  ros2 run dog_gazebo walk_check\n'
-        'и закоммитить robot.yaml и servos.yaml.')
+        'и закоммитить robot.yaml и servos.yaml.\n'
+        'Калибровка с камеры (autocal --servos-yaml .../servos.local.yaml) остаётся в\n'
+        'servos.local.yaml: git pull её не перезаписывает. Когда робот принят с этой\n'
+        'калибровкой, поставьте тег, чтобы история знала, с чем ходили:\n'
+        '  git tag robot-calibrated-$(date +%F) && git push --tags')
 
 
 # ------------------------------------------------------------------ CLI
@@ -599,6 +961,11 @@ def serve(config_dir, port, open_browser):
 
         def do_POST(self):
             v = json.loads(self.rfile.read(int(self.headers.get('Content-Length', 0))) or b'{}')
+            # the web form does not send servo.knee_ratio: take it from robot.yaml so
+            # the knee-ratio warning works here too; render ignores the value
+            ratio = load(config_dir).get('servo_knee_ratio')
+            if ratio is not None:
+                v.setdefault('servo_knee_ratio', ratio)
             msgs, info = validate(v)
             if self.path == '/api/validate':
                 return self._send(200, json.dumps({'messages': msgs, 'info': info}, ensure_ascii=False),
@@ -628,14 +995,53 @@ def main(argv=None):
     ap.add_argument('--config', default=CONFIG, help='folder with robot.yaml and servos.yaml')
     ap.add_argument('--cli', action='store_true', help='text mode instead of the web form')
     ap.add_argument('--check', action='store_true', help='only validate the current files')
+    ap.add_argument('--verify', action='store_true',
+                    help='калиброван ли робот целиком: 0 да, 3 не все суставы, 2 файлы не читаются')
+    ap.add_argument('--report', nargs='?', const='calibration-report.md', metavar='PATH',
+                    help='write the calibration record (markdown) and exit')
     ap.add_argument('--port', type=int, default=8765)
     ap.add_argument('--no-browser', action='store_true')
     a = ap.parse_args(argv)
     if a.check:
-        msgs, _ = validate(load(a.config))
+        v = load(a.config)
+        msgs, _ = validate(v)
+        msgs = list(msgs) + check_servos(a.config, v)
         for lv, t in msgs:
             print({'error': 'ОШИБКА', 'warn': 'внимание', 'info': '·'}[lv], t)
         return 2 if any(lv == 'error' for lv, _ in msgs) else 0
+    if a.verify:
+        msgs, _ = validate(load(a.config))
+        errors = [t for lv, t in msgs if lv == 'error']
+        if errors:
+            print('robot_setup: файлы конфигурации не читаются')
+            for t in errors:
+                print('   - ' + t)
+            return 2
+        missing = uncalibrated(a.config)
+        # A servo already at the edge of its pulse range in the stand pose is pushed past
+        # the limit by the first step, whatever the file says about its zero.
+        edges = [(lv, t) for lv, t in check_servos(a.config, load(a.config))
+                 if 'у края' in t]
+        if missing:
+            print('robot_setup: калибровка неполная — в servos.local.yaml нет %d суставов: %s'
+                  % (len(missing), ', '.join(missing)))
+            return 3
+        if edges:
+            for _lv, text in edges:
+                print('robot_setup: ' + text)
+            print('robot_setup: калибровка уводит серву к пределу — на пол так нельзя')
+            return 3
+        print('robot_setup: калибровка есть у всех суставов (servos.local.yaml)')
+        return 0
+    if a.report:
+        text = report(a.config, load(a.config))
+        if a.report == '-':
+            sys.stdout.write(text)
+        else:
+            with open(a.report, 'w', encoding='utf-8') as f:
+                f.write(text)
+            print('отчёт: %s' % a.report)
+        return 0
     if a.cli:
         return cli(a.config)
     return serve(a.config, a.port, not a.no_browser)

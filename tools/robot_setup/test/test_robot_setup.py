@@ -1,5 +1,6 @@
 import math
 import os
+import re
 import shutil
 import sys
 
@@ -36,6 +37,55 @@ def test_save_changes_only_values_and_keeps_comments(cfg):
     assert (r['thigh'], r['calf'], r['hip_x']) == (0.11, 0.12, 0.095)
     assert diff.count('\n-') == 3 or diff.count('\n-      ') == 3
     assert os.path.exists(os.path.join(cfg, 'robot.yaml.bak'))
+
+
+def test_body_com_x_is_a_form_field_in_the_body_group():
+    f = rs.FIELDS['body_com_x']
+    assert (f[2], f[3], f[4], f[5], f[6], f[7]) == ('мм', 'description', 'body_com_x', 1000, -60, 60)
+    group = next(g for g in rs.GROUPS if g[0] == 'body')
+    assert any(x[0] == 'body_com_x' for x in group[3])
+
+
+def test_body_com_x_is_loaded_saved_and_keeps_comments(cfg):
+    v = rs.load(cfg)
+    assert v['body_com_x'] == 0.0
+    v['body_com_x'] = 12.5
+    diff = rs.save(cfg, v)
+    text = open(os.path.join(cfg, 'robot.yaml')).read()
+    assert 'body_com_x: 0.0125' in text
+    assert '# [m] trunk centre of mass forward of the body centre' in text
+    assert yaml.safe_load(text)['/**']['ros__parameters']['description']['body_com_x'] == 0.0125
+    assert rs.load(cfg)['body_com_x'] == 12.5
+    removed = [ln for ln in diff.splitlines() if ln.startswith('-') and not ln.startswith('---')]
+    assert len(removed) == 1, diff
+
+
+def test_body_com_x_out_of_range_is_an_error():
+    v = rs.load(rs.CONFIG)
+    v['body_com_x'] = 70
+    assert any(lv == 'error' and 'вне' in t for lv, t in rs.validate(v)[0])
+
+
+def test_body_com_x_beyond_the_hip_axes_warns():
+    base = rs.load(rs.CONFIG)
+    msgs = rs.validate(dict(base, body_com_x=55, hip_x=50))[0]
+    assert any(lv == 'warn' and 'дальше осей бёдер' in t for lv, t in msgs)
+    assert not [m for m in msgs if m[0] == 'error']
+    assert not any(lv == 'warn' and 'дальше осей бёдер' in t for lv, t in rs.validate(dict(base, body_com_x=0))[0])
+
+
+def test_cli_enters_body_com_x_end_to_end(cfg, monkeypatch):
+    def fake_input(prompt=''):
+        if 'body_com_x' in prompt:
+            return '12,5'
+        if 'Сохранить' in prompt:
+            return 'y'
+        return ''
+
+    monkeypatch.setattr('builtins.input', fake_input)
+    assert rs.cli(cfg) == 0
+    r = yaml.safe_load(open(os.path.join(cfg, 'robot.yaml')))['/**']['ros__parameters']
+    assert r['description']['body_com_x'] == 0.0125
 
 
 def test_hip_limits_mirror_for_right_legs(cfg):
@@ -104,11 +154,251 @@ def test_sensor_fields_lists_and_flags(cfg):
     assert rs.load(cfg)['gs2'] == 0
 
 
+# reference values printed by the C++ Linkage of servo_driver.cpp, RESEARCH Pattern 2
+KNEE_RATIO_CPP = {-30: 1.605, -20: 1.427, -10: 1.357, 0: 1.334, 10: 1.344, 20: 1.392, 30: 1.507}
+
+
+@pytest.mark.parametrize('delta', sorted(KNEE_RATIO_CPP))
+def test_knee_ratio_matches_the_cpp_linkage(delta):
+    got = rs.knee_ratio_max(15, 20, 95, 95, lo_deg=-90 + delta - 0.05, hi_deg=-90 + delta + 0.05)
+    assert got == pytest.approx(KNEE_RATIO_CPP[delta], abs=0.003)
+
+
+def test_knee_ratio_of_the_shipped_example_and_special_cases():
+    ratio = rs.knee_ratio_max(15, 20, 95, 95)
+    assert ratio is not None and 1.37 <= ratio <= 1.41
+    assert rs.knee_ratio_max(15, 15, 95, 95) == pytest.approx(1.0, abs=0.01)
+    assert rs.knee_ratio_max(0, 0, 0, 0) == 1.0
+    assert rs.knee_ratio_max(15, 15, 300, 60) is None
+
+
+def test_load_reads_servo_knee_ratio():
+    assert rs.load(rs.CONFIG)['servo_knee_ratio'] == 1.0
+
+
+def test_knee_ratio_warning_in_validate_and_check(cfg, capsys):
+    v = rs.load(cfg)
+    v.update({'calf_servo_arm_mm': 15, 'calf_joint_arm_mm': 20, 'calf_rod_mm': 95,
+              'calf_axis_distance_mm': 95})
+    msgs = rs.validate(v)[0]
+    assert any(lv == 'warn' and 'servo.knee_ratio' in t and 'меньше вычисленного' in t for lv, t in msgs)
+    assert any(lv == 'info' and 'тяга колена' in t for lv, t in msgs)
+    assert not any(lv == 'warn' and 'servo.knee_ratio' in t
+                   for lv, t in rs.validate(dict(v, servo_knee_ratio=1.45))[0])
+    without = dict(v)
+    without.pop('servo_knee_ratio')
+    assert not any(lv == 'warn' and 'servo.knee_ratio' in t for lv, t in rs.validate(without)[0])
+    assert not any(lv == 'warn' and 'servo.knee_ratio' in t for lv, t in rs.validate(rs.load(rs.CONFIG))[0])
+    rs.save(cfg, v)
+    capsys.readouterr()
+    assert rs.main(['--check', '--config', cfg]) == 0
+    assert 'servo.knee_ratio' in capsys.readouterr().out
+
+
 def test_sensor_geometry_is_checked(cfg):
     v = rs.load(cfg)
     msgs = [t for lv, t in rs.validate(v)[0] if lv == 'info']
     assert any(t.startswith('линия GS2') for t in msgs) and any(t.startswith('лидары: крест') for t in msgs)
     v['gs2_pitch_deg'] = 10  # nearly flat: the line is beyond the 0.3 m range
-    assert any(lv == 'error' and 'GS2' in t for lv, t in rs.validate(v)[0])
+    assert any(lv == 'warn' and 'GS2' in t for lv, t in rs.validate(v)[0])
     v['gs2_pitch_deg'], v['tof_fl_pitch_deg'] = 40, 2
-    assert any(lv == 'error' and 'ToF FL' in t for lv, t in rs.validate(v)[0])
+    assert any(lv == 'warn' and 'ToF FL' in t for lv, t in rs.validate(v)[0])
+
+
+def test_sensor_errors_do_not_block_save_and_check_while_the_sensors_are_not_on_the_robot(cfg):
+    v = rs.load(cfg)
+    v.update({'thigh': 130, 'calf': 130, 'stand_height': 200, 'max_height': 205})
+    msgs = rs.validate(v)[0]
+    assert not [m for m in msgs if m[0] == 'error'], msgs
+    assert any(lv == 'warn' and 'GS2 не достаёт до пола' in t and 'датчика нет на роботе' in t for lv, t in msgs)
+    assert rs.save(cfg, v) != '(ничего не изменилось)'
+    assert rs.main(['--check', '--config', cfg]) == 0
+
+
+def test_sensor_errors_block_for_sensors_on_the_robot(cfg, monkeypatch):
+    monkeypatch.setattr(rs, 'SENSORS_ON_ROBOT', frozenset({'gs2', 'tof', 'x_lidar'}))
+    v = rs.load(cfg)
+    v.update({'thigh': 130, 'calf': 130, 'stand_height': 200, 'max_height': 205,
+              'gs2_pitch_deg': 10, 'tof_fl_pitch_deg': 2, 'x_lidar_tilt_deg': 0})
+    msgs = rs.validate(v)[0]
+    assert any(lv == 'error' and 'GS2 не достаёт до пола' in t for lv, t in msgs)
+    assert any(lv == 'error' and 'ToF FL' in t for lv, t in msgs)
+    assert any(lv == 'error' and 'лидары: плоскость не пересекает пол' in t for lv, t in msgs)
+
+
+def test_sensor_checks_are_skipped_when_the_flag_is_off():
+    v = rs.load(rs.CONFIG)
+    v.update({'gs2': 0, 'tof': 0, 'x_lidar': 0, 'stand_height': 200})
+    msgs = [t for _, t in rs.validate(v)[0]]
+    assert not any('GS2' in t or 'ToF' in t or 'лидары' in t for t in msgs)
+
+
+def test_shipped_knee_is_coupled_and_validates_without_warnings():
+    v = rs.load(rs.CONFIG)
+    assert v['calf_coupled'] == 1
+    msgs, _ = rs.validate(v)
+    assert not [m for m in msgs if m[0] in ('error', 'warn')], msgs
+    assert any(lv == 'info' and 'coupled_to' in t for lv, t in msgs)
+
+
+def test_editing_calf_max_keeps_the_coupling_and_the_window(cfg):
+    servos_p = os.path.join(cfg, 'servos.yaml')
+    before = yaml.safe_load(open(servos_p))['/**/servo_driver']['ros__parameters']
+    v = rs.load(cfg)
+    v['calf_max'] = -45.0
+    rs.save(cfg, v)
+    after = yaml.safe_load(open(servos_p))['/**/servo_driver']['ros__parameters']
+    for leg in ('lf', 'rf', 'lr', 'rr'):
+        old, new = before['%s_calf_joint' % leg], after['%s_calf_joint' % leg]
+        assert (new['min_deg'], new['max_deg']) == (-140.0, -45.0)
+        for key in ('coupled_to', 'coupling', 'offset_deg', 'range_deg', 'pulse_min_us', 'pulse_max_us',
+                    'servo_arm_mm', 'direction', 'channel'):
+            assert new[key] == old[key], (leg, key)
+    robot = yaml.safe_load(open(os.path.join(cfg, 'robot.yaml')))['/**']['ros__parameters']
+    assert robot['description']['calf_limits_deg'] == [-140.0, -45.0]
+
+
+# --- CAL-06: the calibration checks -------------------------------------------
+
+def _set_offset(cfg, joint, offset, direction=None):
+    path = os.path.join(cfg, 'servos.yaml')
+    text = open(path).read()
+    pattern = re.compile(r'(%s:\s*\{[^}]*?offset_deg:\s*)([-+0-9.]+)' % joint)
+    assert pattern.search(text), joint
+    text = pattern.sub(lambda m: m.group(1) + str(offset), text, count=1)
+    if direction is not None:
+        text = re.sub(r'(%s:\s*\{[^}]*?direction:\s*)([-+0-9]+)' % joint,
+                      lambda m: m.group(1) + str(direction), text, count=1)
+    open(path, 'w').write(text)
+
+
+def test_servo_check_reports_the_pairs_that_drifted(cfg):
+    v = rs.load(cfg)
+    msgs = rs.check_servos(cfg, v)
+    texts = ' | '.join(t for _, t in msgs)
+    assert 'разброс смещений' in texts
+    # The shipped file already carries a real asymmetry, so the check must see it.
+    assert any(lv == 'warn' and 'разошлись' in t for lv, t in msgs), msgs
+
+
+def test_servo_check_accepts_a_symmetric_calibration(cfg):
+    for joint, offset in (('lf_thigh_joint', 30.0), ('rf_thigh_joint', -30.0),
+                          ('lr_thigh_joint', 30.0), ('rr_thigh_joint', -30.0)):
+        _set_offset(cfg, joint, offset)
+    for joint, direction in (('lf_thigh_joint', 1), ('rf_thigh_joint', -1)):
+        _set_offset(cfg, joint, 30.0 if joint.startswith('lf') else -30.0, direction)
+    msgs = rs.check_servos(cfg, rs.load(cfg))
+    thigh = [t for lv, t in msgs if t.startswith('thigh')]
+    assert not [t for t in thigh if 'разошлись' in t], thigh
+
+
+def test_servo_check_flags_one_direction_on_mirrored_servos(cfg):
+    _set_offset(cfg, 'rf_thigh_joint', -56.0, direction=1)   # same sign as lf now
+    msgs = rs.check_servos(cfg, rs.load(cfg))
+    assert any('одинаковое направление' in t for _, t in msgs), msgs
+
+
+def test_servo_check_flags_a_servo_at_the_edge_in_the_stand_pose(cfg):
+    # The stand pulse is 1370 us at offset 0 and moves ~9.4 us per degree, so an
+    # offset of 85 deg lands inside the 5 % band at the low edge (below 605 us).
+    _set_offset(cfg, 'lf_hip_joint', 85.0)
+    msgs = rs.check_servos(cfg, rs.load(cfg))
+    assert any('у края' in t for _, t in msgs), msgs
+
+
+# --- отчёт о калибровке (вход CAL-01 / CAL-03) ---------------------------------
+
+def test_the_report_covers_every_joint_and_hashes_both_files(cfg):
+    text = rs.report(cfg, rs.load(cfg))
+    for joint in rs.LEG_JOINTS:
+        for leg in ('lf', 'rf', 'lr', 'rr'):
+            assert '%s_%s_joint' % (leg, joint) in text, (leg, joint)
+    assert 'sha256' in text
+    assert 'файла нет' in text                       # no servos.local.yaml in a fresh clone
+    assert len([l for l in text.splitlines() if l.startswith('| `')]) == 12
+    # the factory asymmetry the shipped file really carries is named, not hidden
+    assert 'разошлись' in text or 'разброс' in text
+
+
+def test_the_report_shows_the_robots_own_calibration_over_the_factory_one(cfg):
+    with open(os.path.join(cfg, 'servos.local.yaml'), 'w') as f:
+        f.write('/**/servo_driver:\n  ros__parameters:\n'
+                '    lf_thigh_joint: {offset_deg: 47.5}\n'
+                '    rf_thigh_joint: {offset_deg: -47.5, direction: -1}\n')
+    text = rs.report(cfg, rs.load(cfg))
+    assert '+47.5' in text
+    assert '-47.5' in text
+    assert 'своя' in text                             # calibration source is the robot
+    # an overlay is a patch, not a replacement: channel and limits still come from the
+    # factory file, which the local file never mentions
+    row = [l for l in text.splitlines() if '`lf_thigh_joint`' in l][0]
+    assert '| 1 |' in row and '-45…+135' in row
+
+
+def test_the_report_pulse_follows_the_servo_it_belongs_to(cfg):
+    """A pulse is only useful next to its channel: a shifted offset must move it."""
+    before = rs.report(cfg, rs.load(cfg))
+    with open(os.path.join(cfg, 'servos.local.yaml'), 'w') as f:
+        f.write('/**/servo_driver:\n  ros__parameters:\n'
+                '    lf_hip_joint: {offset_deg: -14.0}\n')
+    after = rs.report(cfg, rs.load(cfg))
+    assert before != after
+    row_before = [l for l in before.splitlines() if 'lf_hip_joint' in l][0]
+    row_after = [l for l in after.splitlines() if 'lf_hip_joint' in l][0]
+    assert row_before != row_after
+    pulse_before = float(row_before.split('|')[7])
+    pulse_after = float(row_after.split('|')[7])
+    # 10 deg of offset at 9.44 us/deg: the pulse must move by about 94 us
+    assert abs(abs(pulse_after - pulse_before) - 94.4) < 2.0, (pulse_before, pulse_after)
+
+
+def test_the_report_cli_writes_a_file(cfg, tmp_path, monkeypatch, capsys):
+    out = tmp_path / 'calibration-report.md'
+    assert rs.main(['--config', cfg, '--report', str(out)]) == 0
+    assert 'отчёт' in capsys.readouterr().out
+    assert '# Калибровка робота' in out.read_text(encoding='utf-8')
+    assert 'Итог' in out.read_text(encoding='utf-8')
+
+
+# CAL-01/CAL-03 gate: the factory file is not a calibration. A joint that only the factory
+# file defines has never had its zero set, and a robot walking on it believes its servos are
+# exactly where the drawing says they are.
+
+def write_local(cfg, joints):
+    base = rs.servo_params(cfg)
+    node = {j: {'offset_deg': 1.5, 'direction': base[j].get('direction', 1)} for j in joints}
+    text = '/**/servo_driver:\n  ros__parameters:\n'
+    for j, v in node.items():
+        text += '    %s:\n      offset_deg: %s\n      direction: %s\n' % (j, v['offset_deg'], v['direction'])
+    open(os.path.join(cfg, 'servos.local.yaml'), 'w').write(text)
+
+
+def all_joints():
+    return ['%s_%s_joint' % (leg, k) for leg in rs.LEGS for k in rs.LEG_JOINTS]
+
+
+def test_a_fresh_robot_has_no_calibration_at_all(cfg):
+    missing = rs.uncalibrated(cfg)
+    assert len(missing) == 12, missing
+    assert 'lf_calf_joint' in missing
+
+
+def test_a_half_calibrated_robot_names_the_joints_left(cfg):
+    write_local(cfg, ['lf_hip_joint', 'lf_thigh_joint'])
+    missing = rs.uncalibrated(cfg)
+    assert 'lf_hip_joint' not in missing
+    assert 'lf_calf_joint' in missing
+    assert len(missing) == 10
+
+
+def test_a_calibrated_robot_has_nothing_left(cfg):
+    write_local(cfg, all_joints())
+    assert rs.uncalibrated(cfg) == []
+
+
+def test_the_verify_code_says_whether_the_robot_is_calibrated(cfg, capsys):
+    assert rs.main(['--verify', '--config', cfg]) == 3
+    assert 'калибровка неполная' in capsys.readouterr().out
+    write_local(cfg, all_joints())
+    assert rs.main(['--verify', '--config', cfg]) == 0
+    assert 'калибровка есть у всех суставов' in capsys.readouterr().out

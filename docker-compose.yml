@@ -24,7 +24,14 @@ services:
     device_cgroup_rules:
       - 'c 13:* rmw'            # input devices (js*, event*) plugged in later
     environment:
-      - ROS_DOMAIN_ID=0
+      # Its own domain and no off-host discovery: the simulator on a laptop uses
+      # domain 0 and must not see (or half-see) this robot (TEL-11). To debug from a
+      # laptop set ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET and the same domain there.
+      - ROS_DOMAIN_ID=42
+      - ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
+      # The entrypoint runs tools/preflight first. Set DOG_PREFLIGHT=off only for
+      # bench work where the bus is deliberately absent (CAL-09).
+      - DOG_PREFLIGHT=${DOG_PREFLIGHT:-auto}
     stop_signal: SIGINT
     stop_grace_period: 10s
     command: >

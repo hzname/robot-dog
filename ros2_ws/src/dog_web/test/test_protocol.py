@@ -55,7 +55,8 @@ def test_watchdog_fires_once_after_stall():
 def test_hello_and_state_are_json():
     assert json.loads(protocol.hello(LIM))['limits']['max_vx'] == LIM.max_vx
     s = json.loads(protocol.state('walk', False, 2))
-    assert s == {'type': 'state', 'mode': 'walk', 'estop': False, 'clients': 2}
+    assert s == {'type': 'state', 'mode': 'walk', 'estop': False, 'clients': 2,
+                 'view_only': False}
 
 
 def test_guard_message():
@@ -65,3 +66,48 @@ def test_guard_message():
     assert m == {'type': 'guard', 'state': 'crawl', 'd': 0.4}
     m = json.loads(protocol.guard('{"state": "weird", "d": null}'))
     assert m == {'type': 'guard', 'state': 'clear', 'd': None}
+
+
+# --- TEL-02: the page is the operator's panel, in both directions --------------
+
+def test_estop_can_be_engaged_from_the_page():
+    allowed, publish, reason = protocol.estop_decision(current=False, requested=True)
+    assert (allowed, publish, reason) == (True, True, '')
+
+
+def test_estop_can_be_released_from_the_page():
+    allowed, publish, reason = protocol.estop_decision(current=True, requested=False)
+    assert (allowed, publish, reason) == (True, True, '')
+
+
+def test_a_repeated_estop_does_not_touch_the_topic():
+    assert protocol.estop_decision(current=True, requested=True)[1] is False
+    assert protocol.estop_decision(current=False, requested=False)[1] is False
+
+
+def test_view_only_keeps_the_estop_and_drops_every_other_control():
+    a = protocol.handle_message('{"type":"drive","vx":1,"vy":0,"wz":0}', LIM)
+    a.command = 'stand'
+    a.pose = (0.1, 0.01)
+    a, errors = protocol.gate_actions(a, drive_enabled=False, estop_engaged=False)
+    assert a.twist is None and a.command is None and a.pose is None
+    assert len(errors) == 3
+
+    estop = protocol.handle_message('{"type":"estop","active":true}', LIM)
+    estop, errors = protocol.gate_actions(estop, drive_enabled=False, estop_engaged=False)
+    assert estop.estop is True and errors == []
+    # Releasing is a safety action too: view-only keeps it.
+    release = protocol.handle_message('{"type":"estop","active":false}', LIM)
+    release, errors = protocol.gate_actions(release, drive_enabled=False, estop_engaged=True)
+    assert release.estop is False and errors == []
+
+
+def test_the_full_profile_passes_actions_through():
+    a = protocol.handle_message('{"type":"drive","vx":1,"vy":0,"wz":0}', LIM)
+    a, errors = protocol.gate_actions(a, drive_enabled=True, estop_engaged=False)
+    assert a.twist is not None and errors == []
+
+
+def test_state_says_whether_the_page_is_view_only():
+    assert json.loads(protocol.state('stand', False, 1))['view_only'] is False
+    assert json.loads(protocol.state('stand', False, 1, view_only=True))['view_only'] is True

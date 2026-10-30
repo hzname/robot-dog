@@ -6,6 +6,9 @@
 //   STAND --greet--> GREETING (sit, paws up, wave, back up) --> STAND
 //   STAND --survey--> SURVEY (body looks up / down, left / right, for the lidars) --> STAND
 //   any --estop--> PASSIVE (no joint output until "stand" after release)
+//
+// The gait period comes from gait.period or, with gait.auto_period, from the
+// assumed servo speed (servo.*); it changes only in PASSIVE, STAND and LYING.
 #pragma once
 
 #include <array>
@@ -17,11 +20,14 @@
 #include "dog_control/greet.hpp"
 #include "dog_control/survey.hpp"
 #include "dog_control/kinematics.hpp"
+#include "dog_control/servo_limits.hpp"
 
 namespace dog_control
 {
 
-enum class Mode { PASSIVE, STANDING_UP, STAND, WALK, LYING_DOWN, LYING, GREETING, SURVEY };
+// FALLEN: the robot is down (hard tilt or a lost IMU). Nothing is driven, the
+// outputs are released, and only the operator's ~/recover raises it (D-12).
+enum class Mode { PASSIVE, STANDING_UP, STAND, WALK, LYING_DOWN, LYING, GREETING, SURVEY, FALLEN };
 
 /// TROT: the normal gait. CRAWL: three feet down at any time, slow, follows
 /// the terrain profile (steps, stairs, high bars) - see crawl.hpp.
@@ -60,14 +66,38 @@ struct LocomotionParams
   // gain * height * tan(slope) so the centre of mass stays over the support.
   bool slope_compensation{true};
   double slope_gain{1.0};
-  double slope_filter_tau{0.8};  // [s] averages out the gait's own rocking
+  double slope_filter_tau{0.8};  // [s] upper bound on the averaging window: the window is one
+                                 // gait period, clamped to [0.3, 2 * tau]
   double slope_max_shift{0.04};  // [m]
   double slope_max_deg{25.0};    // ignore readings beyond this (robot falling / lifted)
+
+  // Soft tilt governor (GAIT-04, owner 2026-10-27): above tilt_soft_deg the walk
+  // slows linearly to zero at tilt_stop_deg and stops there instead of waiting for
+  // the emergency gates (20 deg tilt vs the surface, 60 deg fall in walk_check).
+  // The tilt is the filtered ground slope estimate, so the gait's own rocking
+  // does not chop the speed.
+  double tilt_soft_deg{15.0};    // [deg] full speed up to here
+  double tilt_stop_deg{20.0};    // [deg] no command from here
+
+  // Fall protection (phase 4, SAF-05/06/08). The thresholds are provisional (D-11):
+  // soft lies the robot down, hard latches FALLEN after a debounce. They read the
+  // raw body attitude, not the ground-slope estimate: a robot that is tipping over
+  // is not standing on a slope.
+  double safety_soft_deg{22.0};      // [deg] lie down above this
+  double safety_hard_deg{32.0};      // [deg] fall above this for safety_debounce_s
+  double safety_debounce_s{0.2};     // [s]
+  double safety_hysteresis_deg{3.0}; // [deg] come back below soft - hysteresis
+  double safety_imu_timeout_s{0.2};  // [s] silence that counts as a lost IMU
+  double safety_idle_lie_s{90.0};    // [s] holding a pose without commands: lie down
+  bool safety_require_imu{false};
+  /// CAL-08: an IMU is trusted for attitude only after imu/calibrated. A simulator has
+  /// no bias and known axes, so there the flag is turned off; on the robot it stays on.
+  bool imu_require_calibrated{true};
 
   // Heading hold from the gyro: the heading error (commanded minus measured
   // yaw, integrated while walking) is fed back (PI) into the yaw rate of the gait.
   bool heading_hold{true};
-  double heading_kp{2.5};         // [1/s] yaw-rate correction per radian of error
+  double heading_kp{5.0};         // [1/s] yaw-rate correction per radian of error
   double heading_ki{1.0};         // [1/s^2] integral part: removes the steady drift offset
   double heading_max_rate{0.3};   // [rad/s] correction limit
   double heading_max_error{0.5};  // [rad] error clamp (anti-windup: robot blocked)
@@ -76,9 +106,15 @@ struct LocomotionParams
   double heading_crawl_kp{1.0};
   double heading_crawl_ki{0.2};
   double heading_crawl_max_rate{0.08};
+  /// 5 Hz trace of the heading loop into the log; off by default (01-18).
+  bool heading_debug{false};
 
   BodyVelocity max_velocity{0.15, 0.08, 0.6};
   BodyVelocity max_accel{0.5, 0.3, 2.0};
+
+  bool auto_period{false};  // true: the gait period is computed from servo.* (D-12); false: gait.period stays in force
+  double min_period{0.55};  // [s] the computed period is never shorter (0.50 s gave 35 % backwards, docs/SIMULATION.md)
+  ServoSpeedModel servo;    // assumed servo speed the period is computed for (D-13)
 
   GaitParams gait;
   CrawlParams crawl;
@@ -103,8 +139,22 @@ public:
   /// Body attitude from the IMU [rad] (REP-103 roll / pitch vs. gravity).
   /// Without calls the controller behaves as on flat ground.
   void setImuAttitude(double roll, double pitch, double dt);
+  /// The immediate body tilt for the fall guard [rad], computed from the
+  /// accelerometer's own direction. The attitude filter has a whole second of lag:
+  /// by the time it agrees the robot is on the floor, so the guard reads this.
+  /// Also counts as the IMU heartbeat (age and "seen").
+  void setFallTilt(double roll, double pitch);
+  /// The IMU says its gyro bias is known. In the floor profile a robot without
+  /// this flag refuses to stand: the fall guard would be blind (SAF-06).
+  void setImuCalibrated(bool calibrated) {imu_calibrated_ = calibrated;}
+  /// Attitude is trusted after imu/calibrated - or always, when the IMU is a model.
+  bool imuTrusted() const {return imu_calibrated_ || !p_.imu_require_calibrated;}
+  bool imuCalibrated() const {return imu_calibrated_;}
   double slopePitch() const {return slope_pitch_;}
   double slopeRoll() const {return slope_roll_;}
+  /// Speed factor from the tilt governor: 1 below tilt.soft_deg, 0 at
+  /// tilt.stop_deg and above, linear in between (GAIT-04).
+  double tiltScale() const {return tilt_scale_;}
   /// Measured body yaw rate [rad/s] (gyro z). Call every IMU sample;
   /// clearYawRate() when the IMU goes silent. Without it there is no hold.
   void setYawRate(double wz);
@@ -116,6 +166,11 @@ public:
   void clearYawRate() {yaw_rate_valid_ = false; yaw_turned_ = 0.0; yaw_turned_dt_ = 0.0;}
   /// Integrated heading error [rad] (commanded minus measured).
   double headingError() const {return heading_error_;}
+  /// The integral term and the correction the loop applied this cycle [rad/s];
+  /// read by the 5 Hz heading_debug line (01-18).
+  double headingIntegral() const {return heading_integral_;}
+  double headingCorrection() const {return heading_correction_;}
+  double yawRateMeasured() const {return yaw_rate_;}
   /// Hazard guard from perception: forward speed limit [m/s] (inf = none)
   /// and swing height per leg (LF, RF, LR, RR) [m] (NaN = gait.step_height):
   /// only the legs whose path crosses the obstacle lift higher. clearGuard()
@@ -146,9 +201,34 @@ public:
   bool update(double dt);
 
   Mode mode() const {return mode_;}
+  /// Body tilt used by the soft threshold, from the filtered attitude [deg].
+  double tiltDeg() const {return tilt_deg_;}
+  /// Immediate tilt from the accelerometer [deg]: what the fall guard latches on.
+  double rawTiltDeg() const {return tilt_raw_deg_;}
+  bool fallen() const {return mode_ == Mode::FALLEN;}
+  /// Why the robot fell, in words the operator sees on the page and in the log.
+  const std::string & fallReason() const {return fall_reason_;}
+  /// Why the last request() was refused (empty when it was accepted).
+  const std::string & lastRefusal() const {return refusal_;}
+  /// The operator fixed the robot: clear FALLEN and get ready to stand (D-12).
+  /// Returns an empty string on success, otherwise the reason it cannot.
+  std::string recover();
+  /// True once after the controller wants the outputs released (a fall or the
+  /// thermal timeout): the node publishes estop, the driver lets the servos go.
+  bool takeRelaxRequest();
   const std::array<double, kNumJoints> & joints() const {return joints_;}
   const BodyVelocity & velocity() const {return vel_;}
   const TrotGait & gait() const {return gait_;}
+  /// Gait period in force [s]: gait.period or the computed one (TrotGait clamps it to >= 0.1 s).
+  double gaitPeriod() const {return gait_.params().period;}
+  /// True in PASSIVE, STAND and LYING: the modes where reconfigureGait() is accepted.
+  bool gaitReconfigurable() const;
+  /// Live change of the gait period source (D-12): rebuilds the trot with the
+  /// period from gait.period or, with auto_period, from servo.*. Returns false
+  /// and changes nothing outside PASSIVE, STAND, LYING (a gait in motion or a
+  /// transition must not jump), when no period in [min_period, kMaxAutoPeriod]
+  /// fits, or when a manual period is not finite and above 0.
+  bool reconfigureGait(double period, bool auto_period, double min_period, const ServoSpeedModel & servo);
   /// Number of IK targets clamped to the workspace in the last update.
   int unreachableCount() const {return unreachable_;}
 
@@ -180,6 +260,24 @@ private:
   TerrainProfile terrain_;
   Mode mode_{Mode::PASSIVE};
   bool estop_{false};
+  // --- fall and thermal protection (phase 4)
+  void evaluateSafety(double dt);
+  void enterFallen(const std::string & reason);
+  double imu_roll_{0.0};
+  double imu_pitch_{0.0};
+  double tilt_deg_{0.0};       // filtered attitude: the soft threshold's input
+  double tilt_raw_deg_{0.0};   // accelerometer's own direction: the hard one's
+  bool tilt_raw_valid_{false}; // has the accelerometer path spoken yet
+  double imu_age_{1e9};        // [s] since the last IMU sample
+  bool imu_seen_{false};
+  bool imu_calibrated_{false};
+  double hard_t_{0.0};         // [s] tilt above the hard threshold
+  bool soft_active_{false};
+  double idle_t_{0.0};         // [s] holding a pose without commands
+  bool idle_lie_pending_{false};  // lying down for the thermal timeout: relax after
+  bool relax_requested_{false};
+  std::string fall_reason_;
+  std::string refusal_;
   bool pending_lie_{false};
 
   BodyVelocity vel_target_;
@@ -192,8 +290,21 @@ private:
   double trans_to_{0.0};
   double height_{0.0};
   double slope_pitch_{0.0};  // estimated ground slope in the body frame [rad]
+  double tilt_scale_{1.0};   // tilt governor's speed factor (GAIT-04)
   double slope_roll_{0.0};
   bool slope_valid_{false};
+  // The estimate is a time-weighted mean over one gait period: the body pitches
+  // with every step, and that rocking is periodic, so a low-pass only smears it
+  // (GAIT-04: with the plain filter the estimate swung 15...19 deg on a 20 deg ramp).
+  static constexpr int kSlopeSamples = 256;
+  std::array<double, kSlopeSamples> slope_buf_p_{};
+  std::array<double, kSlopeSamples> slope_buf_r_{};
+  std::array<double, kSlopeSamples> slope_buf_dt_{};
+  int slope_head_{0};
+  int slope_count_{0};
+  double slope_sum_p_{0.0};   // sum of sample * dt over the window
+  double slope_sum_r_{0.0};
+  double slope_sum_dt_{0.0};
   double shift_x_{0.0};  // applied (rate-limited) slope shift [m]
   double shift_y_{0.0};
   double yaw_rate_{0.0};
@@ -201,6 +312,8 @@ private:
   double yaw_turned_{0.0}, yaw_turned_dt_{0.0};  // gyro integrated since the last update
   double heading_error_{0.0};
   double heading_integral_{0.0};
+  /// The correction applied by the heading loop in the last cycle [rad/s].
+  double heading_correction_{0.0};
   BodyVelocity gait_vel_;
   double guard_vx_{std::numeric_limits<double>::infinity()};
   std::array<double, kNumLegs> guard_step_{};  // NaN = configured step height

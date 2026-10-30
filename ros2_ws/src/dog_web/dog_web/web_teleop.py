@@ -20,7 +20,9 @@ from geometry_msgs.msg import Twist, Vector3
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import BatteryState
+from diagnostic_msgs.msg import DiagnosticArray
 from std_msgs.msg import Bool, String
+from std_srvs.srv import Trigger
 
 from dog_web import protocol
 from dog_web.calibration import ALLOWED_MODES, CalibrationBridge
@@ -65,8 +67,20 @@ class WebTeleop(Node):
         self.mode = 'unknown'
         self.web_clients = set()
         self._aio_loop = None
-        self.allow_calibration = bool(self.declare_parameter('allow_calibration', True).value)
+        # Closed by default: the page may tune calibration only when the launch file
+        # was started with calibrate:=true for a calibration session (TEL-02).
+        self.allow_calibration = bool(self.declare_parameter('allow_calibration', False).value)
+        # The floor profile starts the page read-only: state and the E-STOP only.
+        self.drive_enabled = bool(self.declare_parameter('drive_enabled', True).value)
+        self._estop = False          # last E-STOP state we published
         self.cal = CalibrationBridge(self) if self.allow_calibration else None
+        # The driver comes up disarmed (SAF-12). Pressing "stand" is the operator's
+        # explicit gesture, so the page arms first and then asks for the pose.
+        self.arm_client = self.create_client(Trigger, 'servo_driver/arm')
+        self.release_client = self.create_client(Trigger, 'servo_driver/release_fault')
+        self._diag = {}
+        # One banner for the whole robot: the worst node wins (DIA-02).
+        self.create_subscription(DiagnosticArray, 'diagnostics', self._on_diagnostics, 10)
 
     # ------------------------------------------------------------ ROS side
     def _on_state(self, msg: String):
@@ -102,9 +116,12 @@ class WebTeleop(Node):
 
     def send_actions(self, actions: protocol.Actions):
         if actions.estop is not None:
+            self._estop = bool(actions.estop)
             self.estop_pub.publish(Bool(data=actions.estop))
             self.get_logger().warning('web: E-STOP %s' % ('ENGAGED' if actions.estop else 'released'))
         if actions.command:
+            if actions.command == 'stand':
+                self._arm_driver()
             self.command_pub.publish(String(data=actions.command))
             self.get_logger().info('web: %s' % actions.command)
         if actions.twist is not None:
@@ -116,9 +133,60 @@ class WebTeleop(Node):
             v.y, v.z = actions.pose
             self.pose_pub.publish(v)
 
+    def _arm_driver(self):
+        """Power the servos: drop the latch first, then arm.
+
+        After a fall or the thermal timeout the driver sits in e-stop or with a
+        latched fault, and ~/arm alone is refused. Pressing "stand" is the
+        operator's one gesture, so the page does both steps (D-12).
+        """
+        if not self.release_client.service_is_ready():
+            self.get_logger().warning('web: servo driver release_fault is not ready yet')
+            return
+        release = self.release_client.call_async(Trigger.Request())
+        release.add_done_callback(lambda _f: self._arm_after_release())
+
+    def _arm_after_release(self):
+        if not self.arm_client.service_is_ready():
+            self.get_logger().warning('web: servo driver is not ready to arm yet')
+            return
+        future = self.arm_client.call_async(Trigger.Request())
+
+        def done(fut):
+            try:
+                res = fut.result()
+            except Exception as exc:  # noqa: BLE001 - arming is best effort here
+                self.get_logger().error('web: arm failed: %r' % exc)
+                return
+            if not res.success:
+                self.get_logger().warning('web: arm refused: %s' % res.message)
+
+        future.add_done_callback(done)
+
     # ------------------------------------------------------------ web side
+    # ------------------------------------------------------------ diagnostics
+    def _on_diagnostics(self, msg: DiagnosticArray):
+        """Keep the worst status per node and push one banner to the page (DIA-02)."""
+        changed = False
+        for status in msg.status:
+            level = {0: 'ok', 1: 'warn', 2: 'error'}.get(status.level, 'ok')
+            prev = self._diag.get(status.name)
+            if prev is None or prev[0] != level or prev[1] != status.message:
+                since = prev[2] if prev else time.time()
+                self._diag[status.name] = (level, status.message, since)
+                changed = True
+        if changed:
+            level, source, reason = protocol.worst_status(
+                [(lvl, name, text) for name, (lvl, text, _) in self._diag.items()])
+            since = self._diag.get(source, ('ok', '', time.time()))[2]
+            text = protocol.alarm(level, source, reason, since)
+            if self._aio_loop:
+                self._aio_loop.call_soon_threadsafe(
+                    lambda: asyncio.ensure_future(self._broadcast(text)))
+
     def _state_json(self):
-        return protocol.state(self.mode, self.mode == 'estop', len(self.web_clients))
+        return protocol.state(self.mode, self.mode == 'estop', len(self.web_clients),
+                              view_only=not self.drive_enabled)
 
     async def _broadcast_state(self):
         text = self._state_json()
@@ -140,6 +208,11 @@ class WebTeleop(Node):
             while True:
                 text = await ws.recv()
                 if _is_calibration(text):
+                    # Only a client that actually calibrates holds the keep-alive:
+                    # a teleop tab must never feed stale poses while the robot walks.
+                    if self.cal and not getattr(ws, 'cal_active', False):
+                        ws.cal_active = True
+                        self.cal.open_session()
                     reply = await self._calibration(text)
                     if reply.get('type') == 'cal_info' and cal_task is None:
                         cal_task = asyncio.ensure_future(self._stream_status(ws))
@@ -149,6 +222,10 @@ class WebTeleop(Node):
                 if actions.errors:
                     await ws.send(json.dumps({'type': 'error', 'message': actions.errors[0]}))
                     continue
+                actions, refused = protocol.gate_actions(
+                    actions, drive_enabled=self.drive_enabled, estop_engaged=self._estop)
+                for reason in refused:
+                    await ws.send(json.dumps({'type': 'error', 'message': reason}))
                 if actions.twist is not None:
                     watchdog.feed(actions.twist, time.monotonic())
                 try:
@@ -162,6 +239,8 @@ class WebTeleop(Node):
             stop_task.cancel()
             if cal_task:
                 cal_task.cancel()
+            if self.cal and getattr(ws, 'cal_active', False):
+                self.cal.close_session()
             self.web_clients.discard(ws)
             if watchdog.moving:
                 self.send_actions(protocol.Actions(twist=(0.0, 0.0, 0.0)))
@@ -209,7 +288,9 @@ class WebTeleop(Node):
         stop = asyncio.Event()
         for sig in (signal.SIGINT, signal.SIGTERM):
             self._aio_loop.add_signal_handler(sig, stop.set)
-        server = Server(self.static_dir, self.handle_client)
+        server = Server(self.static_dir, self.handle_client,
+                        max_clients=int(self.declare_parameter('max_clients', 4).value),
+                        idle_timeout=float(self.declare_parameter('idle_timeout', 60.0).value))
         port = await server.start(self.host, self.port)
         self.get_logger().info('web teleop on http://%s:%d' % (self.host, port))
         try:

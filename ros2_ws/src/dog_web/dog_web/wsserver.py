@@ -47,10 +47,12 @@ def encode_frame(opcode: int, payload: bytes, mask: bytes = None) -> bytes:
 
 
 class WebSocket:
-    def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, peer: str):
+    def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, peer: str,
+                 idle_timeout: float = None):
         self.reader = reader
         self.writer = writer
         self.peer = peer
+        self.idle_timeout = idle_timeout
         self.closed = False
         self._send_lock = asyncio.Lock()
 
@@ -73,13 +75,21 @@ class WebSocket:
         payload = bytes(b ^ mask[i % 4] for i, b in enumerate(data))
         return fin, opcode, payload
 
+    async def _next_frame(self):
+        if not self.idle_timeout:
+            return await self._read_frame()
+        try:
+            return await asyncio.wait_for(self._read_frame(), self.idle_timeout)
+        except asyncio.TimeoutError as exc:
+            raise WebSocketClosed('idle timeout') from exc
+
     async def recv(self) -> str:
         """Next text message. Raises WebSocketClosed when the peer goes away."""
         buffer = bytearray()
         message_opcode = None
         try:
             while True:
-                fin, opcode, payload = await self._read_frame()
+                fin, opcode, payload = await self._next_frame()
                 if opcode == OP_CLOSE:
                     await self.close()
                     raise WebSocketClosed('closed by peer')
@@ -162,11 +172,33 @@ class Server:
     """Serves files from `static_dir` and hands WebSocket clients on
     `ws_path` to `on_client(ws)` (a coroutine)."""
 
-    def __init__(self, static_dir: str, on_client, ws_path: str = '/ws'):
+    def __init__(self, static_dir: str, on_client, ws_path: str = '/ws',
+                 max_clients: int = 4, idle_timeout: float = 60.0, check_origin: bool = True):
         self.static_dir = os.path.abspath(static_dir)
         self.on_client = on_client
         self.ws_path = ws_path
+        self.max_clients = int(max_clients)
+        self.idle_timeout = float(idle_timeout) if idle_timeout else None
+        self.check_origin = check_origin
+        self.clients = 0          # live WebSocket sessions, not TCP connections
         self._server = None
+
+    @staticmethod
+    def origin_allowed(headers: dict) -> bool:
+        """A browser page may open the socket only from the host it was served from.
+
+        A request without `Origin` is not a browser (curl, the calibration tool), so
+        it passes; a browser always sends the header and cannot forge it.
+        """
+        origin = (headers.get('origin') or '').strip()
+        if not origin:
+            return True
+        host = (headers.get('host') or '').strip()
+        if not host:
+            return False
+        served_from = host.split(':')[0].lower()
+        came_from = origin.split('://', 1)[-1].split('/')[0].split(':')[0].lower()
+        return came_from == served_from
 
     async def start(self, host: str, port: int):
         self._server = await asyncio.start_server(self._handle, host, port)
@@ -196,6 +228,14 @@ class Server:
 
         is_upgrade = headers.get('upgrade', '').lower() == 'websocket'
         if path.split('?', 1)[0] == self.ws_path and is_upgrade:
+            if self.check_origin and not self.origin_allowed(headers):
+                writer.write(_http_response('403 Forbidden', b'cross-origin request'))
+                writer.close()
+                return
+            if self.clients >= self.max_clients:
+                writer.write(_http_response('503 Service Unavailable', b'too many clients'))
+                writer.close()
+                return
             key = headers.get('sec-websocket-key')
             if not key:
                 writer.write(_http_response('400 Bad Request', b'missing key'))
@@ -208,10 +248,12 @@ class Server:
                 f'Sec-WebSocket-Accept: {accept_key(key)}\r\n\r\n'
             ).encode('latin-1'))
             await writer.drain()
-            ws = WebSocket(reader, writer, peer)
+            ws = WebSocket(reader, writer, peer, self.idle_timeout)
+            self.clients += 1
             try:
                 await self.on_client(ws)
             finally:
+                self.clients -= 1
                 await ws.close()
             return
 

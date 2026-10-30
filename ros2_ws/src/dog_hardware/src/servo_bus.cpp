@@ -21,21 +21,40 @@ namespace dog_hardware
 bool MockBus::setPulseUs(int channel, double us)
 {
   if (channel < 0 || channel >= kPwmChannels) {return false;}
-  pulses_[channel] = us;
+  ++attempts_[channel];
   ++writes_;
+  // A failed transfer leaves the chip at its previous pulse, like real I2C:
+  // the mock must not change the output either, or the driver could never be
+  // caught trusting a write it did not get.
+  bool failed = false;
+  if (fail_next_ > 0) {--fail_next_; failed = true;}
+  if (fail_channel_[channel] > 0) {--fail_channel_[channel]; failed = true;}
+  if (failed) {return false;}
+  pulses_[channel] = us;
   return true;
 }
 
 bool MockBus::disable(int channel)
 {
   if (channel < 0 || channel >= kPwmChannels) {return false;}
+  ++disable_attempts_[channel];
+  if (fail_disable_[channel] > 0) {--fail_disable_[channel]; return false;}
   pulses_[channel] = 0.0;
   ++writes_;
   return true;
 }
 
+void MockBus::clearFailures()
+{
+  fail_next_ = 0;
+  fail_disable_all_ = 0;
+  fail_channel_.fill(0);
+  fail_disable_.fill(0);
+}
+
 bool MockBus::disableAll()
 {
+  if (fail_disable_all_ > 0) {--fail_disable_all_; return false;}
   pulses_.fill(0.0);
   ++writes_;
   return true;
@@ -111,6 +130,14 @@ bool Pca9685Bus::open(const std::string & device, int address, double pwm_hz,
   if (already_running) {
     if (!writeReg(kMode1, (mode1 & ~kMode1Restart) | kMode1AutoInc | kMode1AllCall)) {
       error = "PCA9685 MODE1 write failed: " + std::string(std::strerror(errno));
+      close();
+      return false;
+    }
+    // The chip kept whatever pulses the previous process left. The robot never
+    // stands on its own at start or restart, so those pulses are dropped rather
+    // than inherited: an operator is holding it anyway (D-06, SAF-12).
+    if (!disableAll()) {
+      error = "PCA9685 disableAll on start failed: " + std::string(std::strerror(errno));
       close();
       return false;
     }

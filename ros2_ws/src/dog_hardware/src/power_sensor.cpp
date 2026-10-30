@@ -142,12 +142,24 @@ std::unique_ptr<PowerSensor> probePowerSensor(const std::string & device,
 
 // ------------------------------------------------------------ PowerGuard
 
+void PowerGuard::clear()
+{
+  latched_ = false;
+  latched_v_ = 0.0;
+  under_since_ = -1.0;
+  under_fired_ = false;
+}
+
 PowerGuard::Event PowerGuard::update(const PowerReading & r, double now)
 {
   const double dt = last_ < 0.0 ? 0.0 : std::max(0.0, now - last_);
   last_ = now;
   const double k = p_.filter_tau > 0.0 ? 1.0 - std::exp(-dt / p_.filter_tau) : 1.0;
   current_ = (dt == 0.0 && k < 1.0) ? r.current : current_ + (r.current - current_) * k;
+
+  // Latched: no more events, but the current filter keeps running so the telemetry
+  // still says what the rail is doing while the operator walks over to look.
+  if (latched_) {return Event::NONE;}
 
   Event ev = Event::NONE;
   if (current_ > p_.overcurrent_a) {
@@ -164,6 +176,8 @@ PowerGuard::Event PowerGuard::update(const PowerReading & r, double now)
     if (under_since_ < 0.0) {under_since_ = now;}
     if (!under_fired_ && now - under_since_ >= p_.undervoltage_time && ev == Event::NONE) {
       under_fired_ = true;
+      latched_ = true;
+      latched_v_ = r.voltage;
       ev = Event::UNDERVOLTAGE;
     }
   } else {

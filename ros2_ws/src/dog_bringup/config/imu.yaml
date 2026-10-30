@@ -11,6 +11,10 @@
     # nose down and `ros2 topic echo /dog/imu/data` must show positive pitch
     # (see docs/TERRAIN.md). E.g. "-y,x,z" for a board turned 90 deg.
     axes: "x,y,z"
+    # CAL-08: set to true only after tools/imu_axes has walked you through the four
+    # positions and said the axes and the gyro sign are right. Until then imu/calibrated
+    # stays silent and attitude drives no slope compensation, heading hold or tilt guard.
+    axes_verified: false
     filter_tau: 1.0          # [s] accelerometer pull on roll / pitch
     accel_gate: 0.15         # ignore accel samples off 1 g by more (footfalls)
     bias_time: 1.0           # [s] gyro bias at start: keep the robot still

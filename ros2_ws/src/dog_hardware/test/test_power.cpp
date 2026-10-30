@@ -83,3 +83,40 @@ TEST(PowerGuard, UndervoltageNeedsItsWindowAndIgnoresPowerOff)
     EXPECT_EQ(off.update({0.0, 0.0}, i * 0.01), PowerGuard::Event::NONE);  // rail switched off
   }
 }
+
+// --- SAF-07: a lost rail latches, a stalled leg does not ----------------------
+
+TEST(PowerGuard, RailLossLatchesUntilSomebodyClearsIt)
+{
+  PowerGuard g(params());
+  EXPECT_EQ(g.update({4.6, 1.0}, 0.0), PowerGuard::Event::NONE);
+  EXPECT_EQ(g.update({4.6, 1.0}, 0.31), PowerGuard::Event::UNDERVOLTAGE);
+  EXPECT_TRUE(g.latched()) << "a collapsed rail must latch";
+  EXPECT_NEAR(g.latchedVoltage(), 4.6, 1e-9);
+
+  // The rail comes back: the protection does not re-arm by itself.
+  for (int i = 0; i < 200; ++i) {
+    EXPECT_EQ(g.update({6.0, 1.0}, 0.4 + i * 0.01), PowerGuard::Event::NONE);
+  }
+  EXPECT_TRUE(g.latched()) << "a robot must not re-arm on a supply that keeps sagging";
+
+  g.clear();   // a human looked at the supply
+  EXPECT_FALSE(g.latched());
+  EXPECT_EQ(g.update({4.6, 1.0}, 3.0), PowerGuard::Event::NONE);
+  EXPECT_EQ(g.update({4.6, 1.0}, 3.4), PowerGuard::Event::UNDERVOLTAGE);
+}
+
+TEST(PowerGuard, OvercurrentStillRearmsByItself)
+{
+  PowerGuard g(params());
+  for (int i = 0; i <= 45; ++i) {EXPECT_EQ(g.update({6.0, 7.0}, i * 0.01), PowerGuard::Event::NONE) << i;}
+  EXPECT_EQ(g.update({6.0, 7.0}, 0.6), PowerGuard::Event::OVERCURRENT);
+  EXPECT_FALSE(g.latched()) << "a stalled leg is a passing event, not a latch";
+  for (int i = 0; i <= 100; ++i) {
+    EXPECT_EQ(g.update({6.0, 1.0}, 0.7 + i * 0.01), PowerGuard::Event::NONE) << i;
+  }
+  for (int i = 0; i <= 45; ++i) {
+    EXPECT_EQ(g.update({6.0, 7.0}, 1.8 + i * 0.01), PowerGuard::Event::NONE) << i;
+  }
+  EXPECT_EQ(g.update({6.0, 7.0}, 2.4), PowerGuard::Event::OVERCURRENT) << "it fires again after clearing";
+}

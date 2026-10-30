@@ -3,6 +3,11 @@
 No xacro: launch files call build_urdf() directly, so geometry lives in one
 YAML file shared with the locomotion controller.
 
+servo_model='real' adds the servo imperfections of the simulation (GAIT-10):
+joint friction (dynamics), bus-voltage factors on effort/velocity and the knee
+rod drive ratio; 'ideal', the default, keeps the output byte for byte as it
+was (D-15).
+
 Joint convention matches dog_control/kinematics.hpp:
   <leg>_hip_joint   axis +x, zero = leg vertical
   <leg>_thigh_joint axis +y, zero = thigh straight down, + swings foot back
@@ -13,26 +18,34 @@ import math
 
 import yaml
 
+from dog_description.servo_profile import ServoProfile, speed_factor, torque_factor
+
 LEGS = (('lf', 1, 1), ('rf', 1, -1), ('lr', -1, 1), ('rr', -1, -1))  # name, front, side
+
+SERVO_MODELS = ('ideal', 'real')
 
 DEFAULT_DESCRIPTION = {
     'body_length': 0.23, 'body_width': 0.10, 'body_height': 0.05,
-    'body_mass': 0.80, 'hip_mass': 0.06, 'thigh_mass': 0.08, 'calf_mass': 0.03,
+    'body_mass': 0.80, 'body_com_x': 0.0, 'payload_mass': 0.0,
+    'hip_mass': 0.06, 'thigh_mass': 0.08, 'calf_mass': 0.03,
     'foot_radius': 0.012, 'servo_effort': 1.1, 'servo_velocity': 6.0, 'sim_p_gain': 25.0,
     'hip_limits_deg': [-40.0, 40.0], 'thigh_limits_deg': [-45.0, 135.0],
-    'calf_limits_deg': [-165.0, -15.0],
+    'calf_limits_deg': [-140.0, -40.0],
 }
 
 
 def load_config(path):
     """Returns (geometry, description) dicts from a robot.yaml file.
-    The description also carries the perception sensors under 'sensors'."""
+    The description also carries the perception sensors under 'sensors' and the
+    servo profile blocks under 'servo_sim' and 'servo'."""
     with open(path) as f:
         data = yaml.safe_load(f)
     params = data['/**']['ros__parameters']
     desc = dict(DEFAULT_DESCRIPTION)
     desc.update(params.get('description', {}))
     desc['sensors'] = dict(params.get('sensors', {}))
+    desc['servo_sim'] = dict(params.get('servo_sim') or {})
+    desc['servo'] = dict(params.get('servo') or {})
     return params['geometry'], desc
 
 
@@ -92,12 +105,27 @@ def stand_angles(geometry, height):
     return 0.0, thigh, calf
 
 
-def build_urdf(geometry, description=None, gazebo=False, namespace='dog', initial=None):
+def build_urdf(geometry, description=None, gazebo=False, namespace='dog', initial=None,
+               servo_model='ideal'):
+    if servo_model not in SERVO_MODELS:
+        raise ValueError(f'unknown servo_model {servo_model!r} (use ideal or real)')
     g = geometry
     d = dict(DEFAULT_DESCRIPTION)
     d.update(description or {})
     L1, L2, L3 = g['hip_offset'], g['thigh'], g['calf']
     bl, bw, bh = d['body_length'], d['body_width'], d['body_height']
+    com_x = d['body_com_x']
+    if isinstance(com_x, bool) or not isinstance(com_x, (int, float)) or not math.isfinite(com_x):
+        raise ValueError('"body_com_x" must be a finite number')
+    # Payload rides on the trunk: a bag strapped on the body, not a redesign of
+    # the links (02-CONTEXT.md D-04). Zero keeps the URDF byte for byte.
+    payload = d.get('payload_mass', 0.0)
+    if isinstance(payload, bool) or not isinstance(payload, (int, float)) or not math.isfinite(payload):
+        raise ValueError('"payload_mass" must be a finite number')
+    if payload < -0.5:
+        raise ValueError(f'"payload_mass" {payload} kg is too negative: the trunk itself is '
+                         f'{d["body_mass"]} kg')
+    trunk_mass = d['body_mass'] + payload
     r_leg = 0.012
     out = ['<?xml version="1.0"?>', '<robot name="robot_dog">']
     out.append(
@@ -110,7 +138,7 @@ def build_urdf(geometry, description=None, gazebo=False, namespace='dog', initia
         '<link name="trunk">'
         f'<visual><geometry><box size="{bl} {bw} {bh}"/></geometry><material name="body"/></visual>'
         f'<collision><geometry><box size="{bl} {bw} {bh}"/></geometry></collision>'
-        + _inertial(d['body_mass'], _box_inertia(d['body_mass'], bl, bw, bh)) + '</link>')
+        + _inertial(trunk_mass, _box_inertia(trunk_mass, bl, bw, bh), (com_x, 0, 0)) + '</link>')
     out.append('<joint name="base_to_trunk" type="fixed"><parent link="base_link"/>'
                '<child link="trunk"/></joint>')
     out.append('<link name="imu_link"/>'
@@ -129,13 +157,33 @@ def build_urdf(geometry, description=None, gazebo=False, namespace='dog', initia
                    f'rpy="{rpy[0]:.5f} {rpy[1]:.5f} {rpy[2]:.5f}"/></joint>')
 
     eff, vel = d['servo_effort'], d['servo_velocity']
+    knee_eff, knee_vel = eff, vel
+    dyn = ''
+    if servo_model == 'real':
+        servo = ServoProfile.from_params(d.get('servo_sim'))
+        k = (d.get('servo') or {}).get('knee_ratio', 1.0)
+        if isinstance(k, bool) or not isinstance(k, (int, float)) or not math.isfinite(k):
+            raise ValueError('"knee_ratio" must be a finite number')
+        if k <= 0.0:
+            raise ValueError('"knee_ratio" must be positive')
+        # The bus voltage scales the servo speed and torque (two datasheet
+        # points). The knee rod drive turns the servo knee_ratio times faster
+        # than the joint and multiplies its torque by the same ratio (D-20);
+        # both knee numbers are rounded once, from the exact ones.
+        sf = speed_factor(servo.bus_voltage, servo.bus_voltage_ref)
+        tf = torque_factor(servo.bus_voltage, servo.bus_voltage_ref)
+        eff = round(d['servo_effort'] * tf, 4)
+        vel = round(d['servo_velocity'] * sf, 4)
+        knee_eff = round(d['servo_effort'] * tf * k, 4)
+        knee_vel = round(d['servo_velocity'] * sf / k, 4)
+        dyn = f'<dynamics damping="0" friction="{servo.friction_nm:g}"/>'
     for name, front, side in LEGS:
         hx, hy = front * g['hip_x'], side * g['hip_y']
         # hip: abduction joint, link spans the lateral offset
         out.append(
             f'<joint name="{name}_hip_joint" type="revolute"><parent link="trunk"/>'
             f'<child link="{name}_hip"/><origin xyz="{hx} {hy} 0"/><axis xyz="1 0 0"/>'
-            + _limit(d['hip_limits_deg'], eff, vel) + '</joint>')
+            + _limit(d['hip_limits_deg'], eff, vel) + dyn + '</joint>')
         out.append(
             f'<link name="{name}_hip"><visual><origin xyz="0 {side * L1 / 2:.4f} 0" rpy="1.5708 0 0"/>'
             f'<geometry><cylinder radius="0.018" length="{L1}"/></geometry><material name="body"/></visual>'
@@ -145,7 +193,7 @@ def build_urdf(geometry, description=None, gazebo=False, namespace='dog', initia
         out.append(
             f'<joint name="{name}_thigh_joint" type="revolute"><parent link="{name}_hip"/>'
             f'<child link="{name}_thigh"/><origin xyz="0 {side * L1} 0"/><axis xyz="0 1 0"/>'
-            + _limit(d['thigh_limits_deg'], eff, vel) + '</joint>')
+            + _limit(d['thigh_limits_deg'], eff, vel) + dyn + '</joint>')
         out.append(
             f'<link name="{name}_thigh"><visual><origin xyz="0 0 {-L2 / 2}"/>'
             f'<geometry><cylinder radius="{r_leg}" length="{L2}"/></geometry><material name="leg"/></visual>'
@@ -155,7 +203,7 @@ def build_urdf(geometry, description=None, gazebo=False, namespace='dog', initia
         out.append(
             f'<joint name="{name}_calf_joint" type="revolute"><parent link="{name}_thigh"/>'
             f'<child link="{name}_calf"/><origin xyz="0 0 {-L2}"/><axis xyz="0 1 0"/>'
-            + _limit(d['calf_limits_deg'], eff, vel) + '</joint>')
+            + _limit(d['calf_limits_deg'], knee_eff, knee_vel) + dyn + '</joint>')
         # the knee is a contact too: the robot kneels on it (the greeting), and
         # a knee that hits a riser or a bar should not pass through it
         kr = min(d['foot_radius'], 0.5 * L3)
@@ -181,7 +229,8 @@ def build_urdf(geometry, description=None, gazebo=False, namespace='dog', initia
             + _inertial(0.005, (1e-6, 1e-6, 1e-6)) + '</link>')
 
     if gazebo:
-        out.append(_gazebo_extras(namespace, d['sim_p_gain'], d['servo_velocity'], initial))
+        out.append(_gazebo_extras(namespace, d['sim_p_gain'], vel, initial,
+                                  knee_vmax=knee_vel if servo_model == 'real' else None))
         out.append(_gazebo_sensors(namespace, d.get('sensors')))
     out.append('</robot>')
     return '\n'.join(out)
@@ -195,10 +244,12 @@ def sim_command_topic(namespace, joint):
     return f'/{namespace}/sim/{joint}/cmd_pos'
 
 
-def _gazebo_extras(ns, p_gain, vmax, initial=None):
+def _gazebo_extras(ns, p_gain, vmax, initial=None, knee_vmax=None):
     parts = []
     for k, joint in enumerate(joint_names()):
         init = f'<initial_position>{initial[k % 3]:.4f}</initial_position>' if initial else ''
+        # the knee joint's own speed cap (its servo turns faster by knee_ratio)
+        jmax = knee_vmax if knee_vmax is not None and joint.endswith('_calf_joint') else vmax
         # Velocity-command mode: the joint behaves like a hobby servo, a
         # position loop whose speed and torque are capped by the URDF limits.
         parts.append(
@@ -207,7 +258,7 @@ def _gazebo_extras(ns, p_gain, vmax, initial=None):
             f'<joint_name>{joint}</joint_name><topic>{sim_command_topic(ns, joint)}</topic>'
             '<use_velocity_commands>true</use_velocity_commands>'
             f'<p_gain>{p_gain}</p_gain><i_gain>0</i_gain><d_gain>0</d_gain>{init}'
-            f'<cmd_max>{vmax}</cmd_max><cmd_min>{-vmax}</cmd_min></plugin></gazebo>')
+            f'<cmd_max>{jmax}</cmd_max><cmd_min>{-jmax}</cmd_min></plugin></gazebo>')
     parts.append(
         '<gazebo><plugin filename="gz-sim-joint-state-publisher-system" '
         f'name="gz::sim::systems::JointStatePublisher"><topic>/{ns}/sim/joint_states</topic>'
@@ -268,14 +319,16 @@ def _gazebo_sensors(ns, sensors):
 
 
 def main():
-    """CLI: generate_urdf <robot.yaml> [--gazebo] > robot.urdf"""
+    """CLI: generate_urdf <robot.yaml> [--gazebo] [--servo-model ideal|real] > robot.urdf"""
     import argparse
     ap = argparse.ArgumentParser(description=main.__doc__)
     ap.add_argument('config')
     ap.add_argument('--gazebo', action='store_true')
+    ap.add_argument('--servo-model', choices=SERVO_MODELS, default='ideal',
+                    help="servo imperfections: 'real' adds friction and bus-voltage factors")
     args = ap.parse_args()
     geometry, description = load_config(args.config)
-    print(build_urdf(geometry, description, gazebo=args.gazebo))
+    print(build_urdf(geometry, description, gazebo=args.gazebo, servo_model=args.servo_model))
 
 
 if __name__ == '__main__':

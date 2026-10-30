@@ -27,6 +27,15 @@ public:
   virtual std::string describe() const = 0;
 };
 
+/// CAL-08: attitude drives the tilt guard, slope compensation and heading hold only when
+/// the gyro bias is measured AND a human has checked the axes with tools/imu_axes (which
+/// prints `axes_verified: true` for imu.yaml). A simulated IMU has no board orientation to
+/// get wrong, so it is trusted without that mark.
+inline bool attitudeTrusted(bool bias_done, bool axes_verified, bool model)
+{
+  return bias_done && (axes_verified || model);
+}
+
 /// Probes `addresses` for an MPU6050 / MPU6500 / MPU9250 (WHO_AM_I), configures
 /// it (+-2 g, +-250 deg/s, 44 Hz low-pass) and returns it, or nullptr.
 std::unique_ptr<ImuSensor> probeImu(const std::string & device,

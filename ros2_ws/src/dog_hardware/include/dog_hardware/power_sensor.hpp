@@ -66,9 +66,18 @@ public:
 
   explicit PowerGuard(PowerGuardParams p) : p_(p) {}
   /// Feed one reading taken at `now` [s]; returns an event once when a
-  /// condition has held for its whole window (re-armed after it clears).
+  /// condition has held for its whole window. Overcurrent re-arms by itself - a
+  /// stalled leg is a passing event. Undervoltage latches: a rail that collapsed is a
+  /// fault a human has to look at, and a robot that re-arms itself on a dying supply
+  /// (or on a BEC that keeps sagging) learns nothing (SAF-07).
   Event update(const PowerReading & r, double now);
   double filteredCurrent() const {return current_;}
+  /// True after an undervoltage event, until clear(): the protection stays latched.
+  bool latched() const {return latched_;}
+  /// The voltage the latch was raised at, for the log.
+  double latchedVoltage() const {return latched_v_;}
+  /// Re-arm after a human has dealt with the supply.
+  void clear();
 
 private:
   PowerGuardParams p_;
@@ -78,6 +87,8 @@ private:
   double under_since_{-1.0};
   bool over_fired_{false};
   bool under_fired_{false};
+  bool latched_{false};
+  double latched_v_{0.0};
 };
 
 }  // namespace dog_hardware

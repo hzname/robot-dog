@@ -67,9 +67,19 @@ public:
         mode_ = msg->data;
         dirty_ = true;
       });
+    // The keyboard is a development tool. On the floor profile it must not drive:
+    // whoever launches the robot with profile:=floor gets a gamepad-only robot, and
+    // an accidental `ros2 run keyboard_teleop` in another terminal must not move it.
+    profile_sub_ = create_subscription<std_msgs::msg::String>(
+      "profile", rclcpp::QoS(1).reliable().transient_local(),
+      [this](std_msgs::msg::String::ConstSharedPtr msg) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        floor_ = msg->data == "floor";
+        dirty_ = true;
+      });
     repeat_timer_ = create_wall_timer(std::chrono::milliseconds(100), [this]() {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (!mapper_->twist().isZero()) {
+        if (!floor_ && !mapper_->twist().isZero()) {
           TeleopOutput out;
           out.twist = mapper_->twist();
           publisher_.publish(out);
@@ -113,6 +123,14 @@ public:
           continue;
         }
         std::lock_guard<std::mutex> lock(mutex_);
+        if (floor_) {
+          if (!floor_announced_) {
+            std::fputs("\nпрофиль «пол»: клавиатура не управляет роботом (управляет геймпад)\n",
+              stdout);
+            floor_announced_ = true;
+          }
+          continue;
+        }
         const auto out = mapper_->apply(ev, quit);
         publisher_.publish(out);
         if (out.estop) {last_event_ = *out.estop ? "E-STOP ENGAGED" : "e-stop released";}
@@ -148,6 +166,9 @@ private:
   std::string last_event_;
   bool dirty_{true};
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr state_sub_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr profile_sub_;
+  bool floor_{false};            // profile:=floor, guarded by mutex_
+  bool floor_announced_{false};  // the refusal is printed once, not on every key
   rclcpp::TimerBase::SharedPtr repeat_timer_;
 };
 

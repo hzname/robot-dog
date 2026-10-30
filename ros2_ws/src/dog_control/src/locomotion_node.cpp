@@ -13,6 +13,12 @@
 //                  (NaN = default), gait (0 trot, 1 crawl), sideways velocity m/s
 //                  to go round an obstacle]; dropped
 //                  after guard_timeout without messages
+// Gait period: from gait.period, or with gait.auto_period computed from
+// servo.max_speed [rad/s], servo.margin and servo.knee_ratio at start and on
+// live changes (D-12). Changes of gait.period, gait.min_period [s], servo.*
+// and gait.auto_period via `ros2 param set` are accepted only in PASSIVE,
+// STAND and LYING - WALK and transitions reject them; when no period up to
+// 1.5 s fits, the node exits with code 1.
 // Publishes:
 //   joint_commands sensor_msgs/JointState 12 joint positions [rad]
 //   state          std_msgs/String        current mode, or "estop" (latched)
@@ -23,13 +29,17 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstdio>
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "dog_control/locomotion.hpp"
+#include "dog_diagnostics/reporter.hpp"
 #include "dog_control/odometry.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "geometry_msgs/msg/twist.hpp"
@@ -40,10 +50,25 @@
 #include "std_msgs/msg/bool.hpp"
 #include "std_msgs/msg/float32_multi_array.hpp"
 #include "std_msgs/msg/float64_multi_array.hpp"
+#include "std_srvs/srv/trigger.hpp"
 #include "std_msgs/msg/string.hpp"
 
 namespace dog_control
 {
+
+namespace
+{
+// Copy of the helper in servo_driver_node.cpp (dog_hardware is Phase 3
+// territory): numbers from YAML or `ros2 param set` may arrive as integer or
+// double.
+double asNumber(const rclcpp::Parameter & p)
+{
+  if (p.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER) {
+    return static_cast<double>(p.as_int());
+  }
+  return p.as_double();  // throws InvalidParameterTypeException otherwise
+}
+}  // namespace
 
 const std::vector<std::string> kJointNames = {
   "lf_hip_joint", "lf_thigh_joint", "lf_calf_joint",
@@ -60,6 +85,18 @@ public:
   {
     const LocomotionParams p = loadParams();
     controller_ = std::make_unique<LocomotionController>(p);
+    gait_period_ = p.gait.period;
+    gait_auto_ = p.auto_period;
+    gait_min_period_ = p.min_period;
+    servo_ = p.servo;
+    heading_debug_ = p.heading_debug;
+    if (gait_auto_) {
+      RCLCPP_INFO(get_logger(),
+        "gait period %.4f s computed from servo.max_speed %.2f, margin %.2f, knee_ratio %.3f",
+        controller_->gaitPeriod(), servo_.max_speed, servo_.margin, servo_.knee_ratio);
+    } else {
+      RCLCPP_INFO(get_logger(), "gait period %.4f s (manual gait.period)", controller_->gaitPeriod());
+    }
     rate_ = declare_parameter("control_rate", 50.0);
     cmd_timeout_ = declare_parameter("cmd_vel_timeout", 0.5);
     guard_timeout_ = declare_parameter("guard_timeout", 1.0);
@@ -95,8 +132,9 @@ public:
         if (controller_->request(msg->data)) {
           RCLCPP_INFO(get_logger(), "command '%s' accepted", msg->data.c_str());
         } else {
-          RCLCPP_WARN(get_logger(), "command '%s' rejected (mode %s%s)", msg->data.c_str(),
-            modeName(controller_->mode()), controller_->estopActive() ? ", e-stop active" : "");
+          RCLCPP_WARN(get_logger(), "command '%s' rejected (mode %s%s): %s", msg->data.c_str(),
+            modeName(controller_->mode()), controller_->estopActive() ? ", e-stop active" : "",
+            controller_->lastRefusal().c_str());
         }
       });
     pose_sub_ = create_subscription<geometry_msgs::msg::Vector3>(
@@ -113,6 +151,51 @@ public:
         }
         controller_->setEstop(msg->data);
       });
+
+    // imu_node tells the world that its gyro bias is known; latched, so a node
+    // that starts later still learns it (SAF-06).
+    const auto latched_bool = rclcpp::QoS(1).transient_local().reliable();
+    imu_calibrated_sub_ = create_subscription<std_msgs::msg::Bool>(
+      "imu/calibrated", latched_bool, [this](std_msgs::msg::Bool::ConstSharedPtr msg) {
+        if (msg->data != controller_->imuCalibrated()) {
+          RCLCPP_INFO(get_logger(), "imu calibrated: %s", msg->data ? "yes" : "no");
+        }
+        controller_->setImuCalibrated(msg->data);
+      });
+
+    estop_pub_ = create_publisher<std_msgs::msg::Bool>("estop", rclcpp::QoS(10).reliable());
+    // Latched so a tool started later (keyboard_teleop, a script) sees the profile
+    // this robot was launched with. profile:=floor makes that tool stand down.
+    profile_pub_ = create_publisher<std_msgs::msg::String>(
+      "profile", rclcpp::QoS(1).reliable().transient_local());
+    {
+      std_msgs::msg::String msg;
+      msg.data = risk_profile_;
+      profile_pub_->publish(msg);   // loadParams() ran before this line
+      RCLCPP_INFO(get_logger(), "profile: %s", risk_profile_.c_str());
+    }
+    diag_ = std::make_unique<dog_diagnostics::Reporter>(this, "locomotion");
+    diag_timer_ = create_wall_timer(std::chrono::seconds(1), [this]() {report();});
+    release_client_ = create_client<std_srvs::srv::Trigger>("servo_driver/release_fault");
+    arm_client_ = create_client<std_srvs::srv::Trigger>("servo_driver/arm");
+    recover_srv_ = create_service<std_srvs::srv::Trigger>("~/recover",
+        [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+        std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
+          // One operator gesture (D-12): check the robot is level, clear the fall,
+          // clear the driver's latch and e-stop, arm it, then stand up.
+          const std::string why = controller_->recover();
+          if (!why.empty()) {
+            res->success = false;
+            res->message = why;
+            RCLCPP_WARN(get_logger(), "recover refused: %s", why.c_str());
+            return;
+          }
+          publishEstop(false);
+          requestDriverRelease();
+          res->success = true;
+          res->message = "recovering: standing up";
+          RCLCPP_WARN(get_logger(), "recover: %s", res->message.c_str());
+        });
 
     imu_sub_ = create_subscription<sensor_msgs::msg::Imu>(
       "imu/data", rclcpp::SensorDataQoS(), [this](sensor_msgs::msg::Imu::ConstSharedPtr msg) {
@@ -160,6 +243,35 @@ public:
         imu_seen_ = true;
         last_imu_ = t;
         controller_->setImuAttitude(roll, pitch, dt);
+        // The fall guard reads the accelerometer's own direction: the filter's tau
+        // is a second, and a robot tipping over reaches 30 degrees in a fraction of
+        // one. The plausibility window keeps an impact out of the estimate.
+        // The sign of gravity is not the same everywhere: our MPU driver and the mock
+        // report +g on z at rest, the Gazebo plugin reports -g, and the first version
+        // read that as upside down and latched a fall at spawn. Point the vector "up"
+        // before reading the angle out of it.
+        auto a = msg->linear_acceleration;
+        if (a.z < 0.0) {
+          a.x = -a.x;
+          a.y = -a.y;
+          a.z = -a.z;
+        }
+        const double norm = std::sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
+        // Only a plausible "at rest" read may feed the guard: a landing spike or a
+        // bounce distorts the vector (the simulator spawns the robot from 0.25 m and
+        // the impact read as 46 degrees for a fifth of a second), while a robot
+        // actually toppling still reads close to 1 g.
+        if (norm > 0.8 * 9.80665 && norm < 1.2 * 9.80665) {
+          const double roll_acc = std::atan2(a.y, a.z);
+          const double pitch_acc = std::atan2(-a.x, std::sqrt(a.y * a.y + a.z * a.z));
+          controller_->setFallTilt(
+            std::max(std::abs(roll_acc), std::abs(roll)) * (roll_acc < 0 ? -1.0 : 1.0),
+            std::max(std::abs(pitch_acc), std::abs(pitch)) * (pitch_acc < 0 ? -1.0 : 1.0));
+        } else {
+          // Implausible sample: hold the guard to the filter, which also resets its
+          // debounce instead of counting the spike towards a fall.
+          controller_->setFallTilt(roll, pitch);
+        }
       });
 
     guard_sub_ = create_subscription<std_msgs::msg::Float64MultiArray>(
@@ -214,6 +326,8 @@ public:
     // Node clock: follows /clock when use_sim_time is set (Gazebo).
     timer_ = rclcpp::create_timer(
       this, get_clock(), rclcpp::Duration::from_seconds(1.0 / rate_), [this]() {tick();});
+    param_cb_ = add_on_set_parameters_callback(
+      [this](const std::vector<rclcpp::Parameter> & params) {return onParams(params);});
     publishState();
     RCLCPP_INFO(get_logger(), "locomotion ready at %.0f Hz (send \"stand\" on ~/command)", rate_);
   }
@@ -243,6 +357,11 @@ private:
     p.gait.duty = declare_parameter("gait.duty", p.gait.duty);
     p.gait.step_height = declare_parameter("gait.step_height", p.gait.step_height);
     p.gait.max_step = declare_parameter("gait.max_step", p.gait.max_step);
+    p.auto_period = declare_parameter("gait.auto_period", p.auto_period);
+    p.min_period = declareNumber("gait.min_period", p.min_period);
+    p.servo.max_speed = declareNumber("servo.max_speed", p.servo.max_speed);
+    p.servo.margin = declareNumber("servo.margin", p.servo.margin);
+    p.servo.knee_ratio = declareNumber("servo.knee_ratio", p.servo.knee_ratio);
     p.crawl.shift_time = declare_parameter("crawl.shift_time", p.crawl.shift_time);
     p.crawl.swing_time = declare_parameter("crawl.swing_time", p.crawl.swing_time);
     p.crawl.max_stride = declare_parameter("crawl.max_stride", p.crawl.max_stride);
@@ -278,6 +397,25 @@ private:
     p.heading_crawl_kp = declare_parameter("heading.crawl_kp", p.heading_crawl_kp);
     p.heading_crawl_ki = declare_parameter("heading.crawl_ki", p.heading_crawl_ki);
     p.heading_crawl_max_rate = declare_parameter("heading.crawl_max_rate", p.heading_crawl_max_rate);
+    p.heading_debug = declare_parameter("heading.debug", p.heading_debug);
+    p.tilt_soft_deg = declare_parameter("tilt.soft_deg", p.tilt_soft_deg);
+    p.tilt_stop_deg = declare_parameter("tilt.stop_deg", p.tilt_stop_deg);
+    // Fall protection (phase 4). The profile says whether the robot works on the
+    // floor, where a missing IMU must stop it, or on the bench, where the IMU may
+    // be absent altogether (SAF-06).
+    p.safety_soft_deg = declare_parameter("safety.soft_deg", p.safety_soft_deg);
+    p.safety_hard_deg = declare_parameter("safety.hard_deg", p.safety_hard_deg);
+    p.safety_debounce_s = declare_parameter("safety.debounce_s", p.safety_debounce_s);
+    p.safety_hysteresis_deg = declare_parameter("safety.hysteresis_deg", p.safety_hysteresis_deg);
+    p.safety_imu_timeout_s = declare_parameter("safety.imu_timeout_s", p.safety_imu_timeout_s);
+    p.safety_idle_lie_s = declare_parameter("safety.idle_lie_s", p.safety_idle_lie_s);
+    const auto profile = declare_parameter("safety.profile", std::string("bench"));
+    if (profile != "floor" && profile != "bench") {
+      throw std::invalid_argument("safety.profile must be 'floor' or 'bench', got '" + profile + "'");
+    }
+    p.safety_require_imu = profile == "floor";
+    p.imu_require_calibrated = declare_parameter("imu.require_calibrated", p.imu_require_calibrated);
+    risk_profile_ = profile;
 
     p.max_velocity.vx = declare_parameter("limits.max_vx", p.max_velocity.vx);
     p.max_velocity.vy = declare_parameter("limits.max_vy", p.max_velocity.vy);
@@ -286,6 +424,81 @@ private:
     p.max_accel.vy = declare_parameter("limits.accel_vy", p.max_accel.vy);
     p.max_accel.wz = declare_parameter("limits.accel_wz", p.max_accel.wz);
     return p;
+  }
+
+  double declareNumber(const std::string & name, double default_value)
+  {
+    rcl_interfaces::msg::ParameterDescriptor desc;
+    desc.dynamic_typing = true;
+    const auto v = declare_parameter(name, rclcpp::ParameterValue(default_value), desc);
+    return asNumber(rclcpp::Parameter(name, v));
+  }
+
+  rcl_interfaces::msg::SetParametersResult onParams(const std::vector<rclcpp::Parameter> & params)
+  {
+    rcl_interfaces::msg::SetParametersResult result;
+    result.successful = true;
+    // The whole set applies atomically: one reconfigureGait call with the
+    // merged values (T-01-08-03).
+    double period = gait_period_;
+    bool auto_period = gait_auto_;
+    double min_period = gait_min_period_;
+    ServoSpeedModel servo = servo_;
+    bool seen = false;
+    for (const auto & param : params) {
+      const auto & name = param.get_name();
+      if (name == "gait.auto_period") {
+        if (param.get_type() != rclcpp::ParameterType::PARAMETER_BOOL) {
+          result.successful = false;
+          result.reason = "gait.auto_period: expected a boolean";
+          return result;
+        }
+        auto_period = param.as_bool();
+        seen = true;
+      } else if (name == "gait.period" || name == "gait.min_period" || name == "servo.max_speed" ||
+        name == "servo.margin" || name == "servo.knee_ratio")
+      {
+        double v = 0.0;
+        try {
+          v = asNumber(param);
+        } catch (const rclcpp::exceptions::InvalidParameterTypeException & e) {
+          result.successful = false;
+          result.reason = name + ": " + e.what();
+          return result;
+        }
+        if (name == "gait.period") {period = v;}
+        else if (name == "gait.min_period") {min_period = v;}
+        else if (name == "servo.max_speed") {servo.max_speed = v;}
+        else if (name == "servo.margin") {servo.margin = v;}
+        else {servo.knee_ratio = v;}
+        seen = true;
+      }
+    }
+    if (!seen || (period == gait_period_ && auto_period == gait_auto_ && min_period == gait_min_period_ &&
+      servo.max_speed == servo_.max_speed && servo.margin == servo_.margin &&
+      servo.knee_ratio == servo_.knee_ratio))
+    {
+      return result;  // nothing of ours changed: leave the controller alone
+    }
+    if (controller_->reconfigureGait(period, auto_period, min_period, servo)) {
+      gait_period_ = period;
+      gait_auto_ = auto_period;
+      gait_min_period_ = min_period;
+      servo_ = servo;
+      RCLCPP_INFO(get_logger(), "gait period %.4f s after parameter change", controller_->gaitPeriod());
+      return result;
+    }
+    result.successful = false;
+    if (!controller_->gaitReconfigurable()) {
+      result.reason = "period change rejected in mode " + std::string(modeName(controller_->mode()));
+    } else {
+      std::ostringstream msg;
+      msg << "no gait period up to " << kMaxAutoPeriod << " s fits servo.margin * servo.max_speed"
+          << " (or the manual period is not a finite number above 0)";
+      result.reason = msg.str();
+    }
+    RCLCPP_WARN(get_logger(), "gait period change rejected: %s", result.reason.c_str());
+    return result;
   }
 
   void tick()
@@ -316,6 +529,41 @@ private:
       controller_->clearYawRate();  // IMU silent: no heading hold on stale data
     }
     const bool out = controller_->update(dt);
+    if (heading_debug_ && (++heading_debug_tick_ % 10) == 0) {
+      // 5 Hz at the 50 Hz loop: err, integral, the applied correction and the
+      // gyro rate, so the acceptance trace can tell a steady drift from a step.
+      // tilt is the governor's own input (the worse of pitch and roll, degrees) and
+      // scale what it did with it: the trace then answers whether the governor
+      // interfered with a cell, not just whether the walk was weak (02-03).
+      const double tilt_deg = 180.0 / M_PI * std::max(
+        std::abs(controller_->slopePitch()), std::abs(controller_->slopeRoll()));
+      RCLCPP_INFO(get_logger(),
+        "heading_debug err=%.3f int=%.3f corr=%.3f wz_meas=%.3f tilt=%.1f scale=%.2f",
+        controller_->headingError(), controller_->headingIntegral(),
+        controller_->headingCorrection(), controller_->yawRateMeasured(),
+        tilt_deg, controller_->tiltScale());
+    }
+    if (controller_->tiltScale() < 1.0) {
+      // The governor speaks up once a second, not every tick: a slowed walk must
+      // be explainable from the log, and a stand on a slope must not look like a
+      // stuck robot (GAIT-04).
+      RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 1000,
+        "tilt_guard scale=%.2f pitch=%.1f roll=%.1f",
+        controller_->tiltScale(), controller_->slopePitch() * 180.0 / M_PI,
+        controller_->slopeRoll() * 180.0 / M_PI);
+    }
+    if (controller_->fallen() && !fall_announced_) {
+      fall_announced_ = true;
+      RCLCPP_ERROR(get_logger(), "FALLEN: %s - call ~/recover to raise the robot",
+        controller_->fallReason().c_str());
+    }
+    if (controller_->takeRelaxRequest()) {
+      // A fall or the thermal timeout: the operator must not have to know the
+      // driver's protocol to make the servos let go.
+      publishEstop(true);
+      RCLCPP_WARN(get_logger(), "outputs released: %s",
+        controller_->fallen() ? controller_->fallReason().c_str() : "thermal timeout, robot is lying");
+    }
     if (odom_publish_) {publishOdom(t, dt);}
     if (controller_->mode() != last_mode_ || controller_->estopActive() != last_estop_) {
       publishState();
@@ -331,6 +579,86 @@ private:
     const auto & q = controller_->joints();
     std::copy(q.begin(), q.end(), joint_msg_.position.begin());
     joint_pub_->publish(joint_msg_);
+  }
+
+  /// Mode, tilt and the reason the robot stopped - the page reads the same words.
+  void report()
+  {
+    using dog_diagnostics::Level;
+    Level level = Level::OK;
+    std::string reason = modeName(controller_->mode());
+    if (controller_->fallen()) {
+      level = Level::ERROR;
+      reason = "fallen: " + controller_->fallReason();
+    } else if (controller_->estopActive()) {
+      level = Level::WARN;
+      reason = "e-stop engaged";
+    } else if (controller_->tiltScale() < 1.0) {
+      level = Level::WARN;
+      reason = "tilt " + std::to_string(static_cast<int>(controller_->slopePitch() * 180.0 / M_PI)) +
+        " deg: the walk slows down";
+    }
+    char tilt[32];
+    std::snprintf(tilt, sizeof(tilt), "%.1f", controller_->tiltDeg());
+    diag_->publish(level, reason, {
+      {"mode", modeName(controller_->mode())},
+      {"tilt_deg", tilt},
+      {"profile", risk_profile_},
+      {"imu_calibrated", controller_->imuCalibrated() ? "true" : "false"}});
+  }
+
+  void publishEstop(bool active)
+  {
+    estop_pub_->publish(std_msgs::msg::Bool().set__data(active));
+  }
+
+  /// Ask the driver to drop its latch, then to arm: without the arm the driver
+  /// ignores the joint commands the stand-up is about to publish.
+  void requestDriverRelease()
+  {
+    recover_attempts_ = 0;
+    releaseAndArm();
+  }
+
+  /// One pass of "drop the latch, then arm". A fallen robot stops sending commands,
+  /// so the driver's own timeout can latch a fault in the same moment the operator
+  /// asks to recover; a single retry covers that race.
+  void releaseAndArm()
+  {
+    if (!release_client_->service_is_ready()) {
+      RCLCPP_WARN(get_logger(), "recover: servo driver release_fault is not reachable");
+      return;
+    }
+    auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
+    release_client_->async_send_request(request,
+      [this](rclcpp::Client<std_srvs::srv::Trigger>::SharedFuture future) {
+        const auto res = future.get();
+        RCLCPP_WARN(get_logger(), "recover: release_fault -> %s", res->message.c_str());
+        requestDriverArm();
+      });
+  }
+
+  void requestDriverArm()
+  {
+    if (!arm_client_->service_is_ready()) {
+      RCLCPP_WARN(get_logger(), "recover: servo driver arm is not reachable");
+      return;
+    }
+    auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
+    arm_client_->async_send_request(request,
+      [this](rclcpp::Client<std_srvs::srv::Trigger>::SharedFuture future) {
+        const auto res = future.get();
+        if (res->success) {
+          controller_->request("stand");
+          RCLCPP_WARN(get_logger(), "recover: driver %s, standing up", res->message.c_str());
+        } else if (++recover_attempts_ < 2) {
+          RCLCPP_WARN(get_logger(), "recover: driver refused to arm (%s) - retrying the release",
+            res->message.c_str());
+          releaseAndArm();
+        } else {
+          RCLCPP_ERROR(get_logger(), "recover: driver refused to arm: %s", res->message.c_str());
+        }
+      });
   }
 
   void publishOdom(const rclcpp::Time & t, double dt)
@@ -368,12 +696,18 @@ private:
     last_mode_ = controller_->mode();
     last_estop_ = controller_->estopActive();
     std_msgs::msg::String msg;
-    msg.data = last_estop_ ? "estop" : modeName(last_mode_);
+    // A fall outranks the e-stop banner it raised: "estop" would hide the reason.
+    msg.data = (last_estop_ && last_mode_ != Mode::FALLEN) ? "estop" : modeName(last_mode_);
     state_pub_->publish(msg);
     RCLCPP_INFO(get_logger(), "mode -> %s", msg.data.c_str());
   }
 
   std::unique_ptr<LocomotionController> controller_;
+  double gait_period_{0.0};
+  bool gait_auto_{false};
+  double gait_min_period_{0.0};
+  ServoSpeedModel servo_;
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_;
   double rate_{50.0};
   double cmd_timeout_{0.5};
   bool cmd_vel_active_{false};
@@ -385,6 +719,8 @@ private:
   bool last_estop_{false};
   bool imu_seen_{false};
   bool odom_publish_{false};
+  bool heading_debug_{false};
+  int heading_debug_tick_{0};
   bool odom_gyro_{false};
   double odom_gyro_bias_{0.0}, odom_scale_{1.0};
   double gyro_yaw_{0.0}, gyro_bias_est_{0.0}, still_time_{0.0}, prev_stamp_{0.0}, prev_yaw_{0.0};
@@ -412,6 +748,17 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr pose_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr estop_sub_;
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr imu_calibrated_sub_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr estop_pub_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr recover_srv_;
+  rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr release_client_;
+  rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr arm_client_;
+  std::unique_ptr<dog_diagnostics::Reporter> diag_;
+  rclcpp::TimerBase::SharedPtr diag_timer_;
+  bool fall_announced_{false};
+  int recover_attempts_{0};
+  std::string risk_profile_{"bench"};
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr profile_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 
@@ -420,7 +767,13 @@ private:
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<dog_control::LocomotionNode>());
+  int code = 0;
+  try {
+    rclcpp::spin(std::make_shared<dog_control::LocomotionNode>());
+  } catch (const std::exception & e) {
+    RCLCPP_FATAL(rclcpp::get_logger("locomotion"), "%s", e.what());
+    code = 1;
+  }
   rclcpp::shutdown();
-  return 0;
+  return code;
 }

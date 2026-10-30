@@ -9,7 +9,11 @@
 //            drawn by the servos, as BatteryState specifies), filtered
 //   estop    std_msgs/Bool             true on sustained overcurrent (stall)
 //   command  std_msgs/String           "lie" on sustained undervoltage
+#include <std_srvs/srv/trigger.hpp>
+
+#include "dog_diagnostics/reporter.hpp"
 #include <chrono>
+#include <cstdio>
 #include <cmath>
 #include <memory>
 #include <string>
@@ -70,6 +74,8 @@ public:
     gp.undervoltage_v = declare_parameter("undervoltage_v", gp.undervoltage_v);
     gp.undervoltage_time = declare_parameter("undervoltage_time", gp.undervoltage_time);
     gp.filter_tau = declare_parameter("filter_tau", gp.filter_tau);
+    // A sensor that stops answering must not look like a healthy rail (SAF-07).
+    sensor_timeout_s_ = declare_parameter("sensor_timeout_s", sensor_timeout_s_);
     overcurrent_action_ = declare_parameter("overcurrent_action", std::string("estop"));
     undervoltage_action_ = declare_parameter("undervoltage_action", std::string("lie"));
     guard_ = std::make_unique<PowerGuard>(gp);
@@ -85,21 +91,40 @@ public:
       std::string probed;
       sensor_ = probePowerSensor(device, addrs, chip, shunt, probed);
       if (!sensor_) {
-        RCLCPP_INFO(get_logger(), "no current sensor found (%s) - power monitoring off", probed.c_str());
-        return;
+        // Stay alive and say it out loud. A node that disappears leaves "no news" to be
+        // read as "no problem", and from here on nothing guards the rail (SAF-07).
+        RCLCPP_ERROR(get_logger(), "no current sensor on %s (%s) - protection inactive",
+          device.c_str(), probed.c_str());
+        probe_note_ = probed;
       }
     } else {
       throw std::runtime_error("unknown backend '" + backend + "' (auto, mock or off)");
     }
 
     power_pub_ = create_publisher<sensor_msgs::msg::BatteryState>("power", 10);
+    diag_ = std::make_unique<dog_diagnostics::Reporter>(this, "power_monitor");
+    diag_timer_ = create_wall_timer(std::chrono::seconds(1), [this]() {report();});
     estop_pub_ = create_publisher<std_msgs::msg::Bool>("estop", rclcpp::QoS(10).reliable());
     command_pub_ = create_publisher<std_msgs::msg::String>("command", 10);
     timer_ = create_wall_timer(std::chrono::duration<double>(1.0 / rate), [this]() {tick();});
-    RCLCPP_INFO(get_logger(), "power monitoring on %s: stall > %.1f A for %.1f s -> %s, "
-      "rail < %.1f V for %.1f s -> %s", sensor_->describe().c_str(), gp.overcurrent_a,
-      gp.overcurrent_time, overcurrent_action_.c_str(), gp.undervoltage_v, gp.undervoltage_time,
-      undervoltage_action_.c_str());
+    // '~/' makes it /<ns>/power_monitor/clear_power_fault, the same private style as
+    // ~/recover in locomotion and ~/release_fault in the driver.
+    clear_srv_ = create_service<std_srvs::srv::Trigger>("~/clear_power_fault",
+      [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+             std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
+        const bool was = guard_->latched();
+        guard_->clear();
+        last_event_ = PowerGuard::Event::NONE;
+        res->success = true;
+        res->message = was ? "power protection re-armed" : "power protection was not latched";
+        RCLCPP_WARN(get_logger(), "power protection %s by request", was ? "re-armed" : "left as is");
+      });
+    if (sensor_) {
+      RCLCPP_INFO(get_logger(), "power monitoring on %s: stall > %.1f A for %.1f s -> %s, "
+        "rail < %.1f V for %.1f s -> %s", sensor_->describe().c_str(), gp.overcurrent_a,
+        gp.overcurrent_time, overcurrent_action_.c_str(), gp.undervoltage_v, gp.undervoltage_time,
+        undervoltage_action_.c_str());
+    }
   }
 
   bool active() const {return sensor_ != nullptr;}
@@ -118,14 +143,57 @@ private:
     }
   }
 
+  /// The rail, in numbers, with the guard's verdict in words.
+  void report()
+  {
+    using dog_diagnostics::Level;
+    if (!active()) {
+      diag_->publish(Level::ERROR, "protection inactive: no current sensor on the bus",
+        {{"present", "false"}, {"protection", "inactive"}, {"probe", probe_note_}});
+      return;
+    }
+    const double silent = last_ok_ < 0.0 ? 1e9 : steadySeconds() - last_ok_;
+    if (sensor_timeout_s_ > 0.0 && silent > sensor_timeout_s_) {
+      char t[32];
+      std::snprintf(t, sizeof(t), "%.1f", silent);
+      diag_->publish(Level::ERROR, "protection inactive: sensor silent for " + std::string(t) + " s",
+        {{"present", "false"}, {"protection", "inactive"}, {"silent_s", t}});
+      return;
+    }
+    if (guard_->latched()) {
+      char v[32];
+      std::snprintf(v, sizeof(v), "%.2f", guard_->latchedVoltage());
+      diag_->publish(Level::ERROR,
+        "rail lost at " + std::string(v) +
+        " V - protection latched, clear with ~/clear_power_fault",
+        {{"present", "true"}, {"protection", "latched"}, {"voltage_v", v}});
+      return;
+    }
+    Level level = Level::OK;
+    std::string reason = "rail healthy";
+    if (last_event_ == PowerGuard::Event::OVERCURRENT) {
+      level = Level::WARN;
+      reason = "servo current high (a leg may be stalled)";
+    } else if (last_event_ == PowerGuard::Event::UNDERVOLTAGE) {
+      level = Level::ERROR;
+      reason = "servo rail low (supply sagging or battery empty)";
+    }
+    char v[32], i[32];
+    std::snprintf(v, sizeof(v), "%.2f", last_voltage_);
+    std::snprintf(i, sizeof(i), "%.2f", guard_->filteredCurrent());
+    diag_->publish(level, reason, {{"voltage_v", v}, {"current_a", i}, {"present", "true"}});
+  }
+
   void tick()
   {
+    if (!sensor_) {return;}
     PowerReading r;
     if (!sensor_->read(r)) {
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "current sensor read failed");
       return;
     }
     const auto ev = guard_->update(r, steadySeconds());
+    last_event_ = ev;
     if (ev == PowerGuard::Event::OVERCURRENT) {
       RCLCPP_ERROR(get_logger(), "servo current %.2f A held too long (stalled leg?) -> %s",
         guard_->filteredCurrent(), overcurrent_action_.c_str());
@@ -135,6 +203,8 @@ private:
         r.voltage, undervoltage_action_.c_str());
       act(undervoltage_action_);
     }
+    last_ok_ = steadySeconds();
+    last_voltage_ = r.voltage;
     sensor_msgs::msg::BatteryState msg;
     msg.header.stamp = now();
     msg.voltage = static_cast<float>(r.voltage);
@@ -155,6 +225,14 @@ private:
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr estop_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr command_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
+  std::unique_ptr<dog_diagnostics::Reporter> diag_;
+  rclcpp::TimerBase::SharedPtr diag_timer_;
+  double last_voltage_{0.0};
+  double sensor_timeout_s_{1.0};
+  double last_ok_{-1.0};
+  std::string probe_note_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr clear_srv_;
+  PowerGuard::Event last_event_{PowerGuard::Event::NONE};
 };
 
 }  // namespace dog_hardware
@@ -165,9 +243,9 @@ int main(int argc, char ** argv)
   int code = 0;
   try {
     auto node = std::make_shared<dog_hardware::PowerMonitorNode>();
-    if (node->active()) {
-      rclcpp::spin(node);
-    }
+    // Even without a sensor the node stays up: its diagnostics is the only place that
+    // tells the operator the rail is unguarded.
+    rclcpp::spin(node);
   } catch (const std::exception & e) {
     RCLCPP_FATAL(rclcpp::get_logger("power_monitor"), "%s", e.what());
     code = 1;

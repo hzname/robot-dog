@@ -14,6 +14,18 @@
 # crouch"): thigh 45 deg back, knee bent 90 deg. They MUST be checked on the
 # robot — follow docs/CALIBRATION.md and tune live with
 #   ros2 param set /dog/servo_driver lf_thigh_joint.offset_deg 47.5
+#
+# The KNEE rows are different: the knee servo sits in the thigh block on the
+# body and pulls the shin through a double parallelogram, so it sets the
+# absolute shin angle s = thigh + calf (coupled_to, coupling 1.0). For the
+# calf rows offset_deg is s at the middle of the pulse window, and
+# offset_deg +- range_deg/2 is the CAD-admissible s range -80..+15 deg;
+# min_deg/max_deg keep the knee against the thigh inside -140..-40 deg.
+# The numbers come from the CAD collision map of 2026-10-13 (a stand-in
+# servo, not measured on the robot). The pulses are shifted so that the
+# centre pulse 1370 us stays the mount pose s = -45 (thigh 45, knee -90).
+# How to keep the window while calibrating: docs/CALIBRATION.md, section
+# "Колено связано с бедром".
 /**/servo_driver:
   ros__parameters:
     backend: pca9685            # pca9685 | mock
@@ -43,17 +55,19 @@
     # Coupling: if the knee rod is anchored on the BODY (servo in the hip
     # block), the servo sets knee + thigh. Declare it with
     #   lf_calf_joint: {..., coupled_to: lf_thigh_joint, coupling: 1.0}
+    # The shipped calf rows use it directly: servo_arm_mm 0.0 and coupling 1.0
+    # (the parallelogram is a 1:1 transfer, no rod lengths needed).
     #
     # v1 measured pulse range: 520..2220 us for 180 deg (centre 1370 us).
-    lf_hip_joint:   {channel: 0,  direction:  1, offset_deg:   0.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -40.0, max_deg:  40.0, servo_arm_mm: 0.0}
-    lf_thigh_joint: {channel: 1,  direction:  1, offset_deg:  45.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -45.0, max_deg: 135.0, servo_arm_mm: 0.0}
-    lf_calf_joint:  {channel: 2,  direction:  1, offset_deg: -90.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg: -165.0, max_deg: -15.0, servo_arm_mm: 0.0}
-    rf_hip_joint:   {channel: 3,  direction: -1, offset_deg:   0.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -40.0, max_deg:  40.0, servo_arm_mm: 0.0}
-    rf_thigh_joint: {channel: 4,  direction: -1, offset_deg:  45.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -45.0, max_deg: 135.0, servo_arm_mm: 0.0}
-    rf_calf_joint:  {channel: 5,  direction: -1, offset_deg: -90.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg: -165.0, max_deg: -15.0, servo_arm_mm: 0.0}
-    lr_hip_joint:   {channel: 6,  direction:  1, offset_deg:   0.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -40.0, max_deg:  40.0, servo_arm_mm: 0.0}
-    lr_thigh_joint: {channel: 7,  direction:  1, offset_deg:  45.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -45.0, max_deg: 135.0, servo_arm_mm: 0.0}
-    lr_calf_joint:  {channel: 8,  direction:  1, offset_deg: -90.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg: -165.0, max_deg: -15.0, servo_arm_mm: 0.0}
-    rr_hip_joint:   {channel: 9,  direction: -1, offset_deg:   0.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -40.0, max_deg:  40.0, servo_arm_mm: 0.0}
-    rr_thigh_joint: {channel: 10, direction: -1, offset_deg:  45.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -45.0, max_deg: 135.0, servo_arm_mm: 0.0}
-    rr_calf_joint:  {channel: 11, direction: -1, offset_deg: -90.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg: -165.0, max_deg: -15.0, servo_arm_mm: 0.0}
+    lf_hip_joint:   {channel: 0,  direction:  1, offset_deg: -24.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -40.0, max_deg:  40.0, servo_arm_mm: 0.0}
+    lf_thigh_joint: {channel: 1,  direction:  1, offset_deg:  56.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -45.0, max_deg: 135.0, servo_arm_mm: 0.0}
+    lf_calf_joint:  {channel: 2,  direction:  1, offset_deg: -32.5, pulse_min_us: 926.2, pulse_max_us: 1823.2, range_deg:  95.0, min_deg: -140.0, max_deg: -40.0, servo_arm_mm: 0.0, coupled_to: lf_thigh_joint, coupling: 1.0}
+    rf_hip_joint:   {channel: 3,  direction: -1, offset_deg:  12.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -40.0, max_deg:  40.0, servo_arm_mm: 0.0}
+    rf_thigh_joint: {channel: 4,  direction: -1, offset_deg:  30.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -45.0, max_deg: 135.0, servo_arm_mm: 0.0}
+    rf_calf_joint:  {channel: 5,  direction: -1, offset_deg: -32.5, pulse_min_us: 907.4, pulse_max_us: 1804.4, range_deg:  95.0, min_deg: -140.0, max_deg: -40.0, servo_arm_mm: 0.0, coupled_to: rf_thigh_joint, coupling: 1.0}
+    lr_hip_joint:   {channel: 6,  direction: -1, offset_deg:   8.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -40.0, max_deg:  40.0, servo_arm_mm: 0.0}
+    lr_thigh_joint: {channel: 7,  direction:  1, offset_deg:  42.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -45.0, max_deg: 135.0, servo_arm_mm: 0.0}
+    lr_calf_joint:  {channel: 8,  direction:  1, offset_deg: -32.5, pulse_min_us: 935.6, pulse_max_us: 1832.6, range_deg:  95.0, min_deg: -140.0, max_deg: -40.0, servo_arm_mm: 0.0, coupled_to: lr_thigh_joint, coupling: 1.0}
+    rr_hip_joint:   {channel: 9,  direction: -1, offset_deg:  15.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -40.0, max_deg:  40.0, servo_arm_mm: 0.0}
+    rr_thigh_joint: {channel: 10, direction: -1, offset_deg:  49.0, pulse_min_us: 520.0, pulse_max_us: 2220.0, range_deg: 180.0, min_deg:  -45.0, max_deg: 135.0, servo_arm_mm: 0.0}
+    rr_calf_joint:  {channel: 11, direction: -1, offset_deg: -32.5, pulse_min_us: 1086.8, pulse_max_us: 1983.8, range_deg:  95.0, min_deg: -140.0, max_deg: -40.0, servo_arm_mm: 0.0, coupled_to: rr_thigh_joint, coupling: 1.0}

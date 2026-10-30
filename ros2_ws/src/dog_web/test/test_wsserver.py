@@ -106,3 +106,110 @@ async def _scenario(tmp_path):
 
 def test_server_end_to_end(tmp_path):
     asyncio.run(_scenario(tmp_path))
+
+
+# --- TEL-03: Origin, client cap, idle sessions ---------------------------------
+
+KEY = base64.b64encode(os.urandom(16)).decode()
+
+
+def _ws_request(port, origin=None, key=KEY):
+    host = '127.0.0.1:%d' % port
+    lines = [
+        'GET /ws HTTP/1.1',
+        'Upgrade: websocket',
+        'Connection: Upgrade',
+        'Host: ' + host,
+        'Sec-WebSocket-Key: ' + key,
+    ]
+    if origin is not None:
+        lines.append('Origin: ' + origin)
+    return ('\r\n'.join(lines) + '\r\n\r\n').encode()
+
+
+async def _echo_client(ws):
+    try:
+        while True:
+            text = await ws.recv()
+            await ws.send('echo:' + text)
+    except WebSocketClosed:
+        return
+
+
+async def _status_code(port, request):
+    r, w = await asyncio.open_connection('127.0.0.1', port)
+    try:
+        w.write(request)
+        await w.drain()
+        head = await asyncio.wait_for(r.readuntil(b'\r\n\r\n'), 2.0)
+        return head.split(b'\r\n')[0].decode('latin-1')
+    finally:
+        w.close()
+
+
+def _scenario_origin(tmp_path):
+    async def run():
+        server = Server(str(tmp_path), _echo_client, idle_timeout=0)
+        port = await server.start('127.0.0.1', 0)
+        try:
+            # A page served by another host must not talk to the robot.
+            assert '403' in await _status_code(
+                port, _ws_request(port, origin='http://evil.example:8080'))
+            # The page that this server served passes.
+            assert '101' in await _status_code(
+                port, _ws_request(port, origin='http://127.0.0.1:%d' % port))
+            # No Origin header at all: not a browser, allowed (the calibration tool).
+            assert '101' in await _status_code(port, _ws_request(port))
+        finally:
+            await server.stop()
+    asyncio.run(run())
+
+
+def test_origin_must_match_the_host_the_page_came_from(tmp_path):
+    _scenario_origin(tmp_path)
+
+
+def _scenario_cap(tmp_path):
+    async def run():
+        server = Server(str(tmp_path), _echo_client, max_clients=1, idle_timeout=0)
+        port = await server.start('127.0.0.1', 0)
+        try:
+            r1, w1 = await asyncio.open_connection('127.0.0.1', port)
+            w1.write(_ws_request(port))
+            await w1.drain()
+            head = await r1.readuntil(b'\r\n\r\n')
+            assert b'101' in head
+            # The first session is live, so the second one is refused.
+            assert '503' in await _status_code(port, _ws_request(port))
+            w1.close()
+            await asyncio.sleep(0.1)
+            assert '101' in await _status_code(port, _ws_request(port))
+        finally:
+            await server.stop()
+    asyncio.run(run())
+
+
+def test_only_so_many_sessions_at_once(tmp_path):
+    _scenario_cap(tmp_path)
+
+
+def _scenario_idle(tmp_path):
+    async def run():
+        server = Server(str(tmp_path), _echo_client, idle_timeout=0.2)
+        port = await server.start('127.0.0.1', 0)
+        try:
+            r, w = await asyncio.open_connection('127.0.0.1', port)
+            w.write(_ws_request(port))
+            await w.drain()
+            await r.readuntil(b'\r\n\r\n')
+            # Say nothing: the server hangs up rather than keeping the socket forever.
+            rest = await asyncio.wait_for(r.read(64), 2.0)
+            assert rest == b'' or rest[0] & 0x0F == OP_CLOSE
+            w.close()
+        finally:
+            await server.stop()
+    asyncio.run(run())
+
+
+def test_a_silent_session_is_closed(tmp_path):
+    _scenario_idle(tmp_path)

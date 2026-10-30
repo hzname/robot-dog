@@ -1,7 +1,12 @@
 #include "dog_control/locomotion.hpp"
 
+#include <cstdio>
+
 #include <algorithm>
 #include <cmath>
+#include <sstream>
+#include <stdexcept>
+#include <string>
 
 namespace dog_control
 {
@@ -30,6 +35,38 @@ std::array<Vec3, kNumLegs> neutralFeet(const LocomotionParams & p)
   }
   return out;
 }
+
+// Period in force [s] (D-12): the manual gait.period, or the smallest period
+// that fits servo.margin * servo.max_speed up to kMaxAutoPeriod. 0.0 when the
+// manual period is not finite and above 0 or nothing fits.
+double effectivePeriod(const LocomotionParams & p)
+{
+  if (!p.auto_period) {
+    return std::isfinite(p.gait.period) && p.gait.period > 0.0 ? p.gait.period : 0.0;
+  }
+  return minimalPeriod(p, p.servo, p.min_period, kMaxAutoPeriod);
+}
+
+// Gait params with the effective period; throws std::runtime_error when there
+// is none (the constructor fails fast, reconfigureGait refuses).
+GaitParams gaitParamsFor(const LocomotionParams & p)
+{
+  GaitParams g = p.gait;
+  g.period = effectivePeriod(p);
+  if (g.period == 0.0) {
+    std::ostringstream msg;
+    if (p.auto_period) {
+      msg << "no gait period up to " << kMaxAutoPeriod << " s fits servo.max_speed " << p.servo.max_speed
+          << " * servo.margin " << p.servo.margin << " (servo.knee_ratio " << p.servo.knee_ratio
+          << ", gait.min_period " << p.min_period << " s): raise servo.max_speed or servo.margin, "
+          << "or set gait.auto_period: false and choose gait.period";
+    } else {
+      msg << "gait.period '" << p.gait.period << "' (use a finite number above 0 s, or gait.auto_period: true)";
+    }
+    throw std::runtime_error(msg.str());
+  }
+  return g;
+}
 }  // namespace
 
 const char * modeName(Mode m)
@@ -43,17 +80,88 @@ const char * modeName(Mode m)
     case Mode::LYING: return "lying";
     case Mode::GREETING: return "greeting";
     case Mode::SURVEY: return "survey";
+    case Mode::FALLEN: return "fallen";
   }
   return "unknown";
 }
 
 LocomotionController::LocomotionController(const LocomotionParams & params)
-: p_(params), gait_(params.gait, neutralFeet(params)), crawl_(params.crawl, neutralFeet(params)),
+: p_(params), gait_(gaitParamsFor(params), neutralFeet(params)), crawl_(params.crawl, neutralFeet(params)),
   greet_(params.greet, neutralFeet(params), params.stand_height, params.leg.thigh, params.leg.calf),
   survey_(params.survey)
 {
+  // The tilt governor must be able to interpolate at all: a stop at or below the
+  // soft threshold would divide by zero, and past 45 deg the estimate itself is
+  // out of its trusted range (slope.max_deg).
+  if (!(p_.tilt_soft_deg > 0.0) || !(p_.tilt_stop_deg > p_.tilt_soft_deg) || p_.tilt_stop_deg > 45.0) {
+    std::ostringstream msg;
+    msg << "tilt.soft_deg " << p_.tilt_soft_deg << " and tilt.stop_deg " << p_.tilt_stop_deg
+        << " must satisfy 0 < soft < stop <= 45";
+    throw std::invalid_argument(msg.str());
+  }
+  // Fall protection (phase 4): the levels must nest, and the thermal deadline,
+  // when it is on, sits inside the range the servos tolerate.
+  if (!(p_.safety_soft_deg > 0.0) || !(p_.safety_hard_deg > p_.safety_soft_deg) ||
+    p_.safety_hard_deg > 60.0 || !(p_.safety_debounce_s > 0.0) ||
+    !(p_.safety_hysteresis_deg >= 0.0) || !(p_.safety_imu_timeout_s >= 0.0))
+  {
+    std::ostringstream msg;
+    msg << "safety.soft_deg " << p_.safety_soft_deg << " and safety.hard_deg " << p_.safety_hard_deg
+        << " must satisfy 0 < soft < hard <= 60, debounce " << p_.safety_debounce_s
+        << " > 0, hysteresis >= 0, imu timeout >= 0";
+    throw std::invalid_argument(msg.str());
+  }
+  if (p_.safety_idle_lie_s != 0.0 && (p_.safety_idle_lie_s < 60.0 || p_.safety_idle_lie_s > 120.0)) {
+    std::ostringstream msg;
+    msg << "safety.idle_lie_s " << p_.safety_idle_lie_s
+        << " must be 0 (off) or within 60-120 s: shorter protects nothing, longer cooks the servos";
+    throw std::invalid_argument(msg.str());
+  }
   height_ = p_.lie_height;
   guard_step_.fill(std::numeric_limits<double>::quiet_NaN());
+}
+
+bool LocomotionController::gaitReconfigurable() const
+{
+  switch (mode_) {
+    case Mode::PASSIVE:
+    case Mode::STAND:
+    case Mode::LYING:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool LocomotionController::reconfigureGait(
+  double period, bool auto_period, double min_period, const ServoSpeedModel & servo)
+{
+  if (!gaitReconfigurable()) {
+    return false;  // a gait in motion or a transition must not jump
+  }
+  LocomotionParams q = p_;
+  q.gait.period = period;
+  q.auto_period = auto_period;
+  q.min_period = min_period;
+  q.servo = servo;
+  const double effective = effectivePeriod(q);
+  if (effective == 0.0) {
+    return false;
+  }
+  GaitParams g = q.gait;
+  g.period = effective;
+  // The rebuilt trot starts at the neutral stance; the per-leg step heights
+  // (a leg raised by the guard) are put back so a swing is not reset.
+  std::array<double, kNumLegs> heights{};
+  for (int leg = 0; leg < kNumLegs; ++leg) {
+    heights[leg] = gait_.stepHeight(leg);
+  }
+  gait_ = TrotGait(g, neutralFeet(q));
+  for (int leg = 0; leg < kNumLegs; ++leg) {
+    gait_.setStepHeight(leg, heights[leg]);
+  }
+  p_ = q;
+  return true;
 }
 
 Vec3 LocomotionController::hipPosition(int leg) const
@@ -78,9 +186,22 @@ void LocomotionController::startTransition(Mode next, double from_height, double
 
 bool LocomotionController::request(const std::string & cmd)
 {
-  if (estop_) {
+  refusal_.clear();
+  if (mode_ == Mode::FALLEN) {
+    // Only ~/recover raises a fallen robot: a stray command from a gamepad or a
+    // stale web page must not put it back on its feet (SAF-05, D-12).
+    refusal_ = "fallen (" + fall_reason_ + "): call ~/recover";
     return false;
   }
+  if (estop_) {
+    refusal_ = "e-stop engaged";
+    return false;
+  }
+  if (cmd == "stand" && p_.safety_require_imu && !imu_calibrated_) {
+    refusal_ = "imu not calibrated: the fall guard would be blind";
+    return false;
+  }
+  idle_t_ = 0.0;  // the operator is here: the thermal timer starts over
   if (cmd == "stand") {
     pending_lie_ = false;
     switch (mode_) {
@@ -140,7 +261,7 @@ void LocomotionController::setEstop(bool active)
 {
   estop_ = active;
   if (active) {
-    mode_ = Mode::PASSIVE;
+    if (mode_ != Mode::FALLEN) {mode_ = Mode::PASSIVE;}  // a fall outranks an e-stop banner
     pending_lie_ = false;
     vel_ = BodyVelocity{};
     vel_target_ = BodyVelocity{};
@@ -154,6 +275,9 @@ void LocomotionController::setEstop(bool active)
 
 void LocomotionController::setVelocity(const BodyVelocity & v)
 {
+  if (std::abs(v.vx) > 1e-6 || std::abs(v.vy) > 1e-6 || std::abs(v.wz) > 1e-6) {
+    idle_t_ = 0.0;
+  }
   const auto & m = p_.max_velocity;
   vel_target_.vx = std::clamp(v.vx, -m.vx, m.vx);
   vel_target_.vy = std::clamp(v.vy, -m.vy, m.vy);
@@ -204,6 +328,11 @@ void LocomotionController::clearGuard()
 
 void LocomotionController::setBodyPose(const BodyPose & pose)
 {
+  if (std::abs(pose.roll) > 1e-6 || std::abs(pose.pitch) > 1e-6 ||
+    std::abs(pose.height) > 1e-6)
+  {
+    idle_t_ = 0.0;
+  }
   pose_target_.roll = std::clamp(pose.roll, -p_.max_roll, p_.max_roll);
   pose_target_.pitch = std::clamp(pose.pitch, -p_.max_pitch, p_.max_pitch);
   pose_target_.height = std::clamp(
@@ -212,27 +341,80 @@ void LocomotionController::setBodyPose(const BodyPose & pose)
 
 void LocomotionController::setImuAttitude(double roll, double pitch, double dt)
 {
+  // The soft threshold reads the filtered attitude: it must not fire on the gait's
+  // own accelerations. The hard one reads the accelerometer (setFallTilt), which
+  // sees a fall while it happens.
+  if (!(std::isfinite(roll) && std::isfinite(pitch))) {return;}
+  // A message arrived: that is the heartbeat, whatever the source of the angle.
+  imu_seen_ = true;
+  imu_age_ = 0.0;
+  // CAL-08: an IMU whose axes and sign were never checked cannot say what "level" is.
+  // Until imu/calibrated says otherwise its attitude drives neither the tilt governor,
+  // nor slope compensation, nor the heading hold - a wrong sign would steer the robot
+  // rather than steady it. The heartbeat above still counts, so a silent IMU is a
+  // fall, not a calibration problem.
+  if (p_.imu_require_calibrated && !imu_calibrated_) {return;}
+  tilt_deg_ = std::max(std::abs(roll), std::abs(pitch)) * 180.0 / M_PI;
   if (!p_.slope_compensation || dt <= 0.0) {return;}
   const bool upright = mode_ == Mode::STAND || mode_ == Mode::WALK;
   if (!upright) {  // the hold starts from the heading at the next walk
     yaw_turned_ = 0.0;
     yaw_turned_dt_ = 0.0;
+    // The legs are about to move under the body: the old window describes a pose
+    // that no longer exists, so the next upright sample starts a fresh mean.
+    slope_count_ = 0;
+    slope_head_ = 0;
+    slope_sum_p_ = 0.0;
+    slope_sum_r_ = 0.0;
+    slope_sum_dt_ = 0.0;
+    return;
   }
   const double lim = p_.slope_max_deg * M_PI / 180.0;
   // The body is commanded parallel to the ground plus pose_: what remains is
   // the ground's slope. Only trust it while standing on the legs.
   const double gp = pitch - pose_.pitch;
   const double gr = roll - pose_.roll;
-  if (!upright || std::abs(gp) > lim || std::abs(gr) > lim) {return;}
-  const double k = 1.0 - std::exp(-dt / std::max(p_.slope_filter_tau, 1e-3));
-  if (!slope_valid_) {
-    slope_pitch_ = gp;
-    slope_roll_ = gr;
-    slope_valid_ = true;
-  } else {
-    slope_pitch_ += (gp - slope_pitch_) * k;
-    slope_roll_ += (gr - slope_roll_) * k;
+  if (std::abs(gp) > lim || std::abs(gr) > lim) {return;}
+  // A time-weighted mean over one gait period. The body pitches with every step
+  // and that rocking is periodic, so a plain low-pass only smears it: on a 20 deg
+  // ramp the filtered estimate swung 15...19 deg, the mean sat 3 deg low and the
+  // tilt governor never reached its stop (GAIT-04). Averaging over exactly one
+  // period cancels the periodic part and leaves the slope.
+  const int slot = slope_head_;
+  slope_buf_p_[slot] = gp;
+  slope_buf_r_[slot] = gr;
+  slope_buf_dt_[slot] = dt;
+  slope_head_ = (slot + 1) % kSlopeSamples;
+  if (slope_count_ < kSlopeSamples) {++slope_count_;}
+  slope_sum_p_ += gp * dt;
+  slope_sum_r_ += gr * dt;
+  slope_sum_dt_ += dt;
+  // The window follows the gait in force; the crawl's nine seconds would make the
+  // estimate uselessly slow, so it is capped by the configured tau.
+  const double window = std::clamp(gaitPeriod(), 0.30, 2.0 * p_.slope_filter_tau);
+  while (slope_count_ > 1) {
+    const int oldest = (slope_head_ - slope_count_ + kSlopeSamples) % kSlopeSamples;
+    const double odt = slope_buf_dt_[oldest];
+    if (slope_sum_dt_ - odt < window) {break;}
+    slope_sum_p_ -= slope_buf_p_[oldest] * odt;
+    slope_sum_r_ -= slope_buf_r_[oldest] * odt;
+    slope_sum_dt_ -= odt;
+    --slope_count_;
   }
+  slope_pitch_ = slope_sum_p_ / slope_sum_dt_;
+  slope_roll_ = slope_sum_r_ / slope_sum_dt_;
+  slope_valid_ = true;
+}
+
+void LocomotionController::setFallTilt(double roll, double pitch)
+{
+  if (!std::isfinite(roll) || !std::isfinite(pitch)) {return;}
+  imu_roll_ = roll;
+  imu_pitch_ = pitch;
+  tilt_raw_deg_ = std::max(std::abs(roll), std::abs(pitch)) * 180.0 / M_PI;
+  tilt_raw_valid_ = true;
+  imu_seen_ = true;
+  imu_age_ = 0.0;
 }
 
 void LocomotionController::setYawRate(double wz)
@@ -253,16 +435,151 @@ void LocomotionController::addYawRate(double wz, double dt)
   }
 }
 
+void LocomotionController::evaluateSafety(double dt)
+{
+  if (imu_seen_) {imu_age_ += dt;}
+
+  // The lie-down asked for by the thermal timeout was carried out: now the servos
+  // may let go (doing it while the robot is still walking would drop it).
+  if (idle_lie_pending_ && mode_ == Mode::LYING) {
+    idle_lie_pending_ = false;
+    relax_requested_ = true;
+  }
+  if (mode_ == Mode::FALLEN) {return;}
+
+  // 1. Hard tilt: the robot is going over. Count time, not frames: the IMU rate
+  //    may differ from the control loop's.
+  const double worst_tilt = tilt_raw_valid_ ? std::max(tilt_deg_, tilt_raw_deg_) : tilt_deg_;
+  // CAL-08: the same rule for the raw accelerometer path - an unchecked axis mapping
+  // can read a level robot as 90 degrees, and a fall as level.
+  const bool too_far = imuTrusted() && imu_seen_ && worst_tilt > p_.safety_hard_deg;
+  hard_t_ = too_far ? hard_t_ + dt : 0.0;
+  if (too_far && hard_t_ >= p_.safety_debounce_s) {
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), "tilt %.0f deg above %.0f deg for %.2f s",
+      worst_tilt, p_.safety_hard_deg, hard_t_);
+    enterFallen(buf);
+    return;
+  }
+
+  // 2. A silent IMU: the fall guard is blind, so the robot must not keep walking.
+  if (imu_seen_ && p_.safety_imu_timeout_s > 0.0 && imu_age_ > p_.safety_imu_timeout_s) {
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), "imu silent for %.2f s (timeout %.2f s)",
+      imu_age_, p_.safety_imu_timeout_s);
+    enterFallen(buf);
+    return;
+  }
+
+  // 3. Soft tilt: still recoverable - lie down instead of waiting for the fall.
+  if (imu_seen_) {
+    if (tilt_deg_ > p_.safety_soft_deg) {
+      soft_active_ = true;
+    } else if (tilt_deg_ < p_.safety_soft_deg - p_.safety_hysteresis_deg) {
+      soft_active_ = false;  // hysteresis: no dithering on the threshold
+    }
+  }
+  const bool upright = mode_ == Mode::STAND || mode_ == Mode::WALK ||
+    mode_ == Mode::GREETING || mode_ == Mode::SURVEY || mode_ == Mode::STANDING_UP;
+  if (soft_active_ && upright) {
+    request("lie");
+    return;
+  }
+
+  // 4. Thermal protection: the servos have no temperature feedback, so holding a
+  //    pose for minutes is the only thing that heats them up (SAF-08).
+  const bool holding = mode_ == Mode::STAND || mode_ == Mode::WALK ||
+    mode_ == Mode::STANDING_UP || mode_ == Mode::LYING_DOWN;
+  if (!holding) {
+    idle_t_ = 0.0;
+    return;
+  }
+  idle_t_ += dt;
+  if (p_.safety_idle_lie_s > 0.0 && idle_t_ > p_.safety_idle_lie_s) {
+    idle_t_ = 0.0;
+    if (request("lie")) {idle_lie_pending_ = true;}
+  }
+}
+
+void LocomotionController::enterFallen(const std::string & reason)
+{
+  mode_ = Mode::FALLEN;
+  fall_reason_ = reason;
+  pending_lie_ = false;
+  vel_ = BodyVelocity{};
+  vel_target_ = BodyVelocity{};
+  pose_ = BodyPose{};
+  pose_target_ = BodyPose{};
+  gait_.reset();
+  hard_t_ = 0.0;
+  relax_requested_ = true;
+}
+
+std::string LocomotionController::recover()
+{
+  if (mode_ != Mode::FALLEN) {return "not fallen";}
+  if (imu_seen_ && imu_age_ > p_.safety_imu_timeout_s) {return "imu is still silent";}
+  if (p_.safety_require_imu && !imu_calibrated_) {return "imu not calibrated";}
+  // "Is the robot level right now" is an instantaneous question, so it is answered by
+  // the accelerometer: after the operator lifts the robot the attitude filter still
+  // remembers the fall for a second and would refuse a robot that is already straight.
+  const double tilt_now = tilt_raw_valid_ ? tilt_raw_deg_ : tilt_deg_;
+  if (imu_seen_ && tilt_now > p_.safety_soft_deg - p_.safety_hysteresis_deg) {
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), "tilt %.0f deg: put the robot level first", tilt_now);
+    return buf;
+  }
+  mode_ = Mode::LYING;
+  height_ = p_.lie_height;
+  gait_.reset();
+  hard_t_ = 0.0;
+  soft_active_ = false;
+  idle_t_ = 0.0;
+  idle_lie_pending_ = false;
+  relax_requested_ = false;
+  estop_ = false;  // the operator's gesture also clears the e-stop we raised
+  fall_reason_.clear();
+  refusal_.clear();
+  return std::string();
+}
+
+bool LocomotionController::takeRelaxRequest()
+{
+  const bool requested = relax_requested_;
+  relax_requested_ = false;
+  return requested;
+}
+
 bool LocomotionController::update(double dt)
 {
   unreachable_ = 0;
   if (dt <= 0.0) {
     return mode_ != Mode::PASSIVE;
   }
+  evaluateSafety(dt);
+  if (mode_ == Mode::FALLEN) {
+    return false;  // the outputs are released, nothing is solved
+  }
   const bool upright = mode_ == Mode::STAND || mode_ == Mode::WALK;
 
   // Accel-limited twist; zero unless upright and not about to lie down.
   BodyVelocity target = (upright && !pending_lie_) ? vel_target_ : BodyVelocity{};
+  // Tilt governor (GAIT-04): the filtered ground slope scales the whole twist, so
+  // a steep place slows the walk to a stand instead of waiting for the fall. A
+  // zero twist in WALK already means standing on planted feet - the gait then
+  // holds still, the same as when the operator releases the sticks.
+  tilt_scale_ = 1.0;
+  if (slope_valid_ && upright) {
+    const double tilt = std::max(std::abs(slope_pitch_), std::abs(slope_roll_)) * 180.0 / M_PI;
+    if (tilt >= p_.tilt_stop_deg) {
+      tilt_scale_ = 0.0;
+    } else if (tilt > p_.tilt_soft_deg) {
+      tilt_scale_ = (p_.tilt_stop_deg - tilt) / (p_.tilt_stop_deg - p_.tilt_soft_deg);
+    }
+  }
+  target.vx *= tilt_scale_;
+  target.vy *= tilt_scale_;
+  target.wz *= tilt_scale_;
   target.vx = std::min(target.vx, guard_vx_);  // hazard ahead: forward only
   if (vel_target_.vx > 0.01) {target.vy += guard_vy_;}  // going round: sideways while asked forward
   // Gait change (trot <-> crawl): stop, and switch once the gait is idle
@@ -325,6 +642,7 @@ bool LocomotionController::update(double dt)
 
   switch (mode_) {
     case Mode::PASSIVE:
+    case Mode::FALLEN:   // unreachable: update() returns early, but the switch is total
       return false;
 
     case Mode::STANDING_UP:
@@ -370,10 +688,14 @@ bool LocomotionController::update(double dt)
         } else {
           heading_integral_ = 0.0;
         }
-        gait_vel_.wz += std::clamp(kp * heading_error_ + ki * heading_integral_, -max_rate, max_rate);
+        const double correction =
+          std::clamp(kp * heading_error_ + ki * heading_integral_, -max_rate, max_rate);
+        gait_vel_.wz += correction;
+        heading_correction_ = correction;
       } else {
         heading_error_ = 0.0;
         heading_integral_ = 0.0;
+        heading_correction_ = 0.0;
       }
       yaw_turned_ = 0.0;
       yaw_turned_dt_ = 0.0;

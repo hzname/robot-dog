@@ -16,11 +16,15 @@ function connect() {
   ws = new WebSocket(`${proto}://${location.host}/ws`);
   ws.onopen = () => setConn(true);
   ws.onclose = () => { setConn(false); setTimeout(connect, 1000); };
+// The server closes sessions that say nothing: a viewer tab must keep talking.
+setInterval(() => {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping' }));
+}, 25000);
   ws.onerror = () => ws.close();
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
     if (msg.type === 'hello') limits = msg.limits;
-    else if (msg.type === 'state') setMode(msg.mode);
+    else if (msg.type === 'state') { setMode(msg.mode); setViewOnly(!!msg.view_only); }
     else if (msg.type === 'error') showError(msg.message);
     else if (msg.type === 'guard') {
       const el = $('guard');
@@ -32,6 +36,15 @@ function connect() {
       el.textContent = text[msg.state] || '';
       el.className = 'pill ' + (msg.state === 'stop' ? 'estop' : '');
     }
+    else if (msg.type === 'alarm') {
+      // One banner for the whole robot: the worst node speaks for it (DIA-02).
+      const el = $('alarm');
+      el.hidden = msg.level === 'ok';
+      el.className = 'alarm ' + msg.level;
+      $('alarm-level').textContent = msg.level === 'error' ? 'АВАРИЯ' : 'внимание';
+      $('alarm-reason').textContent = msg.reason;
+      $('alarm-source').textContent = msg.source ? `· ${msg.source}` : '';
+    }
     else if (msg.type === 'power') {
       const el = $('power');
       el.hidden = false;
@@ -40,7 +53,28 @@ function connect() {
     }
   };
 }
+// profile:=floor publishes view_only: the page shows state and may hit the E-STOP,
+// but every control that moves the robot is locked (TEL-04).
+let viewOnly = false;
+
+function setViewOnly(on) {
+  if (on === viewOnly) return;
+  viewOnly = on;
+  const banner = $('viewonly');
+  if (banner) banner.hidden = !on;
+  for (const id of ['stand', 'lie', 'greet', 'survey', 'gait', 'release']) {
+    const el = $(id);
+    if (el) el.disabled = on;
+  }
+  for (const id of ['pad-move', 'pad-turn', 'speed', 'pitch', 'height']) {
+    const el = $(id);
+    if (el) el.classList.toggle('locked', on);
+  }
+  document.body.classList.toggle('view-only', on);
+}
+
 function send(obj) {
+  if (viewOnly && obj.type !== 'estop') return;
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
 }
 function setConn(on) {

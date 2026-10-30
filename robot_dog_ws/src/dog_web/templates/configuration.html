@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Robot Dog — Configuration</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .cfg-group { border-left: 3px solid var(--green); padding-left: 16px; margin-bottom: 24px; }
+    .cfg-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+    .cfg-row label { min-width: 200px; color: var(--text-dim); font-size: .88em; }
+    .cfg-row .hint { font-size: .75em; color: var(--orange); max-width: 400px; }
+    .cfg-row input[type=number] {
+      background: var(--bg-input); border: 1px solid var(--border); color: var(--green);
+      padding: 6px 10px; border-radius: 6px; width: 120px; font-family: monospace; font-size: .95em;
+    }
+    .cfg-row input[type=number]:focus { border-color: var(--green); outline: none; }
+    .cfg-row select {
+      background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
+      padding: 6px 10px; border-radius: 6px; font-size: .9em;
+    }
+    .fk-result {
+      background: var(--bg-dark); border: 1px solid var(--border); border-radius: 8px;
+      padding: 16px; margin-top: 12px;
+    }
+    .fk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    .fk-item { text-align: center; }
+    .fk-label { color: var(--text-dim); font-size: .8em; margin-bottom: 4px; }
+    .fk-value { font-family: monospace; font-size: 1.15em; color: var(--green); font-weight: bold; }
+    .fk-value.warn { color: var(--accent); }
+    .section-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 20px; }
+    .section-tab {
+      padding: 8px 16px; border-radius: 8px; cursor: pointer;
+      background: var(--bg-input); color: var(--text-dim); border: 1px solid var(--border);
+      transition: .2s; font-size: .9em;
+    }
+    .section-tab:hover { color: var(--text); border-color: var(--green); }
+    .section-tab.active { background: var(--green); color: var(--bg-dark); font-weight: bold; border-color: var(--green); }
+    .cfg-section { display: none; }
+    .cfg-section.active { display: block; }
+    .status-msg { padding: 10px 16px; border-radius: 8px; margin: 12px 0; font-size: .9em; }
+    .status-msg.ok { background: rgba(78,204,163,.15); color: var(--green); border: 1px solid var(--green); }
+    .status-msg.err { background: rgba(233,69,96,.15); color: var(--accent); border: 1px solid var(--accent); }
+    .status-msg.warn { background: rgba(243,156,18,.15); color: var(--orange); border: 1px solid var(--orange); }
+    .code-box {
+      background: var(--bg-dark); border: 1px solid var(--border); border-radius: 8px;
+      padding: 12px; font-family: 'Courier New', monospace; font-size: .85em;
+      color: var(--green); overflow-x: auto; white-space: pre; margin-top: 12px;
+    }
+    .param-group-title { color: var(--blue); font-size: 1.05em; font-weight: 600; margin: 16px 0 10px; }
+  </style>
+</head>
+<body>
+  <nav>
+    <span class="logo">🐕 RobotDogQwen</span>
+    <a href="/dashboard" data-i18n="nav.dashboard">Панель</a>
+    <a href="/control" data-i18n="nav.control">Управление</a>
+    <a href="/state" data-i18n="nav.state">Состояние</a>
+    <a href="/calibration" data-i18n="nav.calibration">Калибровка</a>
+    <a href="/configuration" class="active" data-i18n="nav.config">Конфигурация</a>
+    <span class="status-dot" id="nav-dot"></span>
+  </nav>
+
+  <main>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <h2 data-i18n="cfg.title" style="margin:0">⚙️ Конфигурация робота</h2>
+        <div class="btn-group">
+          <button class="btn btn-blue btn-sm" onclick="loadConfig()" data-i18n="cfg.reload">🔄 Загрузить</button>
+          <button class="btn btn-sm" onclick="validateOnly()" data-i18n="cfg.validate">✅ Проверить</button>
+          <button class="btn btn-orange btn-sm" onclick="saveConfig()" data-i18n="cfg.save">💾 Сохранить и рассчитать FK</button>
+        </div>
+      </div>
+      <div id="status-msg" style="margin-top:10px"></div>
+    </div>
+
+    <!-- Section tabs -->
+    <div class="section-tabs" id="section-tabs">
+      <div class="section-tab active" data-section="body" onclick="showSection('body')">🦿 Body / Геометрия</div>
+      <div class="section-tab" data-section="standing" onclick="showSection('standing')">🧍 Standing / Стойка</div>
+      <div class="section-tab" data-section="joints" onclick="showSection('joints')">🔩 Joints / Суставы</div>
+      <div class="section-tab" data-section="gait" onclick="showSection('gait')">🚶 Gait / Походка</div>
+      <div class="section-tab" data-section="balance" onclick="showSection('balance')">⚖️ Balance / Баланс</div>
+      <div class="section-tab" data-section="imu" onclick="showSection('imu')">📡 IMU</div>
+      <div class="section-tab" data-section="servo" onclick="showSection('servo')">⚡ Servo Driver</div>
+      <div class="section-tab" data-section="teleop" onclick="showSection('teleop')">🎮 Teleop</div>
+      <div class="section-tab" data-section="codegen" onclick="showSection('codegen')">🔧 Code Gen</div>
+    </div>
+
+    <!-- ═══════ BODY ═══════ -->
+    <div class="cfg-section active" id="sec-body">
+      <div class="card">
+        <h2 data-i18n="cfg.body_title">Корпус и геометрия</h2>
+        <div class="cfg-group">
+          <div class="param-group-title" data-i18n="cfg.body_dims">Размеры корпуса</div>
+          <div class="cfg-row">
+            <label>body.length (мм)</label>
+            <input type="number" id="body.length_m" data-unit="mm" step="1" min="50" max="1000">
+            <span class="hint" data-i18n="cfg.hint_length">Длина корпуса (X), мм. От передних до задних бёдер.</span>
+          </div>
+          <div class="cfg-row">
+            <label>body.width (мм)</label>
+            <input type="number" id="body.width_m" data-unit="mm" step="1" min="30" max="500">
+            <span class="hint" data-i18n="cfg.hint_width">Ширина корпуса (Y), мм. От левого до правого бёдра.</span>
+          </div>
+          <div class="cfg-row">
+            <label>body.mass_kg</label>
+            <input type="number" id="body.mass_kg" step="0.1" min="0.1" max="20">
+            <span class="hint" data-i18n="cfg.hint_mass">Масса робота с АКБ, кг.</span>
+          </div>
+        </div>
+        <div class="cfg-group">
+          <div class="param-group-title" data-i18n="cfg.link_lengths">Длины звеньев ноги</div>
+          <div class="cfg-row">
+            <label>link_lengths.hip (мм)</label>
+            <input type="number" id="link_lengths.hip" data-unit="mm" step="0.5" min="5" max="200">
+            <span class="hint" data-i18n="cfg.hint_hip">Тазовое звено (⊥ корпусу), мм. От шарнира отведения до шарнира бедра.</span>
+          </div>
+          <div class="cfg-row">
+            <label>link_lengths.thigh (мм)</label>
+            <input type="number" id="link_lengths.thigh" data-unit="mm" step="0.5" min="10" max="500">
+            <span class="hint" data-i18n="cfg.hint_thigh">Бедро, мм. От тазового до коленного шарнира.</span>
+          </div>
+          <div class="cfg-row">
+            <label>link_lengths.calf (мм)</label>
+            <input type="number" id="link_lengths.calf" data-unit="mm" step="0.5" min="10" max="500">
+            <span class="hint" data-i18n="cfg.hint_calf">Голень, мм. От колена до стопы.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ STANDING ═══════ -->
+    <div class="cfg-section" id="sec-standing">
+      <div class="card">
+        <h2 data-i18n="cfg.standing_title">Поза стояния и FK</h2>
+
+        <!-- Live preview -->
+        <div style="background:rgba(233,69,96,.08);border:1px solid var(--accent);border-radius:8px;padding:12px;margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <button class="btn btn-red btn-sm" onclick="livePoseStanding()" data-i18n="cfg.live_pose">🦿 Применить позу на роботе</button>
+            <button class="btn btn-dark btn-sm" onclick="livePoseZero()" data-i18n="cfg.live_zero">⏹ Вернуть в ноль</button>
+            <span style="color:var(--orange);font-size:.82em" data-i18n="cfg.live_warn">⚠ Робот физически двинется! Убедитесь, что сервы включены и робот стоит на столе.</span>
+          </div>
+        </div>
+        <div class="cfg-group">
+          <div class="param-group-title" data-i18n="cfg.nominal_angles">Номинальные углы (дизайн-параметры)</div>
+          <div class="cfg-row">
+            <label>nominal_calf_angle (°)</label>
+            <input type="number" id="standing.nominal_calf_angle_rad" data-unit="deg" step="1" min="-180" max="0">
+            <span class="hint" data-i18n="cfg.hint_calf_angle">Угол колена в стойке [°]. −68.8° типично. ОПРЕДЕЛЯЕТ высоту стояния!</span>
+          </div>
+          <div class="cfg-row">
+            <label>nominal_thigh_angle (°)</label>
+            <input type="number" id="standing.nominal_thigh_angle_rad" data-unit="deg" step="1" min="-90" max="90">
+            <span class="hint" data-i18n="cfg.hint_thigh_angle">Угол бедра. 0° = вертикально вниз.</span>
+          </div>
+          <div class="cfg-row">
+            <label>nominal_hip_angle (°)</label>
+            <input type="number" id="standing.nominal_hip_angle_rad" data-unit="deg" step="1" min="-90" max="90">
+            <span class="hint" data-i18n="cfg.hint_hip_angle">Отведение бедра. 0° = параллельно корпусу.</span>
+          </div>
+        </div>
+        <div class="cfg-group">
+          <div class="param-group-title" data-i18n="cfg.foot_scale">Масштаб стопы</div>
+          <div class="cfg-row">
+            <label>foot_x_scale</label>
+            <input type="number" id="standing.foot_x_scale" step="0.05" min="0.1" max="1.0">
+            <span class="hint" data-i18n="cfg.hint_footx">0.5 = стопа на полпути от центра до бёдра.</span>
+          </div>
+          <div class="cfg-row">
+            <label>foot_y_scale</label>
+            <input type="number" id="standing.foot_y_scale" step="0.05" min="0.1" max="1.0">
+            <span class="hint" data-i18n="cfg.hint_footy">0.8 = стопа чуть ближе к центру.</span>
+          </div>
+        </div>
+        <div class="cfg-group">
+          <div class="param-group-title" data-i18n="cfg.height_limits">Лимиты высоты (от FK)</div>
+          <div class="cfg-row">
+            <label>height_min_ratio</label>
+            <input type="number" id="standing.height_min_ratio" step="0.05" min="0.3" max="1.0">
+            <span class="hint" data-i18n="cfg.hint_minratio">Мин. высота = ratio × standing_height.</span>
+          </div>
+          <div class="cfg-row">
+            <label>height_max_ratio</label>
+            <input type="number" id="standing.height_max_ratio" step="0.05" min="1.0" max="2.0">
+            <span class="hint" data-i18n="cfg.hint_maxratio">Макс. высота = ratio × standing_height.</span>
+          </div>
+        </div>
+
+        <!-- FK computed results -->
+        <div class="fk-result" id="fk-result">
+          <div style="color:var(--blue);font-weight:600;margin-bottom:10px" data-i18n="cfg.fk_computed">
+            📐 FK: Расчётные значения (автоматически)
+          </div>
+          <div class="fk-grid" id="fk-grid">
+            <div class="fk-item"><div class="fk-label">standing_height (мм)</div><div class="fk-value" id="fk-h">—</div></div>
+            <div class="fk-item"><div class="fk-label">min_height (мм)</div><div class="fk-value" id="fk-min">—</div></div>
+            <div class="fk-item"><div class="fk-label">max_height (мм)</div><div class="fk-value" id="fk-max">—</div></div>
+            <div class="fk-item"><div class="fk-label">target_dist (мм)</div><div class="fk-value" id="fk-td">—</div></div>
+            <div class="fk-item"><div class="fk-label">max_reach (мм)</div><div class="fk-value" id="fk-mr">—</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ JOINTS ═══════ -->
+    <div class="cfg-section" id="sec-joints">
+      <div class="card">
+        <h2 data-i18n="cfg.joints_title">Суставы — шаблоны лимитов</h2>
+
+        <!-- Sign convention -->
+        <div style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:18px">
+          <div style="color:var(--blue);font-weight:600;margin-bottom:8px" data-i18n="cfg.sign_title">📐 Соглашение о знаках (положительное / отрицательное)</div>
+          <table style="width:100%;font-size:.85em;border-collapse:collapse">
+            <thead>
+              <tr style="color:var(--text-dim);border-bottom:1px solid var(--border)">
+                <th style="text-align:left;padding:4px 8px">Тип</th>
+                <th style="text-align:center;padding:4px 8px">Ось</th>
+                <th style="text-align:center;padding:4px 8px">+ (положительное)</th>
+                <th style="text-align:center;padding:4px 8px">− (отрицательное)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid var(--border)">
+                <td style="padding:6px 8px;color:var(--accent);font-weight:600">HIP</td>
+                <td style="text-align:center;padding:6px 8px">Roll (отведение)</td>
+                <td style="text-align:center;padding:6px 8px;color:var(--green)">Нога наружу ↗</td>
+                <td style="text-align:center;padding:6px 8px;color:var(--orange)">Нога внутрь ↙</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--border)">
+                <td style="padding:6px 8px;color:var(--accent);font-weight:600">THIGH</td>
+                <td style="text-align:center;padding:6px 8px">Pitch (наклон)</td>
+                <td style="text-align:center;padding:6px 8px;color:var(--green)">Бедро назад ↩</td>
+                <td style="text-align:center;padding:6px 8px;color:var(--orange)">Бедро вперёд ↪</td>
+              </tr>
+              <tr>
+                <td style="padding:6px 8px;color:var(--accent);font-weight:600">CALF</td>
+                <td style="text-align:center;padding:6px 8px">Pitch (колено)</td>
+                <td style="text-align:center;padding:6px 8px;color:var(--green)">Колено разгибается ⌒</td>
+                <td style="text-align:center;padding:6px 8px;color:var(--orange)">Колено сгибается ⌒⁻¹</td>
+              </tr>
+            </tbody>
+          </table>
+          <p style="color:var(--text-dim);font-size:.78em;margin-top:8px" data-i18n="cfg.sign_note">⚠ Для правых ног (RF, RR) флаг inverted=true зеркально отражает команду сервы: положительная команда → физическое движение в обратную сторону.</p>
+        </div>
+
+        <!-- Joint templates -->
+        <p style="color:var(--text-dim);font-size:.85em;margin-bottom:15px" data-i18n="cfg.joints_desc">
+          Лимиты применяются ко всем суставам данного типа (hip/thigh/calf). Neutral для calf должен совпадать с nominal_calf_angle.
+        </p>
+        <div id="joint-templates"></div>
+
+        <!-- Joint list with inversion -->
+        <h3 style="color:var(--blue);margin:20px 0 10px" data-i18n="cfg.joint_list_title">📋 Список суставов и инверсия</h3>
+        <p style="color:var(--text-dim);font-size:.82em;margin-bottom:10px" data-i18n="cfg.inversion_desc">
+          Инверсия (inverted) нужна для правых ног (RF, RR) — сервы установлены зеркально. inverted=true → команда умножается на −1.
+        </p>
+        <div id="joint-list-table"></div>
+      </div>
+    </div>
+
+    <!-- ═══════ GAIT ═══════ -->
+    <div class="cfg-section" id="sec-gait">
+      <div class="card">
+        <h2 data-i18n="cfg.gait_title">Походка</h2>
+
+        <!-- Gait test -->
+        <div style="background:rgba(233,69,96,.08);border:1px solid var(--accent);border-radius:8px;padding:12px;margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <button class="btn btn-red btn-sm" onclick="gaitTestForward()">🐾 Протестировать походку</button>
+            <button class="btn btn-dark btn-sm" onclick="gaitTestStop()">⏹ Остановить</button>
+            <span style="color:var(--orange);font-size:.82em" data-i18n="cfg.gait_warn">⚠ Робот пойдёт! Убедитесь, что есть место. Скорость 0.15 м/с.</span>
+          </div>
+        </div>
+        <div class="cfg-group">
+          <div class="cfg-row"><label>default_type</label><input type="text" id="gait.default_type" readonly style="background:var(--bg-dark);color:var(--green)"><span class="hint" data-i18n="cfg.hint_default_type">Тип походки по умолчанию. Сейчас поддерживается только trot.</span></div>
+          <div class="cfg-row"><label>control_rate_hz</label><input type="number" id="gait.control_rate_hz" step="10" min="10" max="200"><span class="hint" data-i18n="cfg.hint_gait_rate">Частота цикла управления походкой, Гц. Определяет дискретность шага.</span></div>
+          <div class="cfg-row"><label>velocity_deadzone</label><input type="number" id="gait.velocity_deadzone" step="0.005" min="0" max="0.1"><span class="hint" data-i18n="cfg.hint_vel_dead">Мёртвая зона скорости. Команды ниже этого порога игнорируются.</span></div>
+          <div class="cfg-row"><label>ik_safety_margin (мм)</label><input type="number" id="gait.ik_safety_margin_m" data-unit="mm" step="0.1" min="0" max="10"><span class="hint" data-i18n="cfg.hint_ik_safety">Запас до предела IK. Нога не подходит ближе этого расстояния к сингулярности.</span></div>
+        </div>
+        <div class="cfg-group">
+          <div class="param-group-title">Trot</div>
+          <div class="cfg-row"><label>period_s</label><input type="number" id="gait.trot.period_s" step="0.05" min="0.1" max="3.0"><span class="hint" data-i18n="cfg.hint_period">Полный цикл походки (2 шага диагональной пары), секунды.</span></div>
+          <div class="cfg-row"><label>step_height (мм)</label><input type="number" id="gait.trot.step_height_m" data-unit="mm" step="0.5" min="5" max="200"><span class="hint" data-i18n="cfg.hint_step_h">Высота подъёма стопы в фазе переноса, мм.</span></div>
+          <div class="cfg-row"><label>step_length_scale</label><input type="number" id="gait.trot.step_length_scale" step="0.05" min="0.1" max="2.0"><span class="hint" data-i18n="cfg.hint_step_scale">Множитель длины шага относительно скорости. Больше = шире шаг.</span></div>
+          <div class="cfg-row"><label>turn_gain</label><input type="number" id="gait.trot.turn_gain" step="0.01" min="0" max="0.5"><span class="hint" data-i18n="cfg.hint_turn_gain">Коэффициент связи угловой скорости с боковым смещением стоп.</span></div>
+          <div class="cfg-row"><label>cog_pitch_gain (мм/рад)</label><input type="number" id="gait.trot.cog_pitch_gain_m_per_rad" step="0.005" min="0" max="0.1"><span class="hint" data-i18n="cfg.hint_cog_pitch">Смещение центра тяжести по тангажу при движении. Компенсирует наклон корпуса.</span></div>
+          <div class="cfg-row"><label>cog_roll_gain (мм/рад)</label><input type="number" id="gait.trot.cog_roll_gain_m_per_rad" step="0.005" min="0" max="0.1"><span class="hint" data-i18n="cfg.hint_cog_roll">Смещение центра тяжести по крену при повороте. Компенсирует боковой наклон.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ BALANCE ═══════ -->
+    <div class="cfg-section" id="sec-balance">
+      <div class="card">
+        <h2 data-i18n="cfg.balance_title">Балансировка (PID)</h2>
+
+        <!-- Balance test -->
+        <div style="background:rgba(233,69,96,.08);border:1px solid var(--accent);border-radius:8px;padding:12px;margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <button class="btn btn-red btn-sm" onclick="balanceTest()">⚖️ Применить позу баланса</button>
+            <button class="btn btn-dark btn-sm" onclick="balanceTestStop()">⏹ Сбросить</button>
+            <span style="color:var(--orange);font-size:.82em" data-i18n="cfg.balance_warn">⚠ Робот встанет в configured pose. Баланс использует текущие PID коэффициенты.</span>
+          </div>
+        </div>
+        <div class="cfg-group">
+          <div class="param-group-title">Roll (крен)</div>
+          <div class="cfg-row"><label>kp_roll</label><input type="number" id="balance.pid.roll.kp" step="0.01" min="0" max="5"><span class="hint" data-i18n="cfg.hint_kp_roll">Пропорциональный коэффициент по крену. Реакция на отклонение roll.</span></div>
+          <div class="cfg-row"><label>ki_roll</label><input type="number" id="balance.pid.roll.ki" step="0.005" min="0" max="1"><span class="hint" data-i18n="cfg.hint_ki_roll">Интегральный коэффициент по крену. Накапливает ошибку, устраняет статический перекос.</span></div>
+          <div class="cfg-row"><label>kd_roll</label><input type="number" id="balance.pid.roll.kd" step="0.005" min="0" max="1"><span class="hint" data-i18n="cfg.hint_kd_roll">Дифференциальный коэффициент по крену. Гасит колебания, демпфирование.</span></div>
+        </div>
+        <div class="cfg-group">
+          <div class="param-group-title">Pitch (тангаж)</div>
+          <div class="cfg-row"><label>kp_pitch</label><input type="number" id="balance.pid.pitch.kp" step="0.01" min="0" max="5"><span class="hint" data-i18n="cfg.hint_kp_pitch">Пропорциональный коэффициент по тангажу. Реакция на наклон вперёд/назад.</span></div>
+          <div class="cfg-row"><label>ki_pitch</label><input type="number" id="balance.pid.pitch.ki" step="0.005" min="0" max="1"><span class="hint" data-i18n="cfg.hint_ki_pitch">Интегральный коэффициент по тангажу. Компенсирует постоянный наклон.</span></div>
+          <div class="cfg-row"><label>kd_pitch</label><input type="number" id="balance.pid.pitch.kd" step="0.005" min="0" max="1"><span class="hint" data-i18n="cfg.hint_kd_pitch">Дифференциальный коэффициент по тангажу. Гасит колебания корпуса.</span></div>
+        </div>
+        <div class="cfg-group">
+          <div class="param-group-title">Height (высота)</div>
+          <div class="cfg-row"><label>kp_height</label><input type="number" id="balance.pid.height.kp" step="0.1" min="0" max="10"><span class="hint" data-i18n="cfg.hint_kp_height">Пропорциональный коэффициент по высоте. Поддерживает заданную высоту стойки.</span></div>
+          <div class="cfg-row"><label>ki_height</label><input type="number" id="balance.pid.height.ki" step="0.05" min="0" max="2"><span class="hint" data-i18n="cfg.hint_ki_height">Интегральный коэффициент по высоте. Компенсирует проседание под нагрузкой.</span></div>
+          <div class="cfg-row"><label>kd_height</label><input type="number" id="balance.pid.height.kd" step="0.05" min="0" max="2"><span class="hint" data-i18n="cfg.hint_kd_height">Дифференциальный коэффициент по высоте. Гасит вертикальные колебания (пружина).</span></div>
+        </div>
+        <div class="cfg-group">
+          <div class="param-group-title" data-i18n="cfg.limits">Лимиты</div>
+          <div class="cfg-row"><label>max_roll_correction (°)</label><input type="number" id="balance.max_correction.roll_rad" data-unit="deg" step="1" min="0" max="30"><span class="hint" data-i18n="cfg.hint_max_roll">Максимальная коррекция крена. Ограничивает компенсирующий наклон.</span></div>
+          <div class="cfg-row"><label>max_pitch_correction (°)</label><input type="number" id="balance.max_correction.pitch_rad" data-unit="deg" step="1" min="0" max="30"><span class="hint" data-i18n="cfg.hint_max_pitch">Максимальная коррекция тангажа. Ограничивает компенсирующий наклон.</span></div>
+          <div class="cfg-row"><label>max_height_correction (мм)</label><input type="number" id="balance.max_correction.height_m" data-unit="mm" step="0.5" min="0" max="200"><span class="hint" data-i18n="cfg.hint_max_height">Максимальная коррекция высоты. Предотвращает чрезмерное проседание/подъём.</span></div>
+          <div class="cfg-row"><label>max_correction_rate</label><input type="number" id="balance.max_correction_rate" step="0.1" min="0" max="5"><span class="hint" data-i18n="cfg.hint_corr_rate">Максимальная скорость изменения коррекции, рад/с. Сглаживает реакцию.</span></div>
+          <div class="cfg-row"><label>target_pose_clamp (°)</label><input type="number" id="balance.target_pose_clamp_rad" data-unit="deg" step="1" min="3" max="60"><span class="hint" data-i18n="cfg.hint_pose_clamp">Ограничение целевой позы. Команды наклона выше этого значения обрезаются.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ IMU ═══════ -->
+    <div class="cfg-section" id="sec-imu">
+      <div class="card">
+        <h2 data-i18n="cfg.imu_title">IMU (MPU6050)</h2>
+
+        <!-- IMU test -->
+        <div style="background:rgba(78,205,196,.08);border:1px solid var(--blue);border-radius:8px;padding:12px;margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <button class="btn btn-sm" style="background:var(--blue);color:#fff" onclick="imuTest()">📡 Прочитать IMU</button>
+            <span style="color:var(--text-dim);font-size:.82em" data-i18n="cfg.imu_warn">Показывает текущие roll/pitch/yaw. Проверяет связь с датчиком.</span>
+          </div>
+        </div>
+        <div class="cfg-row"><label>i2c_bus</label><input type="text" id="imu.i2c_bus" style="background:var(--bg-input);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;width:180px"><span class="hint" data-i18n="cfg.hint_i2c_bus">Путь к I2C-шине, например /dev/i2c-0. На Banana Pi обычно /dev/i2c-3.</span></div>
+        <div class="cfg-row"><label>mpu6050_address</label><input type="number" id="imu.mpu6050_address" step="1" min="0" max="127"><span class="hint" data-i18n="cfg.hint_mpu_addr">I2C-адрес MPU6050 (104 = 0x68 по умолчанию, 105 = 0x69 если AD0=HIGH).</span></div>
+        <div class="cfg-row"><label>publish_rate_hz</label><input type="number" id="imu.publish_rate_hz" step="10" min="10" max="200"><span class="hint" data-i18n="cfg.hint_imu_rate">Частота публикации данных IMU в ROS2, Гц. Должна быть ≤ частота опроса датчика.</span></div>
+        <div class="cfg-group" style="margin-top:16px">
+          <div class="param-group-title">Mahony Filter</div>
+          <div class="cfg-row"><label>mahony.kp</label><input type="number" id="imu.mahony.kp" step="0.1" min="0" max="10"><span class="hint" data-i18n="cfg.hint_mahony_kp">Пропорциональный коэффициент фильтра Махони. Больше = быстрее отслеживание, больше шум.</span></div>
+          <div class="cfg-row"><label>mahony.ki</label><input type="number" id="imu.mahony.ki" step="0.001" min="0" max="1"><span class="hint" data-i18n="cfg.hint_mahony_ki">Интегральный коэффициент фильтра Махони. Устраняет дрейф гироскопа. Обычно << Kp.</span></div>
+        </div>
+        <div class="cfg-row"><label>complementary_alpha</label><input type="number" id="imu.complementary_alpha" step="0.01" min="0.5" max="1.0"><span class="hint" data-i18n="cfg.hint_comp_alpha">Вес акселерометра в комплементарном фильтре. 0.98 = 98% гироскоп, 2% аксель.</span></div>
+        <div class="cfg-row"><label>max_stale_duration_s</label><input type="number" id="imu.max_stale_duration_s" step="0.1" min="0.1" max="5.0"><span class="hint" data-i18n="cfg.hint_stale">Если данных нет дольше этого времени, IMU считается отключённым.</span></div>
+      </div>
+    </div>
+
+    <!-- ═══════ SERVO DRIVER ═══════ -->
+    <div class="cfg-section" id="sec-servo">
+      <div class="card">
+        <h2 data-i18n="cfg.servo_title">Драйвер сервоприводов</h2>
+
+        <!-- Servo test -->
+        <div style="background:rgba(78,205,196,.08);border:1px solid var(--blue);border-radius:8px;padding:12px;margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <button class="btn btn-sm" style="background:var(--blue);color:#fff" onclick="servoScan()">🔍 Сканировать сервоприводы</button>
+            <span style="color:var(--text-dim);font-size:.82em" data-i18n="cfg.servo_warn">Показывает количество найденных сервоприводов и их текущие позиции.</span>
+          </div>
+        </div>
+        <div class="cfg-row"><label>bus_type</label>
+          <select id="servo_driver.bus_type">
+            <option value="simulation">simulation</option>
+            <option value="i2c">i2c</option>
+            <option value="uart">uart</option>
+          </select>
+          <span class="hint" data-i18n="cfg.hint_bus_type">Тип шины. simulation = без железа, i2c = PCA9685, uart = UART-сервы.</span>
+        </div>
+        <div class="cfg-row"><label>device_port</label><input type="text" id="servo_driver.device_port" style="background:var(--bg-input);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;width:180px"><span class="hint" data-i18n="cfg.hint_device_port">Путь к устройству. Для I2C: /dev/i2c-3, для UART: /dev/ttyS2.</span></div>
+        <div class="cfg-row"><label>pca9685_address</label><input type="number" id="servo_driver.pca9685_address" step="1" min="0" max="127"><span class="hint" data-i18n="cfg.hint_pca_addr">I2C-адрес PCA9685 (64 = 0x40 по умолчанию).</span></div>
+        <div class="cfg-row"><label>pwm_frequency_hz</label><input type="number" id="servo_driver.pwm_frequency_hz" step="1" min="1" max="1000"><span class="hint" data-i18n="cfg.hint_pwm_freq">Частота ШИМ для серв, Гц. Стандарт: 50 Гц (период 20 мс).</span></div>
+        <div class="cfg-row"><label>watchdog_timeout_s</label><input type="number" id="servo_driver.watchdog_timeout_s" step="0.1" min="0.1" max="5.0"><span class="hint" data-i18n="cfg.hint_watchdog">Если команд нет дольше этого времени, сервы обесточиваются (безопасность).</span></div>
+        <div class="cfg-row"><label>max_position_delta (°)</label><input type="number" id="servo_driver.max_position_delta_rad" data-unit="deg" step="1" min="1" max="60"><span class="hint" data-i18n="cfg.hint_max_delta">Максимальное изменение позиции за один цикл. Ограничивает скорость сервы (безопасность).</span></div>
+        <div class="cfg-row"><label>control_rate_hz</label><input type="number" id="servo_driver.control_rate_hz" step="10" min="10" max="200"><span class="hint" data-i18n="cfg.hint_servo_rate">Частота обновления позиций серв, Гц. Обычно 50–100 Гц.</span></div>
+        <div class="cfg-row"><label>enable_interpolation</label>
+          <select id="servo_driver.enable_interpolation"><option value="true">true</option><option value="false">false</option></select>
+          <span class="hint" data-i18n="cfg.hint_interp">Плавная интерполяция между целевыми позициями. true = мягкие движения.</span>
+        </div>
+        <div class="cfg-row"><label>interpolation_time_s</label><input type="number" id="servo_driver.interpolation_time_s" step="0.01" min="0.01" max="0.5"><span class="hint" data-i18n="cfg.hint_interp_time">Время интерполяции между текущей и целевой позицией, секунды.</span></div>
+      </div>
+    </div>
+
+    <!-- ═══════ TELEOP ═══════ -->
+    <div class="cfg-section" id="sec-teleop">
+      <div class="card">
+        <h2 data-i18n="cfg.teleop_title">Телеуправление</h2>
+        <div class="cfg-row"><label>max_linear_speed</label><input type="number" id="teleop.max_linear_speed" step="0.05" min="0.05" max="3.0"><span class="hint" data-i18n="cfg.hint_max_lin">Максимальная линейная скорость вперёд/назад, м/с. Ограничивает скорость робота.</span></div>
+        <div class="cfg-row"><label>max_angular_speed</label><input type="number" id="teleop.max_angular_speed" step="0.1" min="0.1" max="6.0"><span class="hint" data-i18n="cfg.hint_max_ang">Максимальная угловая скорость поворота, рад/с.</span></div>
+        <div class="cfg-row"><label>max_lateral_speed</label><input type="number" id="teleop.max_lateral_speed" step="0.05" min="0.05" max="2.0"><span class="hint" data-i18n="cfg.hint_max_lat">Максимальная боковая скорость (strafe), м/с.</span></div>
+        <div class="cfg-row"><label>publish_rate_hz</label><input type="number" id="teleop.publish_rate_hz" step="10" min="10" max="200"><span class="hint" data-i18n="cfg.hint_teleop_rate">Частота публикации команд управления, Гц.</span></div>
+        <div class="cfg-row"><label>watchdog_timeout_s</label><input type="number" id="teleop.watchdog_timeout_s" step="0.1" min="0.1" max="5.0"><span class="hint" data-i18n="cfg.hint_teleop_wd">Если нет команд дольше этого времени, робот останавливается (безопасность).</span></div>
+        <div class="cfg-row"><label>axis_deadzone</label><input type="number" id="teleop.axis_deadzone" step="0.01" min="0" max="0.5"><span class="hint" data-i18n="cfg.hint_axis_dead">Мёртвая зона осей джойстика/клавиатуры. Значения ниже игнорируются.</span></div>
+      </div>
+    </div>
+
+    <!-- ═══════ CODE GEN ═══════ -->
+    <div class="cfg-section" id="sec-codegen">
+      <div class="card">
+        <h2 data-i18n="cfg.codegen_title">Генерация кода (C++)</h2>
+        <p style="color:var(--text-dim);font-size:.85em;margin-bottom:15px" data-i18n="cfg.codegen_desc">
+          Автогенерированные константы для вставки в C++ исходный код. Рассчитываются из текущей конфигурации.
+        </p>
+        <div class="cfg-row"><label style="min-width:160px">inverted[]</label></div>
+        <div class="code-box" id="codegen-inverted">—</div>
+        <div class="cfg-row" style="margin-top:12px"><label style="min-width:160px">initial_angles[]</label></div>
+        <div class="code-box" id="codegen-angles">—</div>
+        <div class="cfg-row" style="margin-top:12px"><label style="min-width:160px">joint_names[]</label></div>
+        <div class="code-box" id="codegen-names">—</div>
+      </div>
+    </div>
+
+  </main>
+
+  <script src="/static/common.js"></script>
+  <script src="/static/i18n.js"></script>
+  <script>
+    let currentConfig = null;
+
+    const DEG = Math.PI / 180;
+    const RAD = 180 / Math.PI;
+    function toDeg(r) { return r * RAD; }
+    function toRad(d) { return d * DEG; }
+    function toMm(m) { return m * 1000; }
+    function toM(mm) { return mm / 1000; }
+
+    // ─── Joint list with inversion ───
+    function renderJointList(joints) {
+      const container = document.getElementById('joint-list-table');
+      const list = joints.list || [];
+      // Build angle arrays from templates
+      const types = { hip: joints.hip || {}, thigh: joints.thigh || {}, calf: joints.calf || {} };
+      let html = `<table style="width:100%;font-size:.85em;border-collapse:collapse;background:var(--bg-dark);border-radius:8px;overflow:hidden">
+        <thead>
+          <tr style="color:var(--text-dim);border-bottom:2px solid var(--border)">
+            <th style="text-align:left;padding:8px">ID</th>
+            <th style="text-align:left;padding:8px">Сустав</th>
+            <th style="text-align:center;padding:8px">Тип</th>
+            <th style="text-align:center;padding:8px">Нога</th>
+            <th style="text-align:center;padding:8px">Inverted</th>
+            <th style="text-align:center;padding:8px">Тест</th>
+          </tr>
+        </thead><tbody>`;
+      list.forEach((j, i) => {
+        const legColor = j.leg?.startsWith('R') ? 'var(--orange)' : 'var(--green)';
+        html += `<tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:6px 8px;color:var(--text-dim)">${j.servo_id ?? i}</td>
+          <td style="padding:6px 8px;font-family:monospace;font-size:.88em">${j.name}</td>
+          <td style="text-align:center;padding:6px 8px;color:var(--accent)">${j.type}</td>
+          <td style="text-align:center;padding:6px 8px;color:${legColor};font-weight:600">${j.leg || '—'}</td>
+          <td style="text-align:center;padding:6px 8px">
+            <select id="jinv.${i}" style="background:var(--bg-input);border:1px solid var(--border);color:var(--text);padding:3px 8px;border-radius:4px;font-size:.85em;cursor:pointer">
+              <option value="false" ${!j.inverted ? 'selected' : ''}>false</option>
+              <option value="true" ${j.inverted ? 'selected' : ''}>true</option>
+            </select>
+          </td>
+          <td style="text-align:center;padding:6px 8px">
+            <button class="btn btn-sm" style="padding:3px 10px;font-size:.78em" onclick="liveTestJoint(${i})" title="Двигнуть сустав в neutral">⚡</button>
+            <button class="btn btn-dark btn-sm" style="padding:3px 10px;font-size:.78em" onclick="liveTestJointZero(${i})" title="Вернуть в 0">⏹</button>
+          </td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+      html += `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-red btn-sm" onclick="livePoseNeutralAll()" data-i18n="cfg.live_all_neutral">⚡ Все в neutral</button>
+        <button class="btn btn-dark btn-sm" onclick="livePoseZeroAll()" data-i18n="cfg.live_all_zero">⏹ Все в ноль</button>
+        <span style="color:var(--orange);font-size:.82em" data-i18n="cfg.live_jwarn">⚠ Робот двинется! Проверьте сервы.</span>
+      </div>`;
+      container.innerHTML = html;
+    }
+
+    // ─── Live preview functions ───
+
+    /** Send 12 joint positions to robot via server endpoint */
+    async function liveSendPositions(positions) {
+      return await api('/api/config/test/pose', { positions: positions });
+    }
+
+    /** Build standing pose from current form values */
+    function buildStandingPose() {
+      if (!currentConfig) return null;
+      const hipAng = num('standing.nominal_hip_angle_rad');
+      const thighAng = num('standing.nominal_thigh_angle_rad');
+      const calfAng = num('standing.nominal_calf_angle_rad');
+      const list = (currentConfig.joints || {}).list || [];
+      return list.map(j => {
+        if (j.type === 'hip') return hipAng;
+        if (j.type === 'thigh') return thighAng;
+        if (j.type === 'calf') return calfAng;
+        return 0;
+      });
+    }
+
+    /** Standing: apply current nominal angles as pose */
+    async function livePoseStanding() {
+      const positions = buildStandingPose();
+      if (!positions || positions.length !== 12) {
+        showStatus('err', 'Config not loaded');
+        return;
+      }
+      const res = await liveSendPositions(positions);
+      if (res && res.error) { showStatus('err', res.error); return; }
+      showStatus('ok', '🦿 ' + (t('cfg.live_sent') || 'Standing pose sent'));
+    }
+
+    /** Standing: zero all joints */
+    async function livePoseZero() {
+      const res = await liveSendPositions(new Array(12).fill(0));
+      if (res && res.error) { showStatus('err', res.error); return; }
+      showStatus('ok', '⏹ ' + (t('cfg.live_zero_sent') || 'Zero pose sent'));
+    }
+
+    /** Test single joint — move to its neutral angle (others stay at 0) */
+    async function liveTestJoint(index) {
+      if (!currentConfig) return;
+      const list = (currentConfig.joints || {}).list || [];
+      const j = list[index];
+      if (!j) return;
+      const tmpl = (currentConfig.joints || {})[j.type] || {};
+      const positions = new Array(12).fill(0);
+      positions[index] = tmpl.neutral_rad || 0;
+      const res = await liveSendPositions(positions);
+      if (res && res.error) { showStatus('err', res.error); return; }
+      showStatus('ok', `⚡ #${j.servo_id ?? index} ${j.name} → neutral (${parseFloat(toDeg(tmpl.neutral_rad || 0).toFixed(1))}°)`);
+    }
+
+    /** Test single joint — return to 0 */
+    async function liveTestJointZero(index) {
+      if (!currentConfig) return;
+      const list = (currentConfig.joints || {}).list || [];
+      const positions = new Array(12).fill(0);
+      const res = await liveSendPositions(positions);
+      const j = list[index];
+      if (res && res.error) { showStatus('err', res.error); return; }
+      showStatus('ok', `⏹ ${j ? j.name : 'Joint '+index} → 0°`);
+    }
+
+    /** All joints to their neutral positions */
+    async function livePoseNeutralAll() {
+      if (!currentConfig) return;
+      const list = (currentConfig.joints || {}).list || [];
+      const positions = list.map(j => {
+        const tmpl = (currentConfig.joints || {})[j.type] || {};
+        return tmpl.neutral_rad || 0;
+      });
+      const res = await liveSendPositions(positions);
+      if (res && res.error) { showStatus('err', res.error); return; }
+      showStatus('ok', '⚡ ' + (t('cfg.live_all_sent') || 'All joints → neutral'));
+    }
+
+    /** All joints to zero */
+    async function livePoseZeroAll() {
+      const res = await liveSendPositions(new Array(12).fill(0));
+      if (res && res.error) { showStatus('err', res.error); return; }
+      showStatus('ok', '⏹ All joints → 0°');
+    }
+
+    // ─── Gait test ───
+    async function gaitTestForward() {
+      const res = await api('/api/config/test/gait', { linear_x: 0.15 });
+      if (res && res.error) { showStatus('err', res.error); return; }
+      showStatus('ok', '🐾 ' + (t('cfg.gait_fwd') || 'Walking forward (0.15 m/s) — watch robot!'));
+    }
+    async function gaitTestStop() {
+      const res = await api('/api/config/test/gait', { linear_x: 0, linear_y: 0, angular_z: 0 });
+      if (res && res.error) { showStatus('err', res.error); return; }
+      showStatus('ok', '⏹ ' + (t('cfg.gait_stop') || 'Gait stopped'));
+    }
+
+    // ─── Balance test — apply standing pose then tilt correction ───
+    async function balanceTest() {
+      // First go to standing
+      const positions = buildStandingPose();
+      if (!positions || positions.length !== 12) { showStatus('err', 'Config not loaded'); return; }
+      let res = await liveSendPositions(positions);
+      if (res && res.error) { showStatus('err', res.error); return; }
+      showStatus('ok', '⚖️ ' + (t('cfg.balance_test') || 'Standing pose applied — balance controller uses these PID params'));
+    }
+    async function balanceTestStop() {
+      await liveSendPositions(new Array(12).fill(0));
+      showStatus('ok', '⏹ Balance test stopped');
+    }
+
+    // ─── IMU test ───
+    async function imuTest() {
+      const res = await api('/api/config/test/imu');
+      if (res && res.error) { showStatus('err', res.error); return; }
+      if (!res.imu) { showStatus('err', 'No IMU data'); return; }
+      const imu = res.imu;
+      const roll = imu.roll_deg ?? '—';
+      const pitch = imu.pitch_deg ?? '—';
+      const yaw = imu.yaw_deg ?? '—';
+      showStatus('ok', `📡 IMU: roll=${roll}° pitch=${pitch}° yaw=${yaw}°`);
+    }
+
+    // ─── Servo scan ───
+    async function servoScan() {
+      const res = await api('/api/config/test/servo_scan');
+      if (res && res.error) { showStatus('err', res.error); return; }
+      const cnt = res.servo_count ?? 0;
+      const pos = (res.positions || []).map((p, i) => `${i}:${parseFloat(p).toFixed(2)}`).join(' ');
+      showStatus('ok', `🔍 ${cnt} servos found: ${pos || '—'}`);
+    }
+
+    // ─── Load config ───
+    async function loadConfig() {
+      const cfg = await api('/api/config');
+      if (!cfg || cfg.error) {
+        showStatus('err', cfg?.error || 'Failed to load config');
+        return;
+      }
+      currentConfig = cfg;
+      populateFields(cfg);
+      showFK(cfg.body?.standing?._computed || {});
+      showCodegen(cfg._codegen || {});
+      showStatus('ok', t('cfg.loaded_ok') || 'Config loaded');
+    }
+
+    function populateFields(cfg) {
+      const body = cfg.body || {};
+      const standing = body.standing || {};
+      const links = body.link_lengths_m || {};
+      const gait = cfg.gait || {};
+      const trot = (gait.gaits || {}).trot || {};
+      const bal = cfg.balance || {};
+      const pid = bal.pid || {};
+      const imu = cfg.imu || {};
+      const servo = cfg.servo_driver || {};
+      const teleop = cfg.teleop || {};
+
+      // Body
+      setVal('body.length_m', body.length_m);
+      setVal('body.width_m', body.width_m);
+      setVal('body.mass_kg', body.mass_kg);
+      setVal('link_lengths.hip', links.hip);
+      setVal('link_lengths.thigh', links.thigh);
+      setVal('link_lengths.calf', links.calf);
+
+      // Standing
+      setVal('standing.nominal_calf_angle_rad', standing.nominal_calf_angle_rad);
+      setVal('standing.nominal_thigh_angle_rad', standing.nominal_thigh_angle_rad);
+      setVal('standing.nominal_hip_angle_rad', standing.nominal_hip_angle_rad);
+      setVal('standing.foot_x_scale', standing.foot_x_scale);
+      setVal('standing.foot_y_scale', standing.foot_y_scale);
+      setVal('standing.height_min_ratio', standing.height_min_ratio);
+      setVal('standing.height_max_ratio', standing.height_max_ratio);
+
+      // Joints templates + list
+      renderJointTemplates(cfg.joints || {});
+      renderJointList(cfg.joints || {});
+
+      // Gait
+      setVal('gait.default_type', gait.default_type);
+      setVal('gait.control_rate_hz', gait.control_rate_hz);
+      setVal('gait.velocity_deadzone', gait.velocity_deadzone);
+      setVal('gait.ik_safety_margin_m', gait.ik_safety_margin_m);
+      setVal('gait.trot.period_s', trot.period_s);
+      setVal('gait.trot.step_height_m', trot.step_height_m);
+      setVal('gait.trot.step_length_scale', trot.step_length_scale);
+      setVal('gait.trot.turn_gain', trot.turn_gain);
+      setVal('gait.trot.cog_pitch_gain_m_per_rad', trot.cog_pitch_gain_m_per_rad);
+      setVal('gait.trot.cog_roll_gain_m_per_rad', trot.cog_roll_gain_m_per_rad);
+
+      // Balance
+      setVal('balance.pid.roll.kp', (pid.roll||{}).kp);
+      setVal('balance.pid.roll.ki', (pid.roll||{}).ki);
+      setVal('balance.pid.roll.kd', (pid.roll||{}).kd);
+      setVal('balance.pid.pitch.kp', (pid.pitch||{}).kp);
+      setVal('balance.pid.pitch.ki', (pid.pitch||{}).ki);
+      setVal('balance.pid.pitch.kd', (pid.pitch||{}).kd);
+      setVal('balance.pid.height.kp', (pid.height||{}).kp);
+      setVal('balance.pid.height.ki', (pid.height||{}).ki);
+      setVal('balance.pid.height.kd', (pid.height||{}).kd);
+      setVal('balance.max_correction.roll_rad', (bal.max_correction||{}).roll_rad);
+      setVal('balance.max_correction.pitch_rad', (bal.max_correction||{}).pitch_rad);
+      setVal('balance.max_correction.height_m', (bal.max_correction||{}).height_m);
+      setVal('balance.max_correction_rate', bal.max_correction_rate);
+      setVal('balance.target_pose_clamp_rad', bal.target_pose_clamp_rad);
+
+      // IMU
+      setVal('imu.i2c_bus', imu.i2c_bus, true);
+      setVal('imu.mpu6050_address', imu.mpu6050_address);
+      setVal('imu.publish_rate_hz', imu.publish_rate_hz);
+      setVal('imu.mahony.kp', (imu.mahony_filter||{}).kp);
+      setVal('imu.mahony.ki', (imu.mahony_filter||{}).ki);
+      setVal('imu.complementary_alpha', imu.complementary_alpha);
+      setVal('imu.max_stale_duration_s', imu.max_stale_duration_s);
+
+      // Servo driver
+      setSel('servo_driver.bus_type', servo.bus_type);
+      setVal('servo_driver.device_port', servo.device_port, true);
+      setVal('servo_driver.pca9685_address', servo.pca9685_address);
+      setVal('servo_driver.pwm_frequency_hz', servo.pwm_frequency_hz);
+      setVal('servo_driver.watchdog_timeout_s', servo.watchdog_timeout_s);
+      setVal('servo_driver.max_position_delta_rad', servo.max_position_delta_rad);
+      setVal('servo_driver.control_rate_hz', servo.control_rate_hz);
+      setSel('servo_driver.enable_interpolation', String(servo.enable_interpolation));
+      setVal('servo_driver.interpolation_time_s', servo.interpolation_time_s);
+
+      // Teleop
+      setVal('teleop.max_linear_speed', teleop.max_linear_speed);
+      setVal('teleop.max_angular_speed', teleop.max_angular_speed);
+      setVal('teleop.max_lateral_speed', teleop.max_lateral_speed);
+      setVal('teleop.publish_rate_hz', teleop.publish_rate_hz);
+      setVal('teleop.watchdog_timeout_s', teleop.watchdog_timeout_s);
+      setVal('teleop.axis_deadzone', teleop.axis_deadzone);
+    }
+
+    function setVal(id, val, isText) {
+      const el = document.getElementById(id);
+      if (el) {
+        if (val == null) { el.value = ''; return; }
+        if (el.dataset.unit === 'deg') el.value = parseFloat(toDeg(val).toFixed(2));
+        else if (el.dataset.unit === 'mm') el.value = parseFloat(toMm(val).toFixed(1));
+        else el.value = val;
+      }
+    }
+    function setSel(id, val) {
+      const el = document.getElementById(id);
+      if (el) el.value = val || '';
+    }
+
+    // ─── Joint templates ───
+    function renderJointTemplates(joints) {
+      const container = document.getElementById('joint-templates');
+      container.innerHTML = '';
+      const hints = {
+        hip:   { name: 'HIP (бедро/отведение)', desc: 'Ось отведения ноги вбок (roll). Поворот в тазовом шарнире.' },
+        thigh: { name: 'THIGH (бедро/привод)', desc: 'Ось наклона бедра вперёд/назад (pitch). Основной двигатель ходьбы.' },
+        calf:  { name: 'CALF (голень/колено)', desc: 'Ось колена (pitch). Сгибание/разгибание голени. Neutral должен совпадать с nominal_calf_angle.' },
+      };
+      for (const type of ['hip', 'thigh', 'calf']) {
+        const tmpl = joints[type] || {};
+        const h = hints[type];
+        const div = document.createElement('div');
+        div.className = 'cfg-group';
+        div.innerHTML = `
+          <div class="param-group-title" style="color:var(--accent)">${h.name}</div>
+          <p style="color:var(--text-dim);font-size:.82em;margin-bottom:10px">${h.desc}</p>
+          <div class="cfg-row"><label>min (°)</label><input type="number" id="jtmpl.${type}.min_rad" data-unit="deg" step="1" value="${tmpl.min_rad != null ? parseFloat(toDeg(tmpl.min_rad).toFixed(1)) : 0}"><span class="hint" data-i18n="cfg.hint_jmin">Минимальный угол сустава. Физический предел в отрицательном направлении.</span></div>
+          <div class="cfg-row"><label>max (°)</label><input type="number" id="jtmpl.${type}.max_rad" data-unit="deg" step="1" value="${tmpl.max_rad != null ? parseFloat(toDeg(tmpl.max_rad).toFixed(1)) : 0}"><span class="hint" data-i18n="cfg.hint_jmax">Максимальный угол сустава. Физический предел в положительном направлении.</span></div>
+          <div class="cfg-row"><label>neutral (°)</label><input type="number" id="jtmpl.${type}.neutral_rad" data-unit="deg" step="1" value="${tmpl.neutral_rad != null ? parseFloat(toDeg(tmpl.neutral_rad).toFixed(1)) : 0}"><span class="hint" data-i18n="cfg.hint_jneutral">Нулевая позиция сервы (калибровочный угол). Для calf = nominal_calf_angle.</span></div>
+          <div class="cfg-row"><label>max_vel_rad_s</label><input type="number" id="jtmpl.${type}.max_vel_rad_s" step="1" value="${tmpl.max_vel_rad_s ?? 10}"><span class="hint" data-i18n="cfg.hint_jvel">Максимальная угловая скорость сервы, рад/с. Ограничивает быстродействие.</span></div>
+          <div class="cfg-row"><label>max_effort</label><input type="number" id="jtmpl.${type}.max_effort" step="1" value="${tmpl.max_effort ?? 10}"><span class="hint" data-i18n="cfg.hint_jeffort">Максимальное усилие сервы (условные единицы). Защита от перегрузки.</span></div>
+        `;
+        container.appendChild(div);
+      }
+    }
+
+    // ─── FK display ───
+    function showFK(comp) {
+      const h = comp.standing_height_m;
+      const mr = comp.max_reach_m;
+      const td = comp.target_dist_m;
+      document.getElementById('fk-h').textContent = h != null ? toMm(h).toFixed(1) + ' мм' : '—';
+      document.getElementById('fk-min').textContent = comp.min_height_m != null ? toMm(comp.min_height_m).toFixed(1) + ' мм' : '—';
+      document.getElementById('fk-max').textContent = comp.max_height_m != null ? toMm(comp.max_height_m).toFixed(1) + ' мм' : '—';
+      document.getElementById('fk-td').textContent = td != null ? toMm(td).toFixed(1) + ' мм' : '—';
+      document.getElementById('fk-mr').textContent = mr != null ? toMm(mr).toFixed(1) + ' мм' : '—';
+
+      // Warn if overshoot
+      const hEl = document.getElementById('fk-h');
+      if (td != null && mr != null && td > mr) {
+        hEl.className = 'fk-value warn';
+        hEl.textContent += ' ⚠ OVERSHOOT';
+      } else {
+        hEl.className = 'fk-value';
+      }
+    }
+
+    function showCodegen(cg) {
+      document.getElementById('codegen-inverted').textContent = cg.inverted_array_cpp || '—';
+      // Show initial angles in both rad and deg
+      const anglesCpp = cg.initial_angles_cpp || '—';
+      document.getElementById('codegen-angles').textContent = anglesCpp + '\n// deg: ' + (cg.initial_angles_deg || '—');
+      document.getElementById('codegen-names').textContent = cg.joint_names_cpp || '—';
+    }
+
+    // ─── Collect form data into config ───
+    function collectConfig() {
+      if (!currentConfig) return null;
+      const cfg = JSON.parse(JSON.stringify(currentConfig));
+
+      // Body
+      cfg.body.length_m = num('body.length_m');
+      cfg.body.width_m = num('body.width_m');
+      cfg.body.mass_kg = num('body.mass_kg');
+      cfg.body.link_lengths_m.hip = num('link_lengths.hip');
+      cfg.body.link_lengths_m.thigh = num('link_lengths.thigh');
+      cfg.body.link_lengths_m.calf = num('link_lengths.calf');
+
+      // Standing
+      cfg.body.standing.nominal_calf_angle_rad = num('standing.nominal_calf_angle_rad');
+      cfg.body.standing.nominal_thigh_angle_rad = num('standing.nominal_thigh_angle_rad');
+      cfg.body.standing.nominal_hip_angle_rad = num('standing.nominal_hip_angle_rad');
+      cfg.body.standing.foot_x_scale = num('standing.foot_x_scale');
+      cfg.body.standing.foot_y_scale = num('standing.foot_y_scale');
+      cfg.body.standing.height_min_ratio = num('standing.height_min_ratio');
+      cfg.body.standing.height_max_ratio = num('standing.height_max_ratio');
+
+      // Joint templates
+      for (const type of ['hip', 'thigh', 'calf']) {
+        cfg.joints[type].min_rad = num(`jtmpl.${type}.min_rad`);
+        cfg.joints[type].max_rad = num(`jtmpl.${type}.max_rad`);
+        cfg.joints[type].neutral_rad = num(`jtmpl.${type}.neutral_rad`);
+        cfg.joints[type].max_vel_rad_s = num(`jtmpl.${type}.max_vel_rad_s`);
+        cfg.joints[type].max_effort = num(`jtmpl.${type}.max_effort`);
+      }
+      // Joint list inversion
+      (cfg.joints.list || []).forEach((j, i) => {
+        const sel = document.getElementById(`jinv.${i}`);
+        if (sel) j.inverted = sel.value === 'true';
+      });
+
+      // Gait
+      cfg.gait.control_rate_hz = num('gait.control_rate_hz');
+      cfg.gait.velocity_deadzone = num('gait.velocity_deadzone');
+      cfg.gait.ik_safety_margin_m = num('gait.ik_safety_margin_m');
+      const trot = cfg.gait.gaits.trot;
+      trot.period_s = num('gait.trot.period_s');
+      trot.step_height_m = num('gait.trot.step_height_m');
+      trot.step_length_scale = num('gait.trot.step_length_scale');
+      trot.turn_gain = num('gait.trot.turn_gain');
+      trot.cog_pitch_gain_m_per_rad = num('gait.trot.cog_pitch_gain_m_per_rad');
+      trot.cog_roll_gain_m_per_rad = num('gait.trot.cog_roll_gain_m_per_rad');
+
+      // Balance
+      cfg.balance.pid.roll.kp = num('balance.pid.roll.kp');
+      cfg.balance.pid.roll.ki = num('balance.pid.roll.ki');
+      cfg.balance.pid.roll.kd = num('balance.pid.roll.kd');
+      cfg.balance.pid.pitch.kp = num('balance.pid.pitch.kp');
+      cfg.balance.pid.pitch.ki = num('balance.pid.pitch.ki');
+      cfg.balance.pid.pitch.kd = num('balance.pid.pitch.kd');
+      cfg.balance.pid.height.kp = num('balance.pid.height.kp');
+      cfg.balance.pid.height.ki = num('balance.pid.height.ki');
+      cfg.balance.pid.height.kd = num('balance.pid.height.kd');
+      cfg.balance.max_correction.roll_rad = num('balance.max_correction.roll_rad');
+      cfg.balance.max_correction.pitch_rad = num('balance.max_correction.pitch_rad');
+      cfg.balance.max_correction.height_m = num('balance.max_correction.height_m');
+      cfg.balance.max_correction_rate = num('balance.max_correction_rate');
+      cfg.balance.target_pose_clamp_rad = num('balance.target_pose_clamp_rad');
+
+      // IMU
+      cfg.imu.i2c_bus = document.getElementById('imu.i2c_bus').value;
+      cfg.imu.mpu6050_address = num('imu.mpu6050_address');
+      cfg.imu.publish_rate_hz = num('imu.publish_rate_hz');
+      cfg.imu.mahony_filter.kp = num('imu.mahony.kp');
+      cfg.imu.mahony_filter.ki = num('imu.mahony.ki');
+      cfg.imu.complementary_alpha = num('imu.complementary_alpha');
+      cfg.imu.max_stale_duration_s = num('imu.max_stale_duration_s');
+
+      // Servo driver
+      cfg.servo_driver.bus_type = document.getElementById('servo_driver.bus_type').value;
+      cfg.servo_driver.device_port = document.getElementById('servo_driver.device_port').value;
+      cfg.servo_driver.pca9685_address = num('servo_driver.pca9685_address');
+      cfg.servo_driver.pwm_frequency_hz = num('servo_driver.pwm_frequency_hz');
+      cfg.servo_driver.watchdog_timeout_s = num('servo_driver.watchdog_timeout_s');
+      cfg.servo_driver.max_position_delta_rad = num('servo_driver.max_position_delta_rad');
+      cfg.servo_driver.control_rate_hz = num('servo_driver.control_rate_hz');
+      cfg.servo_driver.enable_interpolation = document.getElementById('servo_driver.enable_interpolation').value === 'true';
+      cfg.servo_driver.interpolation_time_s = num('servo_driver.interpolation_time_s');
+
+      // Teleop
+      cfg.teleop.max_linear_speed = num('teleop.max_linear_speed');
+      cfg.teleop.max_angular_speed = num('teleop.max_angular_speed');
+      cfg.teleop.max_lateral_speed = num('teleop.max_lateral_speed');
+      cfg.teleop.publish_rate_hz = num('teleop.publish_rate_hz');
+      cfg.teleop.watchdog_timeout_s = num('teleop.watchdog_timeout_s');
+      cfg.teleop.axis_deadzone = num('teleop.axis_deadzone');
+
+      return cfg;
+    }
+
+    function num(id) {
+      const el = document.getElementById(id);
+      if (!el) return 0;
+      const v = parseFloat(el.value);
+      if (el.dataset.unit === 'deg') return toRad(v);
+      if (el.dataset.unit === 'mm') return toM(v);
+      return v;
+    }
+
+    // ─── Save ───
+    async function saveConfig() {
+      const cfg = collectConfig();
+      if (!cfg) return showStatus('err', 'No config loaded');
+      const res = await api('/api/config/save', { config: cfg });
+      if (res && res.status === 'ok') {
+        currentConfig = cfg;
+        showFK(res.fk || {});
+        showCodegen(res.codegen || {});
+        showStatus('ok', t('cfg.saved_ok') || 'Config saved. FK recomputed.');
+      } else {
+        showStatus('err', res?.error || 'Save failed');
+      }
+    }
+
+    // ─── Validate only ───
+    async function validateOnly() {
+      const cfg = collectConfig();
+      if (!cfg) return showStatus('err', 'No config loaded');
+      const res = await api('/api/config/validate', { config: cfg });
+      if (!res) return showStatus('err', 'Validation request failed');
+
+      if (res.valid) {
+        showStatus('ok', '✅ ' + (t('cfg.valid_ok') || 'Validation passed'));
+        showFK(res.fk || {});
+        showCodegen(res.codegen || {});
+      } else if (res.errors) {
+        showStatus('err', '❌ ' + res.errors.join('; '));
+      }
+
+      if (res.warnings && res.warnings.length) {
+        showStatus('warn', '⚠️ ' + res.warnings.join('; '));
+      }
+    }
+
+    // ─── Section tabs ───
+    function showSection(name) {
+      document.querySelectorAll('.cfg-section').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('.section-tab').forEach(t => t.classList.remove('active'));
+      document.getElementById('sec-' + name)?.classList.add('active');
+      document.querySelector(`.section-tab[data-section="${name}"]`)?.classList.add('active');
+    }
+
+    // ─── Status message ───
+    function showStatus(type, msg) {
+      const el = document.getElementById('status-msg');
+      el.className = 'status-msg ' + type;
+      el.textContent = msg;
+    }
+
+    // ─── Init ───
+    loadConfig();
+  </script>
+</body>
+</html>

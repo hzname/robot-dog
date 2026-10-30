@@ -21,6 +21,9 @@ public:
 };
 
 /// In-memory bus for tests and PC runs. pulse(ch) == 0 means output off.
+///
+/// Failures can be injected: a real I2C write can fail, and a driver that
+/// swallows that failure leaves the servos frozen at the last pulse (SAF-01).
 class MockBus : public ServoBus
 {
 public:
@@ -31,9 +34,30 @@ public:
 
   double pulse(int channel) const {return pulses_.at(channel);}
   int writes() const {return writes_;}
+  /// Calls that reached the bus for a channel, failed ones included.
+  int attempts(int channel) const {return attempts_.at(channel);}
+
+  /// The next `n` setPulseUs calls fail, whatever the channel.
+  void failNext(int n) {fail_next_ += n;}
+  /// The next `n` calls on `channel` fail.
+  void failChannel(int channel, int n) {fail_channel_.at(channel) += n;}
+  /// The next `n` disableAll calls fail.
+  void failDisableAll(int n) {fail_disable_all_ += n;}
+  /// The next `n` single-channel disable calls on `channel` fail.
+  void failDisable(int channel, int n) {fail_disable_.at(channel) += n;}
+  /// Single-channel disable calls that reached the bus.
+  int disableAttempts(int channel) const {return disable_attempts_.at(channel);}
+  /// The wire is fixed: every pending injected failure is dropped.
+  void clearFailures();
 
 private:
   std::array<double, kPwmChannels> pulses_{};
+  std::array<int, kPwmChannels> attempts_{};
+  std::array<int, kPwmChannels> fail_channel_{};
+  std::array<int, kPwmChannels> fail_disable_{};
+  std::array<int, kPwmChannels> disable_attempts_{};
+  int fail_next_{0};
+  int fail_disable_all_{0};
   int writes_{0};
 };
 
@@ -46,10 +70,10 @@ public:
   Pca9685Bus(const Pca9685Bus &) = delete;
   Pca9685Bus & operator=(const Pca9685Bus &) = delete;
 
-  /// Opens the bus and configures the PWM frequency. If the chip is already
-  /// awake at the right prescaler the outputs are left untouched (a restart
-  /// of the driver does not make the servos twitch). Returns false and fills
-  /// `error` on failure.
+  /// Opens the bus, configures the PWM frequency and turns every output off:
+  /// the robot is always started by hand, so a pulse inherited from a previous
+  /// process is more dangerous than a limp leg (D-06, SAF-12). Returns false and
+  /// fills `error` on failure, including an unconfirmed `disableAll`.
   bool open(const std::string & device, int address, double pwm_hz, double oscillator_hz,
     std::string & error);
   void close();

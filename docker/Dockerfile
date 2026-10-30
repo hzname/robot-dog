@@ -3,8 +3,10 @@
 #   docker build -f docker/Dockerfile -t robot-dog:2.0 .
 #   docker build -f docker/Dockerfile --build-arg ROS_DISTRO=lyrical -t robot-dog:2.0-lyrical .
 #
-# Only ros-base is needed: the workspace has no dependencies outside it
-# (no xacro, no joy, no ros2_control), which keeps the image small on the Pi.
+# ros-base plus std_srvs (the driver's release_fault service type). diagnostic_msgs
+# comes with ros-base; nothing else is added
+# outside it (no xacro, no joy, no ros2_control), which keeps the image small on
+# the Pi.
 ARG ROS_DISTRO=jazzy
 FROM ros:${ROS_DISTRO}-ros-base
 ARG ROS_DISTRO
@@ -12,6 +14,15 @@ ARG ROS_DISTRO
 ARG BUILD_JOBS=2
 
 SHELL ["/bin/bash", "-c"]
+# std_srvs is not in ros-base, and installing it alone is a trap: apt takes the
+# current build of it while the image keeps its older interface neighbours, and the
+# typesupport of the new package then calls symbols they do not have - the node dies
+# at startup with "symbol lookup error" (exit 127). Upgrading the whole installed set
+# in the same layer keeps the interface stack consistent.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ros-${ROS_DISTRO}-std-srvs \
+ && apt-get upgrade -y --no-install-recommends \
+ && rm -rf /var/lib/apt/lists/*
 WORKDIR /ws
 COPY ros2_ws/src ./src
 
@@ -22,6 +33,22 @@ RUN source /opt/ros/${ROS_DISTRO}/setup.bash \
  && rm -rf build log
 
 COPY docker/entrypoint.sh /entrypoint.sh
+# Preflight ships inside the image and the entrypoint runs it before the launch:
+# a step someone can forget is not a check (CAL-09). The smoke script is what CI
+# runs to prove the image can start the stack.
+COPY docker/ci_smoke.sh /ws/docker/ci_smoke.sh
+COPY docker/ci_bag_check.sh /ws/docker/ci_bag_check.sh
+COPY docker/check_state.py /ws/docker/check_state.py
+COPY tools/preflight /ws/tools/preflight
+# The bench tools run inside this image, where ros2 lives: the IMU check walks the
+# operator through four positions, the threshold tool turns a recording into settings.
+COPY tools/imu_axes /ws/tools/imu_axes
+COPY tools/power_thresholds /ws/tools/power_thresholds
+COPY tools/joy_replay /ws/tools/joy_replay
+# Preflight asks robot_setup whether this robot is calibrated before a floor launch.
+COPY tools/robot_setup /ws/tools/robot_setup
+COPY tools/floor_run /ws/tools/floor_run
+COPY tools/odom_scale /ws/tools/odom_scale
 ENV ROS_DISTRO=${ROS_DISTRO}
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["ros2", "launch", "dog_bringup", "robot.launch.py"]

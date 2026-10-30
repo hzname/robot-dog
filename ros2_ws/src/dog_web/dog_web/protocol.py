@@ -6,6 +6,7 @@ Client -> server (JSON text frames):
   {"type": "command", "name": "stand" | "lie" | "greet" | "survey" | "crawl" | "trot"}
   {"type": "estop", "active": true | false}
   {"type": "pose", "pitch": -1..1, "height": <metres offset>}
+  {"type": "ping"}                                              keep-alive, no reply
 Server -> client:
   {"type": "hello", "limits": {...}}
   {"type": "state", "mode": "...", "estop": bool, "clients": n}
@@ -79,6 +80,8 @@ def handle_message(text: str, limits: Limits) -> Actions:
             out.estop = active
             if active:
                 out.twist = (0.0, 0.0, 0.0)
+        elif kind == 'ping':
+            pass  # keep-alive from the page: the server closes silent sessions
         elif kind == 'pose':
             out.pose = (
                 _num(msg, 'pitch', -1, 1) * limits.max_pitch,
@@ -89,6 +92,50 @@ def handle_message(text: str, limits: Limits) -> Actions:
     except (ValueError, json.JSONDecodeError) as exc:
         out = Actions(errors=[str(exc)])
     return out
+
+
+def estop_decision(current: bool, requested: bool):
+    """(allowed, publish, reason) for an E-STOP request from the web page.
+
+    Both directions are the operator's: the page is the robot's own control panel,
+    not a stranger's tab, and after an emergency the person in front of it must be
+    able to release without walking to the gamepad (owner, 2026-10-29). What keeps a
+    stranger out is the origin check, the private ROS domain and the network - not a
+    missing button. `publish` is false when the request changes nothing, so a page
+    that repeats itself does not spray the topic.
+    """
+    return True, bool(requested) != bool(current), ''
+
+
+def gate_actions(actions, *, drive_enabled: bool, estop_engaged: bool):
+    """Drop what this page may not do; returns (actions, errors).
+
+    In view-only mode (profile:=floor) the page shows state and keeps the full
+    E-STOP in both directions - releasing the latch is a safety action - but it
+    cannot drive, command a pose or ask for a gait.
+    """
+    errors = []
+    if actions.estop is not None:
+        allowed, publish, reason = estop_decision(estop_engaged, actions.estop)
+        if not allowed:
+            errors.append(reason)
+            actions.estop = None
+        elif not publish:
+            actions.estop = None
+    if not drive_enabled:
+        if actions.twist is not None:
+            # An E-STOP message carries a zero twist on purpose; that is not an
+            # attempt to drive, so it is dropped silently.
+            if any(actions.twist):
+                errors.append('view only: this robot runs the floor profile')
+            actions.twist = None
+        if actions.command:
+            actions.command = None
+            errors.append('view only: commands come from the gamepad')
+        if actions.pose is not None:
+            actions.pose = None
+            errors.append('view only: body pose comes from the gamepad')
+    return actions, errors
 
 
 class DriveWatchdog:
@@ -116,8 +163,9 @@ def hello(limits: Limits) -> str:
     return json.dumps({'type': 'hello', 'limits': limits.__dict__})
 
 
-def state(mode: str, estop: bool, clients: int) -> str:
-    return json.dumps({'type': 'state', 'mode': mode, 'estop': estop, 'clients': clients})
+def state(mode: str, estop: bool, clients: int, view_only: bool = False) -> str:
+    return json.dumps({'type': 'state', 'mode': mode, 'estop': estop, 'clients': clients,
+                       'view_only': bool(view_only)})
 
 
 GUARD_STATES = ('clear', 'caution', 'step_over', 'crawl', 'stop', 'avoid')
@@ -135,3 +183,27 @@ def guard(raw: str) -> str:
 def power(voltage: float, current: float) -> str:
     return json.dumps({'type': 'power', 'voltage': round(float(voltage), 2),
                        'current': round(float(current), 2)})
+
+
+LEVELS = ('ok', 'warn', 'error')
+
+
+def worst_status(items):
+    """[(level, source, message), ...] -> the worst one (level, source, message).
+
+    The page shows one banner, so one fault has to win: an ERROR outranks a WARN,
+    and among equals the first one wins (the order is the diagnostic array's). An
+    empty list is 'all clear'.
+    """
+    best = ('ok', '', '')
+    for level, source, message in items:
+        if level not in LEVELS:
+            continue
+        if LEVELS.index(level) > LEVELS.index(best[0]):
+            best = (level, source, message)
+    return best
+
+
+def alarm(level: str, source: str, reason: str, since: float) -> str:
+    return json.dumps({'type': 'alarm', 'level': level, 'source': source,
+                       'reason': reason, 'since': round(float(since), 1)})

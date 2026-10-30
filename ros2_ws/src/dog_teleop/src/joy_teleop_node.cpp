@@ -34,6 +34,7 @@ public:
     p.button_release = static_cast<int>(declare_parameter("button_release", p.button_release));
     p.deadzone = declare_parameter("deadzone", p.deadzone);
     p.normal_scale = declare_parameter("normal_scale", p.normal_scale);
+    p.turbo_scale = declare_parameter("turbo_scale", p.turbo_scale);
     p.height_step = declare_parameter("height_step", p.height_step);
     timeout_ = declare_parameter("joy_timeout", 0.5);
     mapper_ = std::make_unique<JoyMapper>(p, declareLimits(*this));

@@ -3,6 +3,7 @@
 // power-on and e-stop.
 #pragma once
 
+#include <array>
 #include <memory>
 #include <utility>
 #include <string>
@@ -84,6 +85,9 @@ struct DriverParams
   double max_joint_speed{6.0};  // [rad/s] slew limit (MG996R no-load ~6 rad/s)
   double enable_stagger{0.15};  // [s] delay between legs when powering servos on
   int joints_per_group{3};      // servos enabled together (one leg)
+  /// The robot only ever starts with a hand on it, so the node starts disarmed
+  /// and arms on an explicit request; the core default keeps bare tests working.
+  bool armed_on_start{true};
 };
 
 class ServoDriver
@@ -100,11 +104,46 @@ public:
   void update(double now);
   /// true: all outputs off immediately, commands ignored until released.
   void setEstop(bool active);
-  /// Turn every output off (servos go limp) without latching an e-stop.
-  void relax();
+  /// Power the joints that already have a target. Until then `setTargets`
+  /// only remembers the pose and nothing is written to the bus (SAF-12).
+  void arm();
+  /// Forget the arm state and drop every output; commands are remembered again.
+  void disarm();
+  bool armed() const {return armed_;}
+
+  /// Turn every output off (servos go limp) without latching a fault.
+  /// Returns true when the bus confirmed it: `disableAll`, one retry, then a
+  /// per-channel fallback. A false means the servos may still be driven (SAF-02).
+  bool relax();
 
   bool estop() const {return estop_;}
   bool setCalibration(size_t index, const ServoCalibration & cal);
+
+  /// How far [deg] the pulse of an enabled channel would move for its *current*
+  /// target if `cal` replaced the calibration now. Zero for a channel that is off:
+  /// nothing is holding it, so nothing can jump. Used to refuse a live calibration
+  /// step that would snap a servo (CAL-04).
+  double liveCalibrationStepDeg(size_t index, const ServoCalibration & cal) const;
+
+  /// Latch the driver's own emergency release: every output off, commands
+  /// ignored. Only an explicit operator action clears it (see `clearFault`).
+  void latchFault(const std::string & reason);
+  void clearFault();
+  bool fault() const {return fault_;}
+  const std::string & faultReason() const {return fault_reason_;}
+  /// Bus writes that came back false, in total and per PCA9685 channel.
+  int busFaults() const {return bus_faults_;}
+  int channelFaults(int channel) const {return channel_faults_.at(channel);}
+  /// Consecutive update() cycles with at least one failed write.
+  int failedFrames() const {return failed_frames_;}
+  /// Failed frames that latch a fault (SAF-01: three at 50 Hz).
+  static constexpr int kFaultFrames = 3;
+  /// Relax calls that the bus never confirmed.
+  int relaxFailures() const {return relax_failures_;}
+  /// The outputs are known to be off (a confirmed relax since the last write).
+  bool outputsConfirmedOff() const {return outputs_confirmed_off_;}
+  /// An e-stop is done only when the outputs are confirmed off (SAF-02).
+  bool estopDone() const {return !estop_ || outputs_confirmed_off_;}
 
   const std::vector<std::string> & names() const {return names_;}
   const std::vector<ServoCalibration> & calibrations() const {return cals_;}
@@ -117,7 +156,7 @@ public:
 
 private:
   enum class State { OFF, PENDING, ON };
-  void write(size_t i);
+  bool write(size_t i);
   double parentAngle(size_t i) const;
 
   std::shared_ptr<ServoBus> bus_;
@@ -130,8 +169,20 @@ private:
   std::vector<double> pulses_;
   std::vector<State> state_;
   std::vector<double> enable_at_;
+  std::vector<bool> dirty_;   // last write failed: retry even if the target holds
+  std::vector<bool> target_set_;
+  std::array<int, kPwmChannels> channel_faults_{};
+  std::string fault_reason_;
   double last_update_{-1.0};
+  int bus_faults_{0};
+  int failed_frames_{0};
+  bool frame_failed_{false};
+  bool frame_written_{false};
+  bool armed_{true};
   bool estop_{false};
+  bool fault_{false};
+  bool outputs_confirmed_off_{true};  // nothing written yet: outputs are off
+  int relax_failures_{0};
   int clamped_{0};
 };
 
