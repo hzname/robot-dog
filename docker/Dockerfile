@@ -48,6 +48,7 @@ COPY tools/joy_replay /ws/tools/joy_replay
 # Preflight asks robot_setup whether this robot is calibrated before a floor launch.
 COPY tools/robot_setup /ws/tools/robot_setup
 COPY tools/floor_run /ws/tools/floor_run
+COPY tools/odom_scale /ws/tools/odom_scale
 ENV ROS_DISTRO=${ROS_DISTRO}
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["ros2", "launch", "dog_bringup", "robot.launch.py"]

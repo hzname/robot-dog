@@ -304,7 +304,7 @@ jobs:
       - run: pip install pytest
       # Both suites are stdlib-only on purpose: the checks that decide whether the
       # robot may start must be testable without ROS and without the robot.
-      - run: python -m pytest -q tools/preflight/test tools/power_thresholds/test tools/imu_axes/test tools/joy_replay/test tools/floor_run/test tools/servo_guard/test ros2_ws/src/dog_bringup/test/test_record.py
+      - run: python -m pytest -q tools/preflight/test tools/power_thresholds/test tools/imu_axes/test tools/joy_replay/test tools/floor_run/test tools/odom_scale/test tools/servo_guard/test ros2_ws/src/dog_bringup/test/test_record.py
 
   robot-image:
     name: robot image (arm64) boots the stack
@@ -347,6 +347,20 @@ jobs:
         run: >
           docker run --rm --platform linux/arm64 -e DOG_PREFLIGHT=off
           robot-dog:ci bash /ws/docker/ci_smoke.sh
+      # CAL-01/CAL-03 at the door: the floor profile must refuse a robot that has no
+      # calibration of its own. Checked inside the image, where the config folder is the
+      # one the launch reads - not only in the unit tests that pass a folder by hand.
+      - name: The floor profile refuses an uncalibrated robot
+        run: |
+          set +e
+          out=$(docker run --rm --platform linux/arm64 -e DOG_PREFLIGHT=off robot-dog:ci \
+            python3 /ws/tools/preflight/preflight.py \
+              --args "backend:=pca9685 profile:=floor gamepad:=false" 2>&1)
+          code=$?
+          set -e
+          echo "$out"
+          test "$code" -eq 2
+          echo "$out" | grep -q 'нет servos.local.yaml'
       # SAF-07 end to end: the recording the bench makes must feed the tool that turns it
       # into thresholds. Also proves the bag is readable afterwards - file compression
       # used to write a bag this distro cannot open.
